@@ -1,5 +1,13 @@
 import Phaser from 'phaser';
-import { currentSeason, encounterChoices, RELICS, runStore, selectEncounter } from '../game/runState';
+import {
+  buildAffinities,
+  currentSeason,
+  encounterChoices,
+  RELICS,
+  runStore,
+  selectEncounter,
+  TOTAL_STAGES,
+} from '../game/runState';
 import { TACTIC_BY_ID } from '../game/data';
 
 export class MapScene extends Phaser.Scene {
@@ -14,7 +22,7 @@ export class MapScene extends Phaser.Scene {
 
     const season = currentSeason();
     this.add
-      .text(width / 2, 70, `${season} · ${runStore.stage + 1}번째 달문`, {
+      .text(width / 2, 70, `${season} · ${runStore.stage + 1}/${TOTAL_STAGES}번째 달문`, {
         fontFamily: '"Gowun Batang", serif',
         fontSize: '46px',
         color: '#ecdbb9',
@@ -30,6 +38,17 @@ export class MapScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.drawRunHud();
+    const deckButton = this.add
+      .text(width - 55, 55, `판술덱 보기 · 정리 ${runStore.purgeTokens}회`, {
+        fontFamily: '"Noto Sans KR", sans-serif',
+        fontSize: '15px',
+        color: '#d2b978',
+        backgroundColor: '#17100ddd',
+        padding: { x: 16, y: 10 },
+      })
+      .setOrigin(1, 0)
+      .setInteractive({ useHandCursor: true });
+    deckButton.on('pointerup', () => this.scene.start('deck'));
     const choices = encounterChoices();
     const gap = choices.length === 1 ? 0 : 410;
     const startX = width / 2 - ((choices.length - 1) * gap) / 2;
@@ -127,10 +146,15 @@ export class MapScene extends Phaser.Scene {
     const tacticNames = [...tacticCounts.entries()]
       .map(([id, count]) => `${TACTIC_BY_ID.get(id)?.name ?? id}${count > 1 ? `×${count}` : ''}`)
       .join(' · ');
+    const builds = [...buildAffinities().entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([build, score]) => `${build} ${score}`)
+      .join(' · ');
 
     this.add.rectangle(800, 805, 1420, 116, 0x0d0a08, 0.94).setStrokeStyle(1, 0x796143, 0.7);
     this.add
-      .text(120, 775, `체력 ${'●'.repeat(runStore.hp)}${'○'.repeat(runStore.maxHp - runStore.hp)}   명성 ${runStore.fame}`, {
+      .text(120, 775, `체력 ${'●'.repeat(runStore.hp)}${'○'.repeat(runStore.maxHp - runStore.hp)}   명성 ${runStore.fame}   빌드 ${builds || '미정'}`, {
         fontFamily: '"Noto Sans KR", sans-serif',
         fontSize: '19px',
         color: '#decba7',
@@ -144,11 +168,10 @@ export class MapScene extends Phaser.Scene {
         wordWrap: { width: 1320 },
       });
     this.add
-      .text(120, 844, `노리개 ${runStore.relics.length}/4  ${relicNames || '아직 없다'}`, {
+      .text(120, 844, `노리개 ${runStore.relics.length}개  ${relicNames || '아직 없다'}`, {
         fontFamily: '"Noto Sans KR", sans-serif',
         fontSize: '14px',
         color: '#b9a278',
       });
   }
 }
-

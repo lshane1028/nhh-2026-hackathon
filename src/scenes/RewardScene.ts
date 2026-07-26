@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { applyReward, makeRewardChoices, runIsComplete, runStore } from '../game/runState';
+import { TACTICS } from '../game/data';
+import { applyReward, makeRewardChoices, RELICS, runIsComplete, runStore } from '../game/runState';
 
 export class RewardScene extends Phaser.Scene {
   constructor() {
@@ -33,12 +34,17 @@ export class RewardScene extends Phaser.Scene {
       const color = reward.type === 'relic' ? 0xc39b4e : reward.type === 'heal' ? 0x9a4d45 : 0x4e8d7b;
       const plate = this.add.rectangle(0, 0, 320, 430, 0x15110e, 0.98).setStrokeStyle(3, color, 0.95);
       const type = this.add
-        .text(0, -164, reward.type === 'relic' ? '노리개' : reward.type === 'tactic' ? '판술패' : '회복', {
+        .text(
+          0,
+          -164,
+          `${reward.type === 'relic' ? '노리개' : reward.type === 'tactic' ? '판술패' : '회복'}${reward.archetype ? ` · ${reward.archetype}` : ''}`,
+          {
           fontFamily: '"Noto Sans KR", sans-serif',
           fontSize: '15px',
           color: Phaser.Display.Color.IntegerToColor(color).rgba,
           letterSpacing: 5,
-        })
+          },
+        )
         .setOrigin(0.5);
       const name = this.add
         .text(0, -92, reward.name, {
@@ -95,6 +101,12 @@ export class RewardScene extends Phaser.Scene {
         color: '#958976',
       })
       .setOrigin(0.5);
+    this.add
+      .text(width / 2, 756, `전체 풀: 판술 ${TACTICS.length}종 · 노리개 ${RELICS.length}종 · 보상은 현재 빌드와 맞는 계열이 더 자주 등장`, {
+        fontFamily: '"Noto Sans KR", sans-serif',
+        fontSize: '14px',
+        color: '#756c5e',
+      })
+      .setOrigin(0.5);
   }
 }
-

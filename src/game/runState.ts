@@ -1,5 +1,6 @@
+import { EXTRA_RELICS } from './content';
 import { shuffle, TACTIC_BY_ID } from './data';
-import type { Tactic } from './types';
+import type { BuildArchetype, RelicDefinition, Tactic } from './types';
 
 export type SeasonId = '봄' | '여름' | '가을' | '겨울';
 
@@ -15,19 +16,13 @@ export interface Encounter {
   rewardLevel: 1 | 2;
 }
 
-export interface RelicDefinition {
-  id: string;
-  name: string;
-  description: string;
-  build: string;
-}
-
 export interface RewardOption {
   id: string;
   type: 'tactic' | 'relic' | 'heal';
   name: string;
   description: string;
   detail: string;
+  archetype?: BuildArchetype;
 }
 
 export interface PersistentRunState {
@@ -40,8 +35,10 @@ export interface PersistentRunState {
   currentEncounter: Encounter | null;
   clearedEncounters: string[];
   shieldSpent: boolean;
+  purgeTokens: number;
 }
 
+export const TOTAL_STAGES = 8;
 const SEASONS: SeasonId[] = ['봄', '여름', '가을', '겨울'];
 
 const ENCOUNTERS: Encounter[][] = [
@@ -50,7 +47,7 @@ const ENCOUNTERS: Encounter[][] = [
       id: 'spring-garden',
       season: '봄',
       name: '매화 뜰의 첫판',
-      ruleName: '첫 꽃',
+      ruleName: '첫꽃',
       description: '처음 갈무리할 때 15점을 더 얻는다.',
       rule: 'bloom',
       targetBonus: 0,
@@ -62,10 +59,10 @@ const ENCOUNTERS: Encounter[][] = [
       season: '봄',
       name: '붉은 띠 큰판',
       ruleName: '띠세',
-      description: '내가 붉은 띠를 먹을수록 목표가 오르지만 보상이 좋다.',
+      description: '목표와 상대 점수가 높지만 희귀 보상이 자주 나온다.',
       rule: 'red_tax',
-      targetBonus: 5,
-      opponentBonus: 10,
+      targetBonus: 8,
+      opponentBonus: 12,
       rewardLevel: 2,
     },
   ],
@@ -73,9 +70,9 @@ const ENCOUNTERS: Encounter[][] = [
     {
       id: 'summer-rain',
       season: '여름',
-      name: '장마 도깨비판',
+      name: '장마 월광판',
       ruleName: '비바람',
-      description: '12월 패는 모든 달과 맞는다. 누구에게나 적용된다.',
+      description: '12월 패는 모든 달과 맞는 만능패로 작용한다.',
       rule: 'rain_wild',
       targetBonus: 15,
       opponentBonus: 10,
@@ -84,9 +81,9 @@ const ENCOUNTERS: Encounter[][] = [
     {
       id: 'summer-dry',
       season: '여름',
-      name: '마른 우물의 판',
+      name: '마른 연못판',
       ruleName: '기근',
-      description: '기력 2로 시작한다. 판술을 아껴 써야 한다.',
+      description: '기력이 부족한 상태로 시작한다. 순환 빌드를 시험한다.',
       rule: 'thin_energy',
       targetBonus: 5,
       opponentBonus: 5,
@@ -99,7 +96,7 @@ const ENCOUNTERS: Encounter[][] = [
       season: '가을',
       name: '풍년 큰판',
       ruleName: '수확',
-      description: '먹은 띠와 열끗 한 장마다 추가 점수를 얻는다.',
+      description: '먹은 띠와 열끗마다 추가 점수를 얻는다.',
       rule: 'harvest',
       targetBonus: 20,
       opponentBonus: 15,
@@ -108,9 +105,9 @@ const ENCOUNTERS: Encounter[][] = [
     {
       id: 'autumn-stakes',
       season: '가을',
-      name: '노을의 판돈',
-      ruleName: '강자 셋',
-      description: '판주 점수에 보정이 붙는다. 선두를 빼앗기 쉽다.',
+      name: '여우의 판돈',
+      ruleName: '강자 판',
+      description: '상대 점수에 큰 보정이 붙는다. 견제와 고 판단이 중요하다.',
       rule: 'high_stakes',
       targetBonus: 10,
       opponentBonus: 30,
@@ -121,27 +118,97 @@ const ENCOUNTERS: Encounter[][] = [
     {
       id: 'winter-eclipse',
       season: '겨울',
-      name: '열두 달의 최종판',
+      name: '열두 달의 월식',
       ruleName: '월식',
-      description: '판주 점수가 크게 오르고 목표가 높다. 완성한 빌드를 시험한다.',
+      description: '목표와 상대 점수가 크게 오른다. 완성한 빌드를 시험한다.',
       rule: 'eclipse',
       targetBonus: 35,
       opponentBonus: 35,
       rewardLevel: 2,
     },
+    {
+      id: 'winter-silence',
+      season: '겨울',
+      name: '눈 덮인 마지막 판',
+      ruleName: '설국',
+      description: '낮은 기력과 높은 목표를 함께 견뎌야 한다.',
+      rule: 'thin_energy',
+      targetBonus: 28,
+      opponentBonus: 25,
+      rewardLevel: 2,
+    },
   ],
 ];
 
-export const RELICS: RelicDefinition[] = [
-  { id: 'rain-charm', name: '비광 부적', description: '먹은 광 한 장마다 20점.', build: '광 폭발' },
-  { id: 'ribbon-knot', name: '청홍 매듭', description: '먹은 띠 한 장마다 9점.', build: '띠 연쇄' },
-  { id: 'bird-bell', name: '고도리 방울', description: '먹은 열끗 한 장마다 12점.', build: '동물 수집' },
-  { id: 'goblin-mirror', name: '도깨비 거울', description: '매 판 첫 판술의 기력을 돌려받는다.', build: '판술 순환' },
-  { id: 'broken-coin', name: '끊어진 엽전', description: '패배 시 체력 손실을 한 번 막고 부서진다.', build: '생존' },
-  { id: 'moon-mortar', name: '달토끼 절구', description: '모든 판의 목표 점수 -15.', build: '안정' },
-  { id: 'last-cup', name: '마지막 술잔', description: '체력이 1이면 최종 점수 ×1.35.', build: '위기 배수' },
-  { id: 'empty-table', name: '빈 술상', description: '손패가 2장 이하일 때 얻는 점수 +35.', build: '후반 폭발' },
+const BASE_RELICS: RelicDefinition[] = [
+  {
+    id: 'rain-charm',
+    name: '비광 부적',
+    description: '먹은 광 한 장마다 20점.',
+    build: '광',
+    rarity: '희귀',
+    effects: [{ type: 'score-per-kind', kind: '광', amount: 20 }],
+  },
+  {
+    id: 'ribbon-knot',
+    name: '청홍 매듭',
+    description: '먹은 띠 한 장마다 9점.',
+    build: '띠',
+    rarity: '희귀',
+    effects: [{ type: 'score-per-kind', kind: '띠', amount: 9 }],
+  },
+  {
+    id: 'bird-bell',
+    name: '고도리 방울',
+    description: '먹은 열끗 한 장마다 12점.',
+    build: '열끗',
+    rarity: '희귀',
+    effects: [{ type: 'score-per-kind', kind: '열끗', amount: 12 }],
+  },
+  {
+    id: 'goblin-mirror',
+    name: '도깨비 거울',
+    description: '매 판 첫 전술은 기력을 소모하지 않는다.',
+    build: '판술',
+    rarity: '전설',
+    effects: [{ type: 'first-tactic-free' }],
+  },
+  {
+    id: 'broken-coin',
+    name: '끊어진 엽전',
+    description: '런에서 한 번 체력 손실을 막는다.',
+    build: '고',
+    rarity: '전설',
+    effects: [{ type: 'shield' }],
+  },
+  {
+    id: 'moon-mortar',
+    name: '달토끼 절구',
+    description: '모든 판의 목표 점수 -15.',
+    build: '포획',
+    rarity: '희귀',
+    effects: [{ type: 'target-down', amount: 15 }],
+  },
+  {
+    id: 'last-cup',
+    name: '마지막 술잔',
+    description: '체력이 1이면 최종 점수 +35%.',
+    build: '고',
+    rarity: '전설',
+    effects: [{ type: 'score-low-hp', amount: 0.35 }],
+  },
+  {
+    id: 'empty-table',
+    name: '빈 술상',
+    description: '손패가 2장 이하면 포획마다 35점.',
+    build: '포획',
+    rarity: '희귀',
+    effects: [{ type: 'late-capture-bonus', threshold: 2, amount: 35 }],
+  },
 ];
+
+export const RELICS: RelicDefinition[] = [...BASE_RELICS, ...EXTRA_RELICS];
+export const RELIC_BY_ID = new Map(RELICS.map((relic) => [relic.id, relic]));
 
 function createInitialState(): PersistentRunState {
   return {
@@ -149,26 +216,29 @@ function createInitialState(): PersistentRunState {
     hp: 3,
     maxHp: 3,
     fame: 0,
-    tacticDeck: ['peek', 'moonstep', 'storm', 'swap', 'blossom'],
+    tacticDeck: ['peek', 'moonstep', 'storm', 'swap', 'blossom', 'breath'],
     relics: [],
     currentEncounter: null,
     clearedEncounters: [],
     shieldSpent: false,
+    purgeTokens: 1,
   };
 }
 
 export const runStore: PersistentRunState = createInitialState();
+let drawSerial = 0;
 
 export function startNewRun(): void {
   Object.assign(runStore, createInitialState());
+  drawSerial = 0;
 }
 
 export function currentSeason(): SeasonId {
-  return SEASONS[Math.min(runStore.stage, SEASONS.length - 1)];
+  return SEASONS[Math.min(Math.floor(runStore.stage / 2), SEASONS.length - 1)];
 }
 
 export function encounterChoices(): Encounter[] {
-  return ENCOUNTERS[Math.min(runStore.stage, ENCOUNTERS.length - 1)];
+  return ENCOUNTERS[Math.min(Math.floor(runStore.stage / 2), ENCOUNTERS.length - 1)];
 }
 
 export function selectEncounter(encounter: Encounter): void {
@@ -176,77 +246,83 @@ export function selectEncounter(encounter: Encounter): void {
 }
 
 export function drawTactics(count = 3): Tactic[] {
-  const ids = shuffle(runStore.tacticDeck).slice(0, count);
-  return ids
-    .map((id) => TACTIC_BY_ID.get(id))
-    .filter((tactic): tactic is Tactic => tactic !== undefined);
+  return shuffle(runStore.tacticDeck.map((id, deckIndex) => ({ id, deckIndex })))
+    .slice(0, count)
+    .flatMap(({ id, deckIndex }): Tactic[] => {
+      const tactic = TACTIC_BY_ID.get(id);
+      if (!tactic) return [];
+      drawSerial += 1;
+      return [{ ...tactic, instanceId: `${id}:${deckIndex}:${drawSerial}` }];
+    });
+}
+
+export function buildAffinities(): Map<BuildArchetype, number> {
+  const scores = new Map<BuildArchetype, number>();
+  const add = (build: BuildArchetype | undefined, amount: number): void => {
+    if (build) scores.set(build, (scores.get(build) ?? 0) + amount);
+  };
+  runStore.tacticDeck.forEach((id) => add(TACTIC_BY_ID.get(id)?.archetype, 1));
+  runStore.relics.forEach((id) => add(RELIC_BY_ID.get(id)?.build, 2));
+  return scores;
+}
+
+function synergyRank(build: BuildArchetype | undefined, rarity: string | undefined): number {
+  const affinity = build ? buildAffinities().get(build) ?? 0 : 0;
+  const rarityGate = rarity === '전설' && runStore.stage < 3 && runStore.currentEncounter?.rewardLevel !== 2 ? -20 : 0;
+  return Math.random() * 6 + affinity * 2 + rarityGate;
+}
+
+function tacticReward(tactic: Tactic): RewardOption {
+  const ownedCopies = runStore.tacticDeck.filter((id) => id === tactic.id).length;
+  return {
+    id: tactic.id,
+    type: 'tactic',
+    name: tactic.name,
+    description: tactic.description,
+    detail: `${tactic.rarity ?? '일반'} · ${tactic.archetype ?? '범용'} · ${ownedCopies ? `현재 ${ownedCopies}장` : '새 전술'}`,
+    archetype: tactic.archetype,
+  };
+}
+
+function relicReward(relic: RelicDefinition): RewardOption {
+  return {
+    id: relic.id,
+    type: 'relic',
+    name: relic.name,
+    description: relic.description,
+    detail: `${relic.rarity ?? '일반'} · ${relic.build} 빌드`,
+    archetype: relic.build,
+  };
 }
 
 export function makeRewardChoices(): RewardOption[] {
-  const availableRelics = shuffle(RELICS.filter((relic) => !runStore.relics.includes(relic.id)));
-  const tacticPool = shuffle([...TACTIC_BY_ID.values()]);
+  const tacticPool = [...TACTIC_BY_ID.values()].sort(
+    (a, b) => synergyRank(b.archetype, b.rarity) - synergyRank(a.archetype, a.rarity),
+  );
+  const relicPool = RELICS.filter((relic) => !runStore.relics.includes(relic.id)).sort(
+    (a, b) => synergyRank(b.build, b.rarity) - synergyRank(a.build, a.rarity),
+  );
   const choices: RewardOption[] = [];
+  if (tacticPool[0]) choices.push(tacticReward(tacticPool[0]));
+  if (relicPool[0]) choices.push(relicReward(relicPool[0]));
 
-  const tactic = tacticPool[0];
-  if (tactic) {
-    const ownedCopies = runStore.tacticDeck.filter((id) => id === tactic.id).length;
-    choices.push({
-      id: tactic.id,
-      type: 'tactic',
-      name: tactic.name,
-      description: tactic.description,
-      detail: ownedCopies > 0 ? `사본 추가 · 현재 ${ownedCopies}장` : '새 판술',
-    });
-  }
-
-  const relic = availableRelics[0];
-  if (relic) {
-    choices.push({
-      id: relic.id,
-      type: 'relic',
-      name: relic.name,
-      description: relic.description,
-      detail: relic.build,
-    });
-  }
-
-  const secondTactic = tacticPool.find((item) => item.id !== tactic?.id);
-  if (runStore.hp < runStore.maxHp) {
+  if (runStore.hp < runStore.maxHp && Math.random() < 0.45) {
     choices.push({
       id: 'heal',
       type: 'heal',
-      name: '따뜻한 술 한 잔',
-      description: '체력을 1 회복한다.',
+      name: '동동주 한 사발',
+      description: '체력을 1 회복한다. 빌드 보상을 포기하는 안전한 선택.',
       detail: `현재 ${runStore.hp}/${runStore.maxHp}`,
     });
-  } else if (runStore.currentEncounter?.rewardLevel === 2 && availableRelics[1]) {
-    const secondRelic = availableRelics[1];
-    choices.push({
-      id: secondRelic.id,
-      type: 'relic',
-      name: secondRelic.name,
-      description: secondRelic.description,
-      detail: secondRelic.build,
-    });
-  } else if (secondTactic) {
-    choices.push({
-      id: secondTactic.id,
-      type: 'tactic',
-      name: secondTactic.name,
-      description: secondTactic.description,
-      detail: '판술 덱에 추가',
-    });
+  } else {
+    if (runStore.currentEncounter?.rewardLevel === 2 && relicPool[1]) {
+      choices.push(relicReward(relicPool[1]));
+    } else if (tacticPool[1]) {
+      choices.push(tacticReward(tacticPool[1]));
+    }
   }
 
-  if (choices.length < 3) {
-    choices.push({
-      id: 'heal',
-      type: 'heal',
-      name: '따뜻한 술 한 잔',
-      description: '체력을 1 회복한다.',
-      detail: `현재 ${runStore.hp}/${runStore.maxHp}`,
-    });
-  }
+  if (choices.length < 3 && tacticPool[1]) choices.push(tacticReward(tacticPool[1]));
   return choices.slice(0, 3);
 }
 
@@ -255,11 +331,26 @@ export function applyReward(reward: RewardOption): void {
   if (reward.type === 'relic' && !runStore.relics.includes(reward.id)) runStore.relics.push(reward.id);
   if (reward.type === 'heal') runStore.hp = Math.min(runStore.maxHp, runStore.hp + 1);
   runStore.stage += 1;
+  if (runStore.stage % 2 === 0 && runStore.stage < TOTAL_STAGES) runStore.purgeTokens += 1;
   runStore.currentEncounter = null;
+}
+
+export function purgeTactic(deckIndex: number): boolean {
+  if (runStore.purgeTokens <= 0 || runStore.tacticDeck.length <= 4) return false;
+  if (deckIndex < 0 || deckIndex >= runStore.tacticDeck.length) return false;
+  runStore.tacticDeck.splice(deckIndex, 1);
+  runStore.purgeTokens -= 1;
+  return true;
 }
 
 export function hasRelic(id: string): boolean {
   return runStore.relics.includes(id);
+}
+
+export function activeRelics(): RelicDefinition[] {
+  return runStore.relics
+    .map((id) => RELIC_BY_ID.get(id))
+    .filter((relic): relic is RelicDefinition => relic !== undefined);
 }
 
 export function registerVictory(score: number): void {
@@ -277,5 +368,5 @@ export function registerDefeat(): boolean {
 }
 
 export function runIsComplete(): boolean {
-  return runStore.stage >= SEASONS.length;
+  return runStore.stage >= TOTAL_STAGES;
 }

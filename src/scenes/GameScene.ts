@@ -3,13 +3,15 @@ import { SfxManager } from '../audio/SfxManager';
 import { createDeck, MONTH_NAMES, shuffle } from '../game/data';
 import { calculateScore, chooseBestDeckCard, matchesMonth } from '../game/rules';
 import {
+  activeRelics,
   drawTactics,
   hasRelic,
   registerDefeat,
   registerVictory,
   runStore,
+  TOTAL_STAGES,
 } from '../game/runState';
-import type { HwatuCard, RunState, Tactic } from '../game/types';
+import type { CardKind, HwatuCard, RelicEffect, RunState, Tactic } from '../game/types';
 import { CardView } from '../ui/CardView';
 
 const COLORS = {
@@ -47,9 +49,10 @@ export class GameScene extends Phaser.Scene {
   private readonly sfx = new SfxManager();
   private activeTactics: Tactic[] = [];
   private skipOpponentTurns = 0;
-  private nextCaptureBonus = 0;
+  private pendingCaptureBonuses: Array<{ amount: number; kind?: CardKind }> = [];
   private firstCaptureAwarded = false;
   private tacticUseCount = 0;
+  private skippedOpponentCount = 0;
 
   private handLayer!: Phaser.GameObjects.Container;
   private fieldLayer!: Phaser.GameObjects.Container;
@@ -116,9 +119,10 @@ export class GameScene extends Phaser.Scene {
     this.busy = false;
     this.activeTactics = drawTactics(3);
     this.skipOpponentTurns = 0;
-    this.nextCaptureBonus = 0;
+    this.pendingCaptureBonuses = [];
     this.firstCaptureAwarded = false;
     this.tacticUseCount = 0;
+    this.skippedOpponentCount = 0;
     this.usedTactics.clear();
     this.knownYaku.clear();
 
@@ -140,16 +144,20 @@ export class GameScene extends Phaser.Scene {
 
   private freshState(): RunState {
     const encounter = runStore.currentEncounter;
-    const targetReduction = hasRelic('moon-mortar') ? 15 : 0;
+    const maxEnergy = 3 + this.relicEffectTotal('max-energy');
+    const targetReduction = this.relicEffectTotal('target-down');
+    const startEnergy = (encounter?.rule === 'thin_energy' ? 2 : 3) + this.relicEffectTotal('start-energy');
     return {
       turn: 0,
       maxTurns: 5,
       goCount: 0,
-      energy: encounter?.rule === 'thin_energy' ? 2 : 3,
+      energy: Math.min(maxEnergy, startEnergy),
       target: 70 + (encounter?.targetBonus ?? 0) - targetReduction,
       comboMultiplier: 1,
       doubledTurn: false,
       wildMonth: false,
+      maxEnergy,
+      goBonus: 0,
     };
   }
 
@@ -439,7 +447,7 @@ export class GameScene extends Phaser.Scene {
     this.tacticLayer.removeAll(true);
     this.activeTactics.forEach((tactic, index) => {
       const y = 242 + index * 122;
-      const used = this.usedTactics.has(tactic.id);
+      const used = this.usedTactics.has(this.tacticKey(tactic));
       const actualCost = this.tacticCost(tactic);
       const affordable = this.state.energy >= actualCost;
       const enabled = !used && affordable && !this.busy;
@@ -497,59 +505,126 @@ export class GameScene extends Phaser.Scene {
 
   private useTactic(tactic: Tactic): void {
     const actualCost = this.tacticCost(tactic);
-    if (this.busy || this.usedTactics.has(tactic.id) || this.state.energy < actualCost) return;
+    const tacticKey = this.tacticKey(tactic);
+    if (this.busy || this.usedTactics.has(tacticKey) || this.state.energy < actualCost) return;
     this.sfx.unlock();
     this.sfx.tactic();
     this.state.energy -= actualCost;
-    this.usedTactics.add(tactic.id);
+    this.usedTactics.add(tacticKey);
     this.tacticUseCount += 1;
 
-    if (tactic.id === 'peek') {
-      const best = chooseBestDeckCard(this.deck, this.field);
+    const effect = tactic.effect;
+    if (!effect) return;
+    if (effect.type === 'peek') {
+      const best = chooseBestDeckCard(this.deck.slice(0, effect.amount ?? 3), this.field);
       const [chosen] = this.deck.splice(best, 1);
       if (chosen) this.deck.unshift(chosen);
-      this.setMessage('산패 셋을 훑었다. 맞는 달을 맨 위로 올렸다.');
-    } else if (tactic.id === 'moonstep') {
+    } else if (effect.type === 'wild') {
       this.state.wildMonth = true;
-      this.setMessage('달넘기. 이번 패는 앞뒤 달과도 맞는다.');
-    } else if (tactic.id === 'storm') {
+    } else if (effect.type === 'double-capture') {
       this.state.doubledTurn = true;
-      this.setMessage('휘몰이. 이번에 먹는 패의 값이 두 배가 된다.');
-    } else if (tactic.id === 'swap') {
+    } else if (effect.type === 'swap') {
+      this.swapDeadCards(effect.amount ?? 1);
+    } else if (effect.type === 'snatch') {
+      this.snatchFieldCard(effect.kind, effect.highest ?? false);
+    } else if (effect.type === 'skip') {
+      this.skipOpponentTurns += effect.amount ?? 1;
+    } else if (effect.type === 'capture-bonus') {
+      this.pendingCaptureBonuses.push({ amount: effect.amount, kind: effect.kind });
+    } else if (effect.type === 'energy') {
+      this.state.energy = Math.min(this.state.maxEnergy, this.state.energy + effect.amount);
+    } else if (effect.type === 'score-kind') {
+      const count = this.captured.filter((card) => card.kind === effect.kind).length;
+      this.bonusScore += count * effect.amount;
+    } else if (effect.type === 'score-flat') {
+      this.bonusScore += effect.amount;
+    } else if (effect.type === 'target-down') {
+      this.state.target = Math.max(30, this.state.target - effect.amount);
+    } else if (effect.type === 'reset-tactics') {
+      const reusable = [...this.usedTactics].filter((key) => key !== tacticKey);
+      reusable.slice(0, effect.amount ?? 1).forEach((key) => this.usedTactics.delete(key));
+    } else if (effect.type === 'field-sweep') {
+      const targets = this.field.filter((card) => card.kind === effect.kind).slice(0, effect.limit ?? 1);
+      targets.forEach((target) => this.field.splice(this.field.findIndex((card) => card.id === target.id), 1));
+      this.captured.push(...targets);
+      this.applyCaptureSynergies(targets);
+    } else if (effect.type === 'go-bonus') {
+      this.state.goBonus += effect.amount;
+    }
+    if (tactic.id === 'red-seal') this.bonusScore += 20;
+    if (tactic.id === 'last-gamble') this.state.target += 10;
+    if (tactic.id === 'victory-toast') this.bonusScore += this.state.goCount * 30;
+    this.setMessage(`${tactic.name}. ${tactic.description}`);
+    this.renderAll();
+  }
+
+  private tacticCost(tactic: Tactic): number {
+    if (this.relicEffects('first-tactic-free').length > 0 && this.tacticUseCount === 0) return 0;
+    const tagDiscount = this.relicEffects('tag-cost-down')
+      .filter((effect) => effect.tag && tactic.tags?.includes(effect.tag))
+      .reduce((sum, effect) => sum + (effect.amount ?? 0), 0);
+    return Math.max(0, tactic.cost - tagDiscount);
+  }
+
+  private tacticKey(tactic: Tactic): string {
+    return tactic.instanceId ?? tactic.id;
+  }
+
+  private relicEffects(type: RelicEffect['type']): RelicEffect[] {
+    return activeRelics().flatMap((relic) => relic.effects ?? []).filter((effect) => effect.type === type);
+  }
+
+  private relicEffectTotal(type: RelicEffect['type']): number {
+    return this.relicEffects(type).reduce((sum, effect) => sum + (effect.amount ?? 0), 0);
+  }
+
+  private swapDeadCards(amount: number): void {
+    for (let index = 0; index < amount; index += 1) {
       const swapIndex = this.hand.findIndex(
         (card) => !this.field.some((fieldCard) => matchesMonth(card, fieldCard, false)),
       );
       const targetIndex = swapIndex >= 0 ? swapIndex : 0;
       const replacement = this.deck.shift();
       const oldCard = this.hand[targetIndex];
-      if (replacement && oldCard) {
-        this.hand[targetIndex] = replacement;
-        this.deck.push(oldCard);
-        this.setMessage(`${oldCard.month}월을 덮고 ${replacement.month}월을 받아왔다.`);
-      }
-    } else if (tactic.id === 'snatch') {
-      const target = [...this.field].sort((a, b) => this.cardValue(a) - this.cardValue(b))[0];
-      if (target) {
-        this.field.splice(this.field.findIndex((card) => card.id === target.id), 1);
-        this.captured.push(target);
-        this.setMessage(`바닥의 ${target.month}월 ${target.kind}를 낚아챘다.`);
-      }
-    } else if (tactic.id === 'silence') {
-      this.skipOpponentTurns += 1;
-      this.setMessage('입막음. 다음 판주 한 명은 패를 내지 못한다.');
-    } else if (tactic.id === 'blossom') {
-      this.nextCaptureBonus += 35;
-      this.setMessage('만개. 다음 갈무리에 35점이 더해진다.');
-    } else if (tactic.id === 'breath') {
-      this.state.energy = Math.min(3, this.state.energy + 1);
-      this.setMessage('숨을 골랐다. 기력 1을 회복했다.');
+      if (!replacement || !oldCard) return;
+      this.hand[targetIndex] = replacement;
+      this.deck.push(oldCard);
     }
-    this.renderAll();
   }
 
-  private tacticCost(tactic: Tactic): number {
-    if (hasRelic('goblin-mirror') && this.tacticUseCount === 0) return 0;
-    return tactic.cost;
+  private snatchFieldCard(kind?: CardKind, highest = false): void {
+    const candidates = this.field.filter((card) => !kind || card.kind === kind);
+    const target = [...candidates].sort((a, b) =>
+      highest ? this.cardValue(b) - this.cardValue(a) : this.cardValue(a) - this.cardValue(b),
+    )[0];
+    if (!target) return;
+    this.field.splice(this.field.findIndex((card) => card.id === target.id), 1);
+    this.captured.push(target);
+    this.applyCaptureSynergies([target]);
+  }
+
+  private applyCaptureSynergies(cards: HwatuCard[]): void {
+    if (cards.length === 0) return;
+    this.relicEffects('capture-kind-bonus').forEach((effect) => {
+      const matches = cards.filter((card) => card.kind === effect.kind).length;
+      this.bonusScore += matches * (effect.amount ?? 0);
+    });
+    this.relicEffects('capture-chain-bonus').forEach((effect) => {
+      if (cards.length >= (effect.threshold ?? 2)) this.bonusScore += effect.amount ?? 0;
+    });
+    this.relicEffects('energy-on-kind').forEach((effect) => {
+      if (cards.some((card) => card.kind === effect.kind)) {
+        this.state.energy = Math.min(this.state.maxEnergy, this.state.energy + (effect.amount ?? 0));
+      }
+    });
+    this.relicEffects('energy-on-chain').forEach((effect) => {
+      if (cards.length >= (effect.threshold ?? 2)) {
+        this.state.energy = Math.min(this.state.maxEnergy, this.state.energy + (effect.amount ?? 0));
+      }
+    });
+    this.relicEffects('late-capture-bonus').forEach((effect) => {
+      if (this.hand.length <= (effect.threshold ?? 2)) this.bonusScore += effect.amount ?? 0;
+    });
   }
 
   private async playCard(card: HwatuCard): Promise<void> {
@@ -586,6 +661,7 @@ export class GameScene extends Phaser.Scene {
 
     if (capturedThisTurn.length > 0) {
       this.captured.push(...capturedThisTurn);
+      this.applyCaptureSynergies(capturedThisTurn);
       await this.animateCaptureSweep(capturedThisTurn, 132, 478);
       this.sfx.capture();
       if (runStore.currentEncounter?.rule === 'bloom' && !this.firstCaptureAwarded) {
@@ -597,14 +673,14 @@ export class GameScene extends Phaser.Scene {
         const harvestCards = capturedThisTurn.filter((item) => item.kind === '띠' || item.kind === '열끗').length;
         if (harvestCards > 0) this.bonusScore += harvestCards * 8;
       }
-      if (this.nextCaptureBonus > 0) {
-        this.bonusScore += this.nextCaptureBonus;
-        this.showStamp(`만개 +${this.nextCaptureBonus}`);
-        this.nextCaptureBonus = 0;
-      }
-      if (hasRelic('empty-table') && this.hand.length <= 2) {
-        this.bonusScore += 35;
-        this.showStamp('빈 술상 +35');
+      if (this.pendingCaptureBonuses.length > 0) {
+        const pendingBonus = this.pendingCaptureBonuses.reduce((sum, bonus) => {
+          const matches = bonus.kind ? capturedThisTurn.filter((card) => card.kind === bonus.kind).length : 1;
+          return sum + bonus.amount * matches;
+        }, 0);
+        this.bonusScore += pendingBonus;
+        if (pendingBonus > 0) this.showStamp(`연쇄 +${pendingBonus}`);
+        this.pendingCaptureBonuses = [];
       }
       if (this.state.doubledTurn) {
         this.bonusScore += capturedThisTurn.reduce((sum, item) => {
@@ -621,7 +697,10 @@ export class GameScene extends Phaser.Scene {
     this.state.turn += 1;
     this.state.wildMonth = false;
     this.state.doubledTurn = false;
-    this.state.energy = Math.min(3, this.state.energy + (capturedThisTurn.length >= 4 ? 1 : 0));
+    this.state.energy = Math.min(
+      this.state.maxEnergy,
+      this.state.energy + (capturedThisTurn.length >= 4 ? 1 : 0),
+    );
     this.checkNewYaku();
     this.renderAll();
     await this.delay(300);
@@ -667,6 +746,7 @@ export class GameScene extends Phaser.Scene {
       await this.delay(240);
       if (this.skipOpponentTurns > 0) {
         this.skipOpponentTurns -= 1;
+        this.skippedOpponentCount += 1;
         this.setMessage(`${opponent.name}이 입을 다물었다. 차례를 넘긴다.`);
         this.showStamp('차례 봉인');
         await this.delay(520);
@@ -790,10 +870,23 @@ export class GameScene extends Phaser.Scene {
 
   private currentScore(): number {
     let total = calculateScore(this.captured, this.state.goCount, this.state.comboMultiplier).total + this.bonusScore;
-    if (hasRelic('rain-charm')) total += this.captured.filter((card) => card.kind === '광').length * 20;
-    if (hasRelic('ribbon-knot')) total += this.captured.filter((card) => card.kind === '띠').length * 9;
-    if (hasRelic('bird-bell')) total += this.captured.filter((card) => card.kind === '열끗').length * 12;
-    if (hasRelic('last-cup') && runStore.hp === 1) total = Math.round(total * 1.35);
+    this.relicEffects('score-per-kind').forEach((effect) => {
+      total += this.captured.filter((card) => card.kind === effect.kind).length * (effect.amount ?? 0);
+    });
+    total += this.tacticUseCount * this.relicEffectTotal('score-per-tactic');
+    total += this.state.goCount * this.relicEffectTotal('score-per-go');
+    total += this.skippedOpponentCount * this.relicEffectTotal('score-per-skip');
+    if (new Set(this.captured.map((card) => card.kind)).size >= 4) {
+      total += this.relicEffectTotal('score-four-kinds');
+    }
+    if (runStore.hp === 1) {
+      const lowHpMultiplier = this.relicEffectTotal('score-low-hp');
+      total = Math.round(total * (1 + lowHpMultiplier));
+    }
+    const goMultiplier = this.relicEffectTotal('go-multiplier') + this.state.goBonus;
+    if (this.state.goCount > 0 && goMultiplier > 0) {
+      total = Math.round(total * (1 + goMultiplier * this.state.goCount));
+    }
     return total;
   }
 
@@ -906,8 +999,8 @@ export class GameScene extends Phaser.Scene {
   private chooseGo(): void {
     this.modalLayer.removeAll(true);
     this.state.goCount += 1;
-    this.state.target = Math.ceil(this.currentScore() * 1.25 + 20) - (hasRelic('moon-mortar') ? 15 : 0);
-    this.state.energy = Math.min(3, this.state.energy + 1);
+    this.state.target = Math.ceil(this.currentScore() * 1.25 + 20) - this.relicEffectTotal('target-down');
+    this.state.energy = Math.min(this.state.maxEnergy, this.state.energy + 1);
     this.usedTactics.clear();
     this.busy = false;
     this.sfx.stamp();
@@ -1038,10 +1131,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateHud(): void {
-    this.scoreText.setText(`${runStore.stage + 1}/4판 · 현재 ${this.currentScore()}점`);
+    this.scoreText.setText(`${runStore.stage + 1}/${TOTAL_STAGES}판 · 현재 ${this.currentScore()}점`);
     this.targetText.setText(`목표 ${this.effectiveTarget()}점`);
     this.turnText.setText(`남은 패 ${this.hand.length}`);
-    this.energyText.setText(`기력 ${this.state.energy}/3`);
+    this.energyText.setText(`기력 ${this.state.energy}/${this.state.maxEnergy}`);
     this.goText.setText(`체력 ${runStore.hp}/${runStore.maxHp} · ${this.state.goCount > 0 ? `${this.state.goCount}고` : '첫 판'}`);
     this.deckText.setText(`산패 ${this.deck.length}장 · 바닥 ${this.field.length}장`);
   }
