@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { startNewRun } from '../game/runState';
 
 export class TitleScene extends Phaser.Scene {
   constructor() {
@@ -40,8 +41,11 @@ export class TitleScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const start = this.makeButton(width / 2, 684, '네 자리 판을 연다', 320, 72);
-    start.on('pointerup', () => this.scene.start('game'));
+    const start = this.makeButton(width / 2, 684, '열두 달의 길을 연다', 340, 72);
+    start.on('pointerup', () => {
+      startNewRun();
+      this.scene.start('map');
+    });
     this.makeButton(width / 2, 770, '규칙', 180, 52).on('pointerup', () => this.showRules());
 
     this.add
@@ -94,15 +98,14 @@ export class TitleScene extends Phaser.Scene {
     const shade = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.74).setInteractive();
     const panel = this.add.rectangle(width / 2, height / 2, 760, 520, 0x15110d, 0.98).setStrokeStyle(2, 0xad8a55);
     const copy = [
-      '한 판의 규칙',
+      '열두 달 런의 규칙',
       '',
-      '1. 나와 세 판주가 다섯 장씩 들고 차례로 패를 냅니다.',
-      '2. 같은 달의 바닥패를 먹고 산패 한 장을 뒤집습니다.',
-      '3. 판주들도 실제로 패와 족보를 가져가며 점수를 올립니다.',
-      '4. 판술은 나만 사용할 수 있는 로그라이트 기술입니다.',
-      '5. 목표를 넘기면 스톱으로 선두를 굳히거나 고로 배수를 겁니다.',
-      '',
-      '일반 고스톱과 달리 판주마다 노리는 패가 다릅니다.',
+      '1. 봄부터 겨울까지 네 판을 통과합니다.',
+      '2. 매 계절 안전한 판과 위험한 큰판 중 하나를 고릅니다.',
+      '3. 나와 세 판주가 같은 화투판에서 패와 족보를 다툽니다.',
+      '4. 판이 끝나면 판술·노리개·회복 중 하나만 가져갑니다.',
+      '5. 판술 사본을 늘리면 다음 판에서 뽑힐 확률이 높아집니다.',
+      '6. 목표를 넘기면 스톱으로 선두를 굳히거나 고로 배수를 겁니다.',
     ].join('\n');
     const text = this.add
       .text(width / 2, height / 2 - 20, copy, {

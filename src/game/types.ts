@@ -16,7 +16,7 @@ export interface ScoreBreakdown {
 }
 
 export interface Tactic {
-  id: 'peek' | 'moonstep' | 'storm';
+  id: string;
   name: string;
   description: string;
   cost: number;
@@ -32,4 +32,3 @@ export interface RunState {
   doubledTurn: boolean;
   wildMonth: boolean;
 }
-

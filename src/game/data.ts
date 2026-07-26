@@ -39,7 +39,39 @@ export const TACTICS: Tactic[] = [
     description: '이번 턴에 먹은 패의 기본 점수를 두 배로 계산한다.',
     cost: 2,
   },
+  {
+    id: 'swap',
+    name: '패갈이',
+    description: '맞출 달이 없는 손패 한 장을 산패와 바꾼다.',
+    cost: 1,
+  },
+  {
+    id: 'snatch',
+    name: '낚아채기',
+    description: '바닥에서 가장 값싼 패 한 장을 즉시 가져온다.',
+    cost: 1,
+  },
+  {
+    id: 'silence',
+    name: '입막음',
+    description: '다음 판주 한 명의 차례를 건너뛴다.',
+    cost: 2,
+  },
+  {
+    id: 'blossom',
+    name: '만개',
+    description: '다음 갈무리에 35점을 추가한다.',
+    cost: 1,
+  },
+  {
+    id: 'breath',
+    name: '숨고르기',
+    description: '기력 1을 회복한다.',
+    cost: 0,
+  },
 ];
+
+export const TACTIC_BY_ID = new Map(TACTICS.map((tactic) => [tactic.id, tactic]));
 
 export function createDeck(): HwatuCard[] {
   return MONTH_KINDS.flatMap((kinds, monthIndex) =>
@@ -60,4 +92,3 @@ export function shuffle<T>(items: T[], random: () => number = Math.random): T[] 
   }
   return result;
 }
-

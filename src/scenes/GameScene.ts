@@ -1,7 +1,14 @@
 import Phaser from 'phaser';
 import { SfxManager } from '../audio/SfxManager';
-import { createDeck, MONTH_NAMES, shuffle, TACTICS } from '../game/data';
+import { createDeck, MONTH_NAMES, shuffle } from '../game/data';
 import { calculateScore, chooseBestDeckCard, matchesMonth } from '../game/rules';
+import {
+  drawTactics,
+  hasRelic,
+  registerDefeat,
+  registerVictory,
+  runStore,
+} from '../game/runState';
 import type { HwatuCard, RunState, Tactic } from '../game/types';
 import { CardView } from '../ui/CardView';
 
@@ -38,6 +45,11 @@ export class GameScene extends Phaser.Scene {
   private knownYaku = new Set<string>();
   private opponents: OpponentState[] = [];
   private readonly sfx = new SfxManager();
+  private activeTactics: Tactic[] = [];
+  private skipOpponentTurns = 0;
+  private nextCaptureBonus = 0;
+  private firstCaptureAwarded = false;
+  private tacticUseCount = 0;
 
   private handLayer!: Phaser.GameObjects.Container;
   private fieldLayer!: Phaser.GameObjects.Container;
@@ -102,6 +114,11 @@ export class GameScene extends Phaser.Scene {
     this.state = this.freshState();
     this.bonusScore = 0;
     this.busy = false;
+    this.activeTactics = drawTactics(3);
+    this.skipOpponentTurns = 0;
+    this.nextCaptureBonus = 0;
+    this.firstCaptureAwarded = false;
+    this.tacticUseCount = 0;
     this.usedTactics.clear();
     this.knownYaku.clear();
 
@@ -122,12 +139,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private freshState(): RunState {
+    const encounter = runStore.currentEncounter;
+    const targetReduction = hasRelic('moon-mortar') ? 15 : 0;
     return {
       turn: 0,
       maxTurns: 5,
       goCount: 0,
-      energy: 3,
-      target: 70,
+      energy: encounter?.rule === 'thin_energy' ? 2 : 3,
+      target: 70 + (encounter?.targetBonus ?? 0) - targetReduction,
       comboMultiplier: 1,
       doubledTurn: false,
       wildMonth: false,
@@ -136,13 +155,14 @@ export class GameScene extends Phaser.Scene {
 
   private createRoom(): void {
     const { width, height } = this.scale;
+    const encounter = runStore.currentEncounter;
     const room = this.add.image(width / 2, height / 2, 'room').setDisplaySize(width, height);
     room.setTint(0xb9ad9b);
     this.add.rectangle(width / 2, height / 2, width, height, 0x050403, 0.22);
     this.add.rectangle(width / 2, 505, 1100, 525, 0x140c08, 0.2).setStrokeStyle(2, 0x5a3526, 0.38);
 
     this.add
-      .text(width / 2, 54, '네 자리 도깨비 판', {
+      .text(width / 2, 54, encounter?.name ?? '네 자리 도깨비 판', {
         fontFamily: '"Gowun Batang", serif',
         fontSize: '28px',
         color: '#dfcfad',
@@ -152,13 +172,20 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     this.add
-      .text(width / 2, 94, '세 판주가 실제로 패를 먹는다 · 판술로 확률을 꺾는다 · 고로 배수를 건다', {
+      .text(
+        width / 2,
+        94,
+        encounter
+          ? `${encounter.ruleName}: ${encounter.description}`
+          : '세 판주가 실제로 패를 먹는다 · 판술로 확률을 꺾는다 · 고로 배수를 건다',
+        {
         fontFamily: '"Noto Sans KR", sans-serif',
         fontSize: '15px',
         color: '#b4a68d',
         backgroundColor: '#0b0806b8',
         padding: { x: 12, y: 5 },
-      })
+        },
+      )
       .setOrigin(0.5);
 
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
@@ -288,7 +315,7 @@ export class GameScene extends Phaser.Scene {
   private renderOpponents(activeId?: string): void {
     this.opponentLayer.removeAll(true);
     this.opponents.forEach((opponent) => {
-      const score = calculateScore(opponent.captured, 0).total;
+      const score = this.opponentScore(opponent);
       const active = opponent.id === activeId;
       const group = this.add.container(opponent.seatX, 176);
       const halo = this.add
@@ -410,10 +437,11 @@ export class GameScene extends Phaser.Scene {
 
   private renderTactics(): void {
     this.tacticLayer.removeAll(true);
-    TACTICS.forEach((tactic, index) => {
+    this.activeTactics.forEach((tactic, index) => {
       const y = 242 + index * 122;
       const used = this.usedTactics.has(tactic.id);
-      const affordable = this.state.energy >= tactic.cost;
+      const actualCost = this.tacticCost(tactic);
+      const affordable = this.state.energy >= actualCost;
       const enabled = !used && affordable && !this.busy;
       const group = this.add.container(1455, y);
       const plate = this.add
@@ -428,7 +456,7 @@ export class GameScene extends Phaser.Scene {
         })
         .setOrigin(0, 0.5);
       const cost = this.add
-        .text(101, -28, `기력 ${tactic.cost}`, {
+        .text(101, -28, actualCost === 0 && tactic.cost > 0 ? '거울 0' : `기력 ${actualCost}`, {
           fontFamily: '"Noto Sans KR", sans-serif',
           fontSize: '13px',
           color: enabled ? '#7fc1ad' : '#625d53',
@@ -459,7 +487,7 @@ export class GameScene extends Phaser.Scene {
     this.fieldLayer.each((child: Phaser.GameObjects.GameObject) => {
       if (!(child instanceof CardView)) return;
       const fieldCard = child.getData('fieldCard') as HwatuCard;
-      child.setMatchHint(matchesMonth(card, fieldCard, this.state.wildMonth));
+      child.setMatchHint(this.cardsMatch(card, fieldCard, this.state.wildMonth));
     });
   }
 
@@ -468,11 +496,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private useTactic(tactic: Tactic): void {
-    if (this.busy || this.usedTactics.has(tactic.id) || this.state.energy < tactic.cost) return;
+    const actualCost = this.tacticCost(tactic);
+    if (this.busy || this.usedTactics.has(tactic.id) || this.state.energy < actualCost) return;
     this.sfx.unlock();
     this.sfx.tactic();
-    this.state.energy -= tactic.cost;
+    this.state.energy -= actualCost;
     this.usedTactics.add(tactic.id);
+    this.tacticUseCount += 1;
 
     if (tactic.id === 'peek') {
       const best = chooseBestDeckCard(this.deck, this.field);
@@ -482,11 +512,44 @@ export class GameScene extends Phaser.Scene {
     } else if (tactic.id === 'moonstep') {
       this.state.wildMonth = true;
       this.setMessage('달넘기. 이번 패는 앞뒤 달과도 맞는다.');
-    } else {
+    } else if (tactic.id === 'storm') {
       this.state.doubledTurn = true;
       this.setMessage('휘몰이. 이번에 먹는 패의 값이 두 배가 된다.');
+    } else if (tactic.id === 'swap') {
+      const swapIndex = this.hand.findIndex(
+        (card) => !this.field.some((fieldCard) => matchesMonth(card, fieldCard, false)),
+      );
+      const targetIndex = swapIndex >= 0 ? swapIndex : 0;
+      const replacement = this.deck.shift();
+      const oldCard = this.hand[targetIndex];
+      if (replacement && oldCard) {
+        this.hand[targetIndex] = replacement;
+        this.deck.push(oldCard);
+        this.setMessage(`${oldCard.month}월을 덮고 ${replacement.month}월을 받아왔다.`);
+      }
+    } else if (tactic.id === 'snatch') {
+      const target = [...this.field].sort((a, b) => this.cardValue(a) - this.cardValue(b))[0];
+      if (target) {
+        this.field.splice(this.field.findIndex((card) => card.id === target.id), 1);
+        this.captured.push(target);
+        this.setMessage(`바닥의 ${target.month}월 ${target.kind}를 낚아챘다.`);
+      }
+    } else if (tactic.id === 'silence') {
+      this.skipOpponentTurns += 1;
+      this.setMessage('입막음. 다음 판주 한 명은 패를 내지 못한다.');
+    } else if (tactic.id === 'blossom') {
+      this.nextCaptureBonus += 35;
+      this.setMessage('만개. 다음 갈무리에 35점이 더해진다.');
+    } else if (tactic.id === 'breath') {
+      this.state.energy = Math.min(3, this.state.energy + 1);
+      this.setMessage('숨을 골랐다. 기력 1을 회복했다.');
     }
     this.renderAll();
+  }
+
+  private tacticCost(tactic: Tactic): number {
+    if (hasRelic('goblin-mirror') && this.tacticUseCount === 0) return 0;
+    return tactic.cost;
   }
 
   private async playCard(card: HwatuCard): Promise<void> {
@@ -525,6 +588,24 @@ export class GameScene extends Phaser.Scene {
       this.captured.push(...capturedThisTurn);
       await this.animateCaptureSweep(capturedThisTurn, 132, 478);
       this.sfx.capture();
+      if (runStore.currentEncounter?.rule === 'bloom' && !this.firstCaptureAwarded) {
+        this.firstCaptureAwarded = true;
+        this.bonusScore += 15;
+        this.showStamp('첫 꽃 +15');
+      }
+      if (runStore.currentEncounter?.rule === 'harvest') {
+        const harvestCards = capturedThisTurn.filter((item) => item.kind === '띠' || item.kind === '열끗').length;
+        if (harvestCards > 0) this.bonusScore += harvestCards * 8;
+      }
+      if (this.nextCaptureBonus > 0) {
+        this.bonusScore += this.nextCaptureBonus;
+        this.showStamp(`만개 +${this.nextCaptureBonus}`);
+        this.nextCaptureBonus = 0;
+      }
+      if (hasRelic('empty-table') && this.hand.length <= 2) {
+        this.bonusScore += 35;
+        this.showStamp('빈 술상 +35');
+      }
       if (this.state.doubledTurn) {
         this.bonusScore += capturedThisTurn.reduce((sum, item) => {
           const values = { 광: 40, 열끗: 18, 띠: 12, 피: 5 };
@@ -564,7 +645,7 @@ export class GameScene extends Phaser.Scene {
   private resolveCard(card: HwatuCard, wildMonth: boolean): HwatuCard[] {
     const matching = this.field
       .map((fieldCard, index) => ({ fieldCard, index }))
-      .filter(({ fieldCard }) => matchesMonth(card, fieldCard, wildMonth))
+      .filter(({ fieldCard }) => this.cardsMatch(card, fieldCard, wildMonth))
       .sort((a, b) => this.cardValue(b.fieldCard) - this.cardValue(a.fieldCard));
     if (matching.length === 0) {
       this.field.push(card);
@@ -574,11 +655,23 @@ export class GameScene extends Phaser.Scene {
     return [card, matched];
   }
 
+  private cardsMatch(played: HwatuCard, fieldCard: HwatuCard, wildMonth: boolean): boolean {
+    if (matchesMonth(played, fieldCard, wildMonth)) return true;
+    return runStore.currentEncounter?.rule === 'rain_wild' && (played.month === 12 || fieldCard.month === 12);
+  }
+
   private async performOpponentTurns(): Promise<void> {
     for (const opponent of this.opponents) {
       if (opponent.hand.length === 0) continue;
       this.renderOpponents(opponent.id);
       await this.delay(240);
+      if (this.skipOpponentTurns > 0) {
+        this.skipOpponentTurns -= 1;
+        this.setMessage(`${opponent.name}이 입을 다물었다. 차례를 넘긴다.`);
+        this.showStamp('차례 봉인');
+        await this.delay(520);
+        continue;
+      }
 
       const cardIndex = this.chooseOpponentCard(opponent);
       const [played] = opponent.hand.splice(cardIndex, 1);
@@ -696,10 +789,20 @@ export class GameScene extends Phaser.Scene {
   }
 
   private currentScore(): number {
-    return calculateScore(this.captured, this.state.goCount, this.state.comboMultiplier).total + this.bonusScore;
+    let total = calculateScore(this.captured, this.state.goCount, this.state.comboMultiplier).total + this.bonusScore;
+    if (hasRelic('rain-charm')) total += this.captured.filter((card) => card.kind === '광').length * 20;
+    if (hasRelic('ribbon-knot')) total += this.captured.filter((card) => card.kind === '띠').length * 9;
+    if (hasRelic('bird-bell')) total += this.captured.filter((card) => card.kind === '열끗').length * 12;
+    if (hasRelic('last-cup') && runStore.hp === 1) total = Math.round(total * 1.35);
+    return total;
+  }
+
+  private opponentScore(opponent: OpponentState): number {
+    return calculateScore(opponent.captured, 0).total + (runStore.currentEncounter?.opponentBonus ?? 0);
   }
 
   private effectiveTarget(): number {
+    if (runStore.currentEncounter?.rule !== 'red_tax') return this.state.target;
     const redRibbonIds = new Set(['1-1', '2-1', '3-1']);
     const redRibbons = this.captured.filter((card) => redRibbonIds.has(card.id)).length;
     return this.state.target + redRibbons * 15;
@@ -748,7 +851,7 @@ export class GameScene extends Phaser.Scene {
     this.busy = true;
     const { width, height } = this.scale;
     const rank = this.playerRank();
-    const leaderScore = Math.max(...this.opponents.map((opponent) => calculateScore(opponent.captured, 0).total));
+    const leaderScore = Math.max(...this.opponents.map((opponent) => this.opponentScore(opponent)));
     this.modalLayer.removeAll(true);
     const shade = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.66);
     const panel = this.add.rectangle(width / 2, height / 2, 760, 420, 0x15100d, 0.99).setStrokeStyle(3, COLORS.brass);
@@ -803,7 +906,7 @@ export class GameScene extends Phaser.Scene {
   private chooseGo(): void {
     this.modalLayer.removeAll(true);
     this.state.goCount += 1;
-    this.state.target = Math.ceil(this.currentScore() * 1.25 + 20);
+    this.state.target = Math.ceil(this.currentScore() * 1.25 + 20) - (hasRelic('moon-mortar') ? 15 : 0);
     this.state.energy = Math.min(3, this.state.energy + 1);
     this.usedTactics.clear();
     this.busy = false;
@@ -823,7 +926,7 @@ export class GameScene extends Phaser.Scene {
       { name: '나', score: this.currentScore() },
       ...this.opponents.map((opponent) => ({
         name: opponent.name,
-        score: calculateScore(opponent.captured, 0).total,
+        score: this.opponentScore(opponent),
       })),
     ].sort((a, b) => b.score - a.score);
     this.modalLayer.removeAll(true);
@@ -865,17 +968,35 @@ export class GameScene extends Phaser.Scene {
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
-    const retry = this.makeModalButton(680, 620, '다시 친다', '새로운 패로 시작', COLORS.red);
-    retry.on('pointerup', () => this.scene.restart());
-    const home = this.makeModalButton(920, 620, '방을 나선다', '제목으로', COLORS.jade);
+    const proceed = this.makeModalButton(
+      680,
+      620,
+      won ? '보상 고르기' : '길로 돌아간다',
+      won
+        ? '판술 또는 노리개 3택1'
+        : hasRelic('broken-coin') && !runStore.shieldSpent
+          ? '끊어진 엽전이 체력을 지킨다'
+          : '체력 1을 잃는다',
+      won ? COLORS.brass : COLORS.red,
+    );
+    proceed.on('pointerup', () => {
+      if (won) {
+        registerVictory(this.currentScore());
+        this.scene.start('reward');
+        return;
+      }
+      registerDefeat();
+      this.scene.start(runStore.hp <= 0 ? 'run-end' : 'map', { failed: runStore.hp <= 0 });
+    });
+    const home = this.makeModalButton(920, 620, '런을 포기한다', '제목으로', COLORS.jade);
     home.on('pointerup', () => this.scene.start('title'));
-    this.modalLayer.add([shade, panel, title, detailText, final, retry, home]);
+    this.modalLayer.add([shade, panel, title, detailText, final, proceed, home]);
   }
 
   private playerRank(): number {
     const playerScore = this.currentScore();
     return 1 + this.opponents.filter(
-      (opponent) => calculateScore(opponent.captured, 0).total > playerScore,
+      (opponent) => this.opponentScore(opponent) > playerScore,
     ).length;
   }
 
@@ -917,11 +1038,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateHud(): void {
-    this.scoreText.setText(`현재 ${this.currentScore()}점`);
+    this.scoreText.setText(`${runStore.stage + 1}/4판 · 현재 ${this.currentScore()}점`);
     this.targetText.setText(`목표 ${this.effectiveTarget()}점`);
     this.turnText.setText(`남은 패 ${this.hand.length}`);
     this.energyText.setText(`기력 ${this.state.energy}/3`);
-    this.goText.setText(this.state.goCount > 0 ? `${this.state.goCount}고` : '첫 판');
+    this.goText.setText(`체력 ${runStore.hp}/${runStore.maxHp} · ${this.state.goCount > 0 ? `${this.state.goCount}고` : '첫 판'}`);
     this.deckText.setText(`산패 ${this.deck.length}장 · 바닥 ${this.field.length}장`);
   }
 
