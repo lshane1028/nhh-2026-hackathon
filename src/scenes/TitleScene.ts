@@ -40,7 +40,7 @@ export class TitleScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const start = this.makeButton(width / 2, 684, '첫 판을 연다', 300, 72);
+    const start = this.makeButton(width / 2, 684, '네 자리 판을 연다', 320, 72);
     start.on('pointerup', () => this.scene.start('game'));
     this.makeButton(width / 2, 770, '규칙', 180, 52).on('pointerup', () => this.showRules());
 
@@ -96,13 +96,13 @@ export class TitleScene extends Phaser.Scene {
     const copy = [
       '한 판의 규칙',
       '',
-      '1. 손패를 눌러 같은 달의 바닥패를 먹습니다.',
-      '2. 이어서 산패 한 장이 뒤집히고, 같은 달이면 함께 먹습니다.',
-      '3. 광·열끗·띠·피와 족보를 모아 목표 점수를 넘깁니다.',
-      '4. 판술은 나쁜 운을 한 번 비트는 기술입니다.',
-      '5. 목표를 달성하면 스톱으로 확정하거나 고로 판을 연장합니다.',
+      '1. 나와 세 판주가 다섯 장씩 들고 차례로 패를 냅니다.',
+      '2. 같은 달의 바닥패를 먹고 산패 한 장을 뒤집습니다.',
+      '3. 판주들도 실제로 패와 족보를 가져가며 점수를 올립니다.',
+      '4. 판술은 나만 사용할 수 있는 로그라이트 기술입니다.',
+      '5. 목표를 넘기면 스톱으로 선두를 굳히거나 고로 배수를 겁니다.',
       '',
-      '화투를 처음 접해도 먹을 수 있는 패가 붉게 표시됩니다.',
+      '일반 고스톱과 달리 판주마다 노리는 패가 다릅니다.',
     ].join('\n');
     const text = this.add
       .text(width / 2, height / 2 - 20, copy, {
@@ -122,4 +122,3 @@ export class TitleScene extends Phaser.Scene {
     });
   }
 }
-
