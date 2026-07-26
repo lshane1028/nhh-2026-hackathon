@@ -5,7 +5,6 @@ export default defineConfig({
   build: {
     target: 'es2022',
     assetsInlineLimit: 0,
-    sourcemap: true,
+    sourcemap: false,
   },
 });
-
