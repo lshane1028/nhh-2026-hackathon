@@ -1,0 +1,1 @@
+# nhh-2026-hackathon
