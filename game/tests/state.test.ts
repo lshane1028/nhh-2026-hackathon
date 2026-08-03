@@ -31,6 +31,7 @@ describe("playable run reducer", () => {
       hand: januaryPair,
       drawPile: deck.filter((card) => !januaryPair.some((selected) => selected.instanceId === card.instanceId)),
       selectedCardIds: januaryPair.map((card) => card.instanceId),
+      manualYakuId: "month_pair" as const,
       yard: { cards: [], sweptCount: 0, shakeArmed: false },
       targetScore: 10_000,
       chain: createGoChainState(),
@@ -47,6 +48,85 @@ describe("playable run reducer", () => {
     expect(banked.chain.pot).toBe(0);
     expect(banked.chain.confirmedScore).toBeGreaterThan(0);
     expect(banked.chain.confirmedCollection.cardIds).toEqual(expect.arrayContaining(januaryPair.map((card) => card.instanceId)));
+  });
+
+  it("toggles only the clicked cards and preserves the five-card cap", () => {
+    const deck = createStandardHwatuDeck();
+    const hand = deck.slice(0, 6);
+    let state: ReturnType<typeof createInitialGameState> = {
+      ...createInitialGameState("SELECT-REGRESSION"),
+      screen: "play" as const,
+      deck,
+      hand,
+      selectedCardIds: [],
+    };
+
+    for (const index of [0, 2, 4]) {
+      state = gameReducer(state, { type: "SELECT_CARD", cardId: hand[index].instanceId });
+    }
+    expect(state.selectedCardIds).toEqual([0, 2, 4].map((index) => hand[index].instanceId));
+
+    state = gameReducer(state, { type: "SELECT_CARD", cardId: hand[2].instanceId });
+    expect(state.selectedCardIds).toEqual([hand[0].instanceId, hand[4].instanceId]);
+
+    state = gameReducer(state, { type: "CLEAR_SELECTION" });
+    for (const card of hand.slice(0, 5)) {
+      state = gameReducer(state, { type: "SELECT_CARD", cardId: card.instanceId });
+    }
+    expect(state.selectedCardIds).toHaveLength(5);
+    const beforeSixth = state.selectedCardIds;
+    state = gameReducer(state, { type: "SELECT_CARD", cardId: hand[5].instanceId });
+    expect(state.selectedCardIds).toEqual(beforeSixth);
+  });
+
+  it("clears a chosen yaku when cards or the cup role change", () => {
+    const deck = createStandardHwatuDeck();
+    const pair = deck.filter((card) => card.month === 1).slice(0, 2);
+    const base = {
+      ...createInitialGameState("MANUAL-RESET"),
+      screen: "play" as const,
+      deck,
+      hand: deck.slice(0, 8),
+      selectedCardIds: pair.map((card) => card.instanceId),
+      manualYakuId: "month_pair" as const,
+    };
+
+    const changedCards = gameReducer(base, { type: "SELECT_CARD", cardId: base.hand[4].instanceId });
+    expect(changedCards.manualYakuId).toBeNull();
+
+    const changedRole = gameReducer(base, { type: "SET_CUP_ROLE", role: "double_chaff" });
+    expect(changedRole.manualYakuId).toBeNull();
+  });
+
+  it("requires a valid manually chosen yaku before submission", () => {
+    const deck = createStandardHwatuDeck();
+    const pair = deck.filter((card) => card.month === 1).slice(0, 2);
+    const base = {
+      ...createInitialGameState("MANUAL-SUBMIT"),
+      runId: "manual-submit",
+      screen: "play" as const,
+      deck,
+      hand: pair,
+      selectedCardIds: pair.map((card) => card.instanceId),
+      yard: { cards: [], sweptCount: 0, shakeArmed: false },
+    };
+
+    expect(gameReducer(base, { type: "SUBMIT_HAND" })).toBe(base);
+
+    const invalid = gameReducer(
+      { ...base, manualYakuId: "four_ribbons" as const },
+      { type: "SUBMIT_HAND" },
+    );
+    expect(invalid.screen).toBe("play");
+    expect(invalid.handsRemaining).toBe(base.handsRemaining);
+    expect(invalid.lastScore).toBeNull();
+
+    const valid = gameReducer(
+      { ...base, manualYakuId: "month_pair" as const },
+      { type: "SUBMIT_HAND" },
+    );
+    expect(valid.screen).toBe("decision");
+    expect(valid.lastScore?.yakuId).toBe("month_pair");
   });
 
   it("buys and applies a painter card as a permanent deck edit", () => {

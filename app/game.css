@@ -157,6 +157,9 @@
 .yaku-picker > div { display: flex; min-width: 9rem; flex-direction: column; margin-right: auto; }
 .yaku-picker > div span { color: var(--muted); font-size: 0.65rem; }
 .yaku-picker button, .cup-role-switch button { min-height: 2rem !important; padding: 0.35rem 0.55rem !important; font-size: 0.72rem; }
+.yaku-picker button { display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
+.yaku-picker button > span { color: var(--muted); font-size: 0.56rem; font-weight: 650; }
+.yaku-picker button.active > span { color: inherit; opacity: 0.82; }
 .cup-role-switch { justify-content: flex-end; padding: 0.55rem; border: 1px solid var(--paper-deep); border-radius: 0.7rem; background: #fffaf0; }
 .cup-role-switch > span { width: 100%; margin-right: 0.25rem; color: var(--muted); font-size: 0.65rem; font-weight: 800; text-align: right; }
 

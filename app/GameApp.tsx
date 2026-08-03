@@ -3,16 +3,14 @@
 import { useEffect, useMemo, useReducer, useState } from "react";
 
 import { BOSS_BY_ID } from "@/game/content/bosses";
-import { CONTRACTS, START_DECKS, WEATHER_BY_ID } from "@/game/content/meta";
+import { CONTRACTS, WEATHER_BY_ID } from "@/game/content/meta";
 import { getStageDefinition } from "@/game/content/stages";
 import { TALISMAN_BY_ID } from "@/game/content/talismans";
-import {
-  ALL_IMMEDIATE_YAKU_DEFINITIONS,
-  COLLECTION_YAKU_DEFINITIONS,
-} from "@/game/content/yaku";
+import { ALL_IMMEDIATE_YAKU_DEFINITIONS } from "@/game/content/yaku";
+import { calculateCollectionBonus } from "@/game/engine/collection-bonus";
 import { calculateGoRequirement, canGo, getNextHandMinimum } from "@/game/engine/go";
 import { canDeclareShake } from "@/game/engine/experimental";
-import { getCollectionProgress, findImmediateYakuCandidates } from "@/game/engine/yaku";
+import { findImmediateYakuCandidates } from "@/game/engine/yaku";
 import {
   createInitialGameState,
   evaluateSelectedHand,
@@ -75,33 +73,73 @@ function cardsFor(state: GameState, ids: readonly string[]): CardInstance[] {
 function collectionItems(state: GameState): CollectionBoardItem[] {
   const confirmedCards = cardsFor(state, state.chain.confirmedCollection.cardIds);
   const pendingCards = cardsFor(state, state.chain.pendingCollection.cardIds);
-  const confirmed = getCollectionProgress({
-    confirmedCards,
-    confirmedCompletedYakuIds: state.chain.confirmedCollection.completedYakuIds,
-    cupRole: state.cupRole,
-  });
-  const total = getCollectionProgress({
-    confirmedCards,
-    pendingCards,
-    confirmedCompletedYakuIds: state.chain.confirmedCollection.completedYakuIds,
-    pendingCompletedYakuIds: state.chain.pendingCollection.completedYakuIds,
-    cupRole: state.cupRole,
-  });
-  return COLLECTION_YAKU_DEFINITIONS.map((definition) => {
-    const c = confirmed.find((entry) => entry.yakuId === definition.id)?.matchedCardIds.length ?? 0;
-    const t = total.find((entry) => entry.yakuId === definition.id)?.matchedCardIds.length ?? 0;
-    return {
-      yakuId: definition.id,
-      name: definition.name,
-      description: definition.description,
-      assetTag: definition.assetTag,
-      confirmedCount: c,
-      pendingCount: Math.max(0, t - c),
-      required: definition.required,
-      completed: state.chain.confirmedCollection.completedYakuIds.includes(definition.id),
-      newlyCompleted: state.lastScore?.newCollectionYakuIds.includes(definition.id),
-    };
-  });
+  const confirmed = calculateCollectionBonus(confirmedCards, state.cupRole);
+  const total = calculateCollectionBonus([...confirmedCards, ...pendingCards], state.cupRole);
+  const pendingCount = (track: keyof typeof total.counts): number =>
+    Math.max(0, total.counts[track] - confirmed.counts[track]);
+
+  return [
+    {
+      id: "bright",
+      name: "광",
+      kind: "bright",
+      assetTag: "collection:bright-five-slots",
+      description: "다섯 광 중 모은 패만 빛납니다",
+      confirmedCount: confirmed.counts.bright,
+      pendingCount: pendingCount("bright"),
+      milestones: [
+        { at: 3, label: "3장", reward: "+2배수" },
+        { at: 4, label: "4장", reward: "+4배수" },
+        { at: 5, label: "5장", reward: "+7배수" },
+      ],
+    },
+    {
+      id: "animal",
+      name: "동물",
+      kind: "animal",
+      assetTag: "collection:animal-track",
+      description: "동물 그림패 전체 · 고도리는 별도 보너스",
+      confirmedCount: confirmed.counts.animal,
+      pendingCount: pendingCount("animal"),
+      slotCount: 10,
+      milestones: [
+        { at: 3, label: "고도리", reward: "+2배수", active: total.completedSets.godori },
+        { at: 5, label: "5장", reward: "+2배수" },
+        { at: 6, label: "그 뒤", reward: "+0.5/장" },
+      ],
+    },
+    {
+      id: "ribbon",
+      name: "띠",
+      kind: "ribbon",
+      assetTag: "collection:ribbon-track",
+      description: "띠 전체 · 홍단·초단·청단은 조합 보너스",
+      confirmedCount: confirmed.counts.ribbon,
+      pendingCount: pendingCount("ribbon"),
+      slotCount: 10,
+      milestones: [
+        { at: 3, label: "홍단", reward: "+2", active: total.completedSets.hongdan },
+        { at: 3, label: "초단", reward: "+2", active: total.completedSets.chodan },
+        { at: 3, label: "청단", reward: "+2", active: total.completedSets.cheongdan },
+        { at: 5, label: "5장", reward: "+2배수" },
+        { at: 6, label: "그 뒤", reward: "+0.5/장" },
+      ],
+    },
+    {
+      id: "chaff",
+      name: "피",
+      kind: "chaff",
+      assetTag: "collection:chaff-ten-slots",
+      description: "쌍피는 두 칸 · 10을 넘으면 월 합도 성장",
+      confirmedCount: confirmed.counts.chaff,
+      pendingCount: pendingCount("chaff"),
+      milestones: [
+        { at: 5, label: "5피", reward: "+1배수" },
+        { at: 10, label: "10피", reward: "+4배수" },
+        { at: 11, label: "초과", reward: "월 합 +1/피" },
+      ],
+    },
+  ];
 }
 
 function cardEditorOption(definition: ReturnType<typeof getPendingConsumableDefinition>): {
@@ -248,7 +286,6 @@ function DeckEditor({ state, dispatch }: {
 export default function GameApp() {
   const [state, dispatch] = useReducer(gameReducer, undefined, () => createInitialGameState());
   const [savedState, setSavedState] = useState<GameState | null>(null);
-  const [selectedDeckId, setSelectedDeckId] = useState("deck_standard");
   const [tutorialMode, setTutorialMode] = useState(true);
   const [selectedContract, setSelectedContract] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -311,16 +348,13 @@ export default function GameApp() {
           title="꽃판: GO!"
           subtitle="열두 달을 고쳐 만드는 화투 로그라이크"
           description="48장 화투패의 월 숫자를 더하고 족보 배수를 키우세요. 안전하게 저장할지, 고를 외쳐 더 크게 걸지 선택하는 덱빌딩 게임입니다. 모든 그림 자리는 교체 가능한 assetTag 텍스트로 남겨 둔 프로토타입입니다."
-          versionLabel="NAN 2026 PROTOTYPE · v0.2"
-          startDecks={START_DECKS}
-          selectedDeckId={selectedDeckId}
+          versionLabel="NAN 2026 PROTOTYPE · v0.3"
           experimentalRules={state.experimentalRules}
           experimentalRuleOptions={EXPERIMENT_OPTIONS}
           canContinue={Boolean(savedState)}
           continueSummary={savedState ? `${savedState.stage}월 · ${format(savedState.chain.confirmedScore)}점` : undefined}
-          onSelectDeck={setSelectedDeckId}
           onToggleExperimentalRule={(key: keyof ExperimentalRules) => dispatch({ type: "TOGGLE_EXPERIMENT", key })}
-          onNewGame={() => dispatch({ type: "START_RUN", startDeckId: selectedDeckId, tutorialMode })}
+          onNewGame={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode })}
           onContinue={savedState ? () => dispatch({ type: "CONTINUE_RUN", state: savedState }) : undefined}
         />
       </div>
@@ -458,7 +492,7 @@ export default function GameApp() {
           stats={state.stats}
           summary={isWin ? "열두 달을 모두 도장 찍었습니다. 같은 덱으로 무한 달력을 이어갈 수 있습니다." : "덱은 사라지지 않았습니다. 같은 시드로 다시 설계해 보세요."}
           failureReason={!isWin ? `${format(Math.max(0, state.targetScore - state.chain.confirmedScore))}점 부족` : undefined}
-          onRestart={() => dispatch({ type: "START_RUN", startDeckId: state.startDeckId ?? "deck_standard", tutorialMode: state.tutorialMode })}
+          onRestart={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode: state.tutorialMode })}
           onReturnToTitle={resetToTitle}
           onCopySeed={() => void navigator.clipboard?.writeText(state.seed)}
         />
@@ -480,8 +514,8 @@ export default function GameApp() {
   const firstLesson = state.tutorialMode && state.stage === 1;
   const playTutorial = state.screen === "decision"
     ? {
-        step: 4,
-        total: 4,
+        step: 5,
+        total: 5,
         title: "첫 점수를 안전하게 저장해 보세요",
         body: "방금 만든 점수는 아직 ‘이번 승부’에 있습니다. 저장하면 누적 점수가 되고, 고를 누르면 다음 손까지 더 큰 점수를 노리는 대신 실패 위험이 생깁니다.",
         actionHint: "이번에는 ‘저장하고 계속’을 눌러 보세요.",
@@ -489,8 +523,8 @@ export default function GameApp() {
       }
     : state.roundSubmissionIndex > 0 || state.chain.confirmedScore > 0
       ? {
-          step: 4,
-          total: 4,
+          step: 5,
+          total: 5,
           title: "기본 조작을 익혔어요",
           body: "카드를 클릭해 월 합을 만들고, 족보 배수를 붙여 목표 점수를 채우면 됩니다. 필요 없는 카드는 버려 새 패를 뽑으세요.",
           actionHint: `누적 ${format(state.chain.confirmedScore)} / 목표 ${format(state.targetScore)}점`,
@@ -498,7 +532,7 @@ export default function GameApp() {
       : state.selectedCardIds.length === 0
         ? {
             step: 1,
-            total: 4,
+            total: 5,
             title: "손패는 드래그하지 않고 클릭합니다",
             body: "카드의 큰 숫자가 월값입니다. 선택한 카드들의 월 숫자를 더한 값이 점수식의 앞 숫자가 됩니다.",
             actionHint: "같은 월 두 장이 보이면 둘 다 클릭하세요. 없으면 월 숫자가 큰 카드 두 장을 골라도 됩니다.",
@@ -507,20 +541,29 @@ export default function GameApp() {
         : state.selectedCardIds.length === 1
           ? {
               step: 2,
-              total: 4,
+              total: 5,
               title: "선택한 카드는 위로 올라옵니다",
               body: "지금 선택한 카드가 첫 번째 점수 재료입니다. 한 장을 더 골라 월 합과 가능한 족보가 어떻게 바뀌는지 확인하세요.",
               actionHint: "카드 한 장을 더 클릭해 보세요.",
               targetLabel: "두 번째 카드",
             }
-          : {
-              step: 3,
-              total: 4,
-              title: "월 합 × 배수가 이번 손 점수입니다",
-              body: "점수판의 왼쪽은 선택 카드의 월 숫자 합, 오른쪽은 족보·수집·부적이 만든 배수입니다.",
-              actionHint: "예상 점수를 확인한 뒤 ‘족보 제출’을 눌러 보세요.",
-              targetLabel: "족보 제출",
-            };
+          : !state.manualYakuId
+            ? {
+                step: 3,
+                total: 5,
+                title: "이번 손의 족보를 직접 고르세요",
+                body: "선택한 카드로 가능한 족보만 버튼으로 나타납니다. 자동 최고점은 없으니 월 합과 배수를 보고 어떤 족보로 낼지 직접 정합니다.",
+                actionHint: "‘적용할 족보’에서 원하는 족보 버튼을 눌러 보세요.",
+                targetLabel: "적용할 족보",
+              }
+            : {
+                step: 4,
+                total: 5,
+                title: "월 합 × 배수가 이번 손 점수입니다",
+                body: "점수판의 왼쪽은 족보에 들어간 카드의 월 숫자 합, 오른쪽은 족보·수집·부적이 만든 배수입니다.",
+                actionHint: "예상 점수를 확인한 뒤 ‘족보 제출’을 눌러 보세요.",
+                targetLabel: "족보 제출",
+              };
   return (
     <div className="game-root play-root">
       <GameTopBar
@@ -553,7 +596,13 @@ export default function GameApp() {
           </header>
 
           <div className="play-score-panel">
-            <ScoreFormula assetTag="ui:score-formula:month-times-multiplier" breakdown={preview?.breakdown ?? state.lastScore} label={state.screen === "decision" ? "방금 낸 점수" : "선택 카드 예상 점수"} showOperations={false} />
+            <ScoreFormula
+              assetTag="ui:score-formula:month-times-multiplier"
+              breakdown={state.screen === "decision" ? state.lastScore : preview?.breakdown}
+              label={state.screen === "decision" ? "방금 낸 점수" : "선택 카드 예상 점수"}
+              emptyMessage={state.selectedCardIds.length > 0 ? "적용할 족보를 직접 고르면 계산식이 열립니다." : "카드를 선택하면 가능한 족보가 표시됩니다."}
+              showOperations={false}
+            />
           </div>
 
           <div className="hand-cards" aria-label="내 손패">
@@ -562,11 +611,15 @@ export default function GameApp() {
 
           <div className="hand-options">
             <section className="yaku-picker" aria-label="메인 족보 선택">
-              <div><strong>적용할 족보</strong><span>자동은 가장 높은 점수를 선택합니다</span></div>
-              <button type="button" className={!state.manualYakuId ? "active" : ""} onClick={() => dispatch({ type: "SET_MANUAL_YAKU", yakuId: null })}>최고점 자동</button>
+              <div><strong>적용할 족보를 직접 선택</strong><span>{state.selectedCardIds.length ? "하나를 골라야 점수를 낼 수 있습니다" : "먼저 카드를 고르세요"}</span></div>
               {yakuChoices.map((id) => {
                 const definition = ALL_IMMEDIATE_YAKU_DEFINITIONS.find((entry) => entry.id === id);
-                return <button type="button" className={state.manualYakuId === id ? "active" : ""} key={id} onClick={() => dispatch({ type: "SET_MANUAL_YAKU", yakuId: id as ImmediateYakuId })}>{definition?.name ?? id}</button>;
+                return (
+                  <button type="button" className={state.manualYakuId === id ? "active" : ""} key={id} onClick={() => dispatch({ type: "SET_MANUAL_YAKU", yakuId: id as ImmediateYakuId })}>
+                    <strong>{definition?.name ?? id}</strong>
+                    <span>×{definition?.baseHeung ?? 1} · {definition?.description}</span>
+                  </button>
+                );
               })}
             </section>
 
@@ -581,7 +634,7 @@ export default function GameApp() {
             <footer className="hand-actions">
               {state.experimentalRules.bombsAndShake ? <button type="button" disabled={!shakeReady} className={state.yard.shakeArmed ? "active" : ""} onClick={() => dispatch({ type: "DECLARE_SHAKE" })}>같은 월 3장 흔들기</button> : null}
               <button type="button" disabled={!state.selectedCardIds.length || state.discardsRemaining <= 0} onClick={() => dispatch({ type: "DISCARD_SELECTED" })}>선택 버리기 ({state.discardsRemaining})</button>
-              <button type="button" className="primary-action" disabled={!state.selectedCardIds.length || state.handsRemaining <= 0} onClick={() => dispatch({ type: "SUBMIT_HAND" })}>족보 제출 ({state.handsRemaining})</button>
+              <button type="button" className="primary-action" disabled={!state.selectedCardIds.length || !state.manualYakuId || state.handsRemaining <= 0} onClick={() => dispatch({ type: "SUBMIT_HAND" })}>족보 제출 ({state.handsRemaining})</button>
             </footer>
           ) : (
             <footer className="decision-actions">
@@ -593,7 +646,7 @@ export default function GameApp() {
         </section>
 
         <aside className="play-support">
-          <CollectionBoard assetTag="ui:collection-board" items={collections} maxVisible={8} />
+          <CollectionBoard assetTag="ui:collection-board" items={collections} />
         </aside>
       </main>
 
@@ -606,12 +659,13 @@ export default function GameApp() {
 
 function RulesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <GameModal id="rules" open={open} assetTag="ui:rules:scroll" title="꽃판 규칙 요약" description="월 합 × 배수와 고·스톱의 선택을 네 단계로 정리했습니다." onClose={onClose}>
+    <GameModal id="rules" open={open} assetTag="ui:rules:scroll" title="꽃판 규칙 요약" description="월 합 × 배수와 고·스톱의 선택을 간단히 정리했습니다." onClose={onClose}>
       <div className="rules-copy">
         <section><h3>1. 카드를 클릭</h3><p>손패에서 1~5장을 클릭합니다. 드래그는 없습니다. 선택한 카드들의 월 숫자를 더한 값이 점수식의 앞 숫자입니다.</p></section>
-        <section><h3>2. 월 합 × 배수</h3><p>족보가 기본 배수를 정하고, 수집 족보와 부적이 배수를 더하거나 곱합니다. 마지막 결과를 내림해 이번 손 점수를 만듭니다.</p></section>
-        <section><h3>3. 저장 / 고 / 스톱</h3><p>저장은 이번 승부 점수를 누적하고 계속합니다. 고는 다음 손까지 더 높은 문턱에 도전하며, 실패하면 이번 승부에서 모은 점수를 잃습니다. 스톱은 지금 점수로 판을 끝냅니다.</p></section>
-        <section><h3>4. 덱빌딩</h3><p>매달 장터 하나를 고릅니다. 부적은 보유 중 자동 발동, 비결서는 족보 배수 성장, 화공은 영구 카드 강화, 금단 계약은 강력한 효과와 대가입니다.</p></section>
+        <section><h3>2. 족보를 직접 선택</h3><p>선택 카드로 가능한 족보 중 하나를 직접 고릅니다. 자동 최고점은 없으며, 족보를 골라야 예상 점수와 제출 버튼이 열립니다.</p></section>
+        <section><h3>3. 월 합 × 배수</h3><p>족보에 들어간 카드의 월 숫자 합이 앞 숫자, 족보와 광·동물·띠·피 수집 및 부적이 만든 값이 배수입니다.</p></section>
+        <section><h3>4. 저장 / 고 / 스톱</h3><p>저장은 이번 승부 점수를 누적하고 계속합니다. 고는 다음 손까지 더 높은 문턱에 도전하며, 실패하면 이번 승부에서 모은 점수를 잃습니다. 스톱은 지금 점수로 판을 끝냅니다.</p></section>
+        <section><h3>5. 덱빌딩</h3><p>모든 런은 기본 48장으로 시작합니다. 매달 장터에서 부적·족보 성장·영구 카드 강화·금단 계약을 골라 나만의 덱으로 바꿉니다.</p></section>
       </div>
     </GameModal>
   );
