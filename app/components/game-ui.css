@@ -139,6 +139,14 @@ button.hwatu-card:hover:not(:disabled) { transform: translateY(-0.22rem); }
     0 0 0 2px rgb(177 131 47 / 24%),
     0 0.45rem 1rem rgb(36 30 20 / 18%);
 }
+.hwatu-card--selected.hwatu-card--scoring {
+  border-color: var(--game-red);
+  box-shadow:
+    inset 0 0 0 3px rgb(218 177 78 / 48%),
+    0 0 0 3px rgb(165 50 42 / 26%),
+    0 0.6rem 1.15rem rgb(36 30 20 / 22%);
+  transform: translateY(-0.35rem);
+}
 .hwatu-card--disabled { opacity: 0.55; filter: grayscale(0.45); }
 
 .hwatu-card--enhancement-inked {

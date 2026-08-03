@@ -152,7 +152,15 @@ export function HwatuCard({
       ) : null}
 
       <span className="hwatu-card__state" aria-hidden="true">
-        {isDisabled ? "사용 불가" : scoring ? "득점 카드" : selected ? "선택됨" : "선택 가능"}
+        {isDisabled
+          ? "사용 불가"
+          : selected && scoring
+            ? "선택됨 · 점수 포함"
+            : selected
+              ? "선택됨"
+              : scoring
+                ? "점수 포함"
+                : "선택 가능"}
       </span>
     </>
   );

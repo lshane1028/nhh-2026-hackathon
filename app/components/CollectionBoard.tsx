@@ -6,7 +6,7 @@ export interface CollectionMilestone {
   at: number;
   label: string;
   reward?: string;
-  /** Use for named sets such as Godori that are not unlocked by count alone. */
+  /** Use for combination milestones such as Godori or colored ribbon sets. */
   active?: boolean;
 }
 
@@ -115,20 +115,23 @@ export function CollectionBoard({
 
                   {item.milestones?.length ? (
                     <div className="collection-board__milestones" aria-label={`${item.name} 효과 구간`}>
-                      {item.milestones.map((milestone) => (
-                        <span
-                          className={joinClassNames(
-                            "collection-board__milestone",
-                            (milestone.active ?? total >= milestone.at) &&
-                              "collection-board__milestone--active",
-                          )}
-                          key={`${milestone.at}-${milestone.label}`}
-                        >
-                          <b>{milestone.at}</b>
-                          {milestone.label}
-                          {milestone.reward ? <em>{milestone.reward}</em> : null}
-                        </span>
-                      ))}
+                      {item.milestones.map((milestone) => {
+                        const isActive = milestone.active ?? total >= milestone.at;
+
+                        return (
+                          <span
+                            className={joinClassNames(
+                              "collection-board__milestone",
+                              isActive && "collection-board__milestone--active",
+                            )}
+                            key={`${milestone.at}-${milestone.label}`}
+                          >
+                            <b>{milestone.at}</b>
+                            {milestone.label}
+                            {milestone.reward ? <em>{milestone.reward}</em> : null}
+                          </span>
+                        );
+                      })}
                     </div>
                   ) : null}
                 </div>
