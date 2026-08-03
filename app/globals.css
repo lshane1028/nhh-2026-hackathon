@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #1d1b18;
+  --paper: #f7f0df;
+  --paper-deep: #e5d8ba;
+  --red: #9f3029;
+  --blue: #315b76;
+  --green: #315c43;
+  --gold: #b08129;
+  --line: #b7a783;
+  --muted: #6d6559;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+html { min-width: 320px; background: #24221f; }
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 2%) 1px, transparent 1px) 0 0 / 32px 32px,
+    linear-gradient(rgb(255 255 255 / 2%) 1px, transparent 1px) 0 0 / 32px 32px,
+    #24221f;
+  color: var(--ink);
+  font-family: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+}
+
+button, input, select { font: inherit; }
+button { touch-action: manipulation; }
+
+::selection { background: #9f3029; color: white; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

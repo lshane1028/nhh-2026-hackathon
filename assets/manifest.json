@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "policy": "text-placeholder-only",
+  "generatedImages": [],
+  "externalImages": [],
+  "assetTagAttribute": "data-asset-tag",
+  "filenameRule": "Replace ':' with '__' and save under public/assets/{category}/",
+  "example": {
+    "assetTag": "talisman:goblin-mirror",
+    "file": "public/assets/talismans/talisman__goblin-mirror.webp"
+  },
+  "tagSources": [
+    "game/content/cards.ts",
+    "game/content/yaku.ts",
+    "game/content/talismans.ts",
+    "game/content/upgrades.ts",
+    "game/content/bosses.ts",
+    "game/content/meta.ts",
+    "game/content/stages.ts",
+    "app/GameApp.tsx"
+  ],
+  "categories": [
+    "cards",
+    "yakus",
+    "talismans",
+    "painters",
+    "books",
+    "forbidden",
+    "bosses",
+    "enhancements",
+    "editions",
+    "seals",
+    "stages",
+    "ui",
+    "effects"
+  ]
+}

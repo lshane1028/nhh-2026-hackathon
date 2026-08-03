@@ -1,0 +1,37 @@
+import type { ExperimentalRules, ImmediateYakuId, ScreenId } from "../types";
+
+export type GameAction =
+  | { type: "HYDRATE"; payload: unknown }
+  | { type: "SET_SEED"; seed: string }
+  | { type: "OPEN_DECK_SELECT" }
+  | { type: "START_RUN"; startDeckId: string; tutorialMode: boolean }
+  | { type: "CONTINUE_RUN"; state: import("../types").GameState }
+  | { type: "TOGGLE_EXPERIMENT"; key: keyof ExperimentalRules }
+  | { type: "START_STAGE" }
+  | { type: "SELECT_CARD"; cardId: string }
+  | { type: "CLEAR_SELECTION" }
+  | { type: "SET_MANUAL_YAKU"; yakuId: ImmediateYakuId | null }
+  | { type: "SET_CUP_ROLE"; role: "animal" | "double_chaff" }
+  | { type: "DECLARE_SHAKE" }
+  | { type: "SUBMIT_HAND" }
+  | { type: "DISCARD_SELECTED" }
+  | { type: "BANK_CHAIN" }
+  | { type: "DECLARE_GO" }
+  | { type: "STOP_ROUND" }
+  | { type: "CONTINUE_AFTER_REWARD" }
+  | { type: "CHOOSE_SHOP"; shopType: "talisman" | "painter" | "book" | "forbidden" }
+  | { type: "BUY_OFFER"; offerId: string }
+  | { type: "REROLL_SHOP" }
+  | { type: "SELECT_CONSUMABLE_TARGET"; cardId: string }
+  | { type: "APPLY_CONSUMABLE"; option?: string }
+  | { type: "CANCEL_CONSUMABLE" }
+  | { type: "SELL_TALISMAN"; instanceId: string }
+  | { type: "MOVE_TALISMAN"; instanceId: string; direction: -1 | 1 }
+  | { type: "CHOOSE_CONTRACT"; contractId: string }
+  | { type: "OPEN_SCREEN"; screen: ScreenId }
+  | { type: "RETURN_TO_PLAY" }
+  | { type: "RETRY_NAGARI" }
+  | { type: "RETRY_TUTORIAL_BOSS" }
+  | { type: "NEXT_STAGE" }
+  | { type: "CONTINUE_INFINITE" }
+  | { type: "RESET_RUN" };
