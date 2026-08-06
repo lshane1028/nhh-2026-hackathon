@@ -75,18 +75,58 @@ function formatNumber(value: number): string {
 const CATEGORY_GUIDES: Record<ShopOffer["category"], string> = {
   talisman: "사두면 매 손 자동으로 발동",
   book: "이 족보의 배수가 영구히 성장",
-  painter: "내 카드 한 장을 영구히 바꿈",
+  painter: "덱에서 카드를 영구히 뺍니다",
   forbidden: "강한 효과와 영구적인 대가",
-  pack: "후보 중 하나를 무료로",
+  pack: "열어서 덱에 넣을 카드를 고릅니다",
 };
 
 const CATEGORY_NAMES: Record<ShopOffer["category"], string> = {
   talisman: "부적",
   book: "비결서",
-  painter: "화공",
+  painter: "소각",
   forbidden: "금단",
-  pack: "꾸러미",
+  pack: "카드 묶음",
 };
+
+interface Department {
+  categories: readonly ShopOffer["category"][];
+  label: string;
+  blurb: string;
+  assetTag: string;
+  tutorialId: string;
+}
+
+/** Four fixed departments, one per quadrant. */
+const DEPARTMENTS: readonly Department[] = [
+  {
+    categories: ["talisman"],
+    label: "부적전",
+    blurb: "가지고 있는 동안 매 손 자동으로 발동",
+    assetTag: "shop:talisman",
+    tutorialId: "dept-talisman",
+  },
+  {
+    categories: ["book"],
+    label: "비결서점",
+    blurb: "적힌 족보의 기본 배수가 영구히 성장",
+    assetTag: "shop:book",
+    tutorialId: "dept-book",
+  },
+  {
+    categories: ["pack", "painter"],
+    label: "덱 손질방",
+    blurb: "덱에 카드를 넣거나 빼서 판을 다시 짭니다",
+    assetTag: "shop:workshop",
+    tutorialId: "dept-workshop",
+  },
+  {
+    categories: ["forbidden"],
+    label: "금단장",
+    blurb: "판을 뒤집는 힘과 영구적인 대가",
+    assetTag: "shop:forbidden",
+    tutorialId: "dept-forbidden",
+  },
+];
 
 /** Text stand-in for a picture. Swap by styling [data-asset-tag]. */
 function ArtSlot({ assetTag, className }: { assetTag: string; className?: string }) {
@@ -131,6 +171,8 @@ function MarketCard({
   tutorialId,
   onClick,
 }: MarketCardProps) {
+  /* The picture is the whole tile; everything else lives in the hover panel,
+     so a department reads as two or three pictures rather than a wall of text. */
   return (
     <div className="market-card__wrap" data-tutorial={tutorialId}>
       {priceLabel ? <span className="market-card__price" aria-hidden="true">{priceLabel}</span> : null}
@@ -142,35 +184,41 @@ function MarketCard({
           recommended && "market-card--recommended",
           sold && "market-card--sold",
         )}
+        aria-label={`${name}, ${kindLabel}, ${description}`}
         aria-pressed={selected}
         disabled={disabled}
         onClick={onClick}
       >
-        {recommended ? <span className="market-card__flag">추천</span> : null}
+        <span className="market-card__art" data-asset-tag={assetTag}>
+          <span className="market-card__art-mark" aria-hidden="true">IMG</span>
+          <code>{assetTag}</code>
+        </span>
+
         <span className="market-card__kind">{kindLabel}</span>
-        <ArtSlot assetTag={assetTag} />
-        <strong className="market-card__name">{name}</strong>
-        <span className="market-card__guide">{guide}</span>
-        <p className="market-card__body">{description}</p>
-        {detailLabel ? <small className="market-card__detail">{detailLabel}</small> : null}
-        <span className="market-card__cta">{ctaLabel}</span>
+        {recommended ? <span className="market-card__flag">추천</span> : null}
+        <span className="market-card__label">{name}</span>
+
+        <span className="market-card__hint" role="tooltip">
+          <b>{name}</b>
+          <em>{kindLabel}{priceLabel ? ` · ${priceLabel}` : ""}</em>
+          <p>{description}</p>
+          <i>{guide}</i>
+          {detailLabel ? <u>{detailLabel}</u> : null}
+          <s>{ctaLabel}</s>
+        </span>
       </button>
     </div>
   );
 }
 
-function Rack({ label, hint, children, variant, tutorialId }: {
+function Rack({ label, hint, children, tutorialId }: {
   label: string;
   hint?: string;
-  variant?: "packs";
   tutorialId?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section
-      className={joinClassNames("market-rack", variant && `market-rack--${variant}`)}
-      data-tutorial={tutorialId}
-    >
+    <section className="market-rack" data-tutorial={tutorialId}>
       <h3 className="market-rack__label">
         <span>{label}</span>
         {hint ? <em>{hint}</em> : null}
@@ -207,8 +255,6 @@ function offerCard(item: MarketOfferView, money: number, onBuy: (id: string) => 
 
 export function MarketScreen(props: MarketScreenProps) {
   const shopOffers = props.mode === "shop" ? props.offers : [];
-  const goods = shopOffers.filter((item) => item.offer.category !== "pack");
-  const packs = shopOffers.filter((item) => item.offer.category === "pack");
   const recommended = shopOffers.find((item) => item.recommended);
 
   return (
@@ -254,7 +300,7 @@ export function MarketScreen(props: MarketScreenProps) {
                   disabled={!props.canReroll || props.money < props.rerollCost}
                   onClick={props.onReroll}
                 >
-                  <strong>새 상품</strong>
+                  <strong>새 물건</strong>
                   <span>{formatNumber(props.rerollCost)}냥</span>
                 </button>
               ) : null}
@@ -295,28 +341,41 @@ export function MarketScreen(props: MarketScreenProps) {
           ) : null}
 
           {props.mode === "shop" ? (
-            <>
-              <Rack
-                label={props.openedPack ? `${props.openedPack} 개봉` : "오늘의 장터"}
-                hint={props.openedPack
-                  ? "하나만 무료로 고르세요"
-                  : `${goods.filter((item) => !item.offer.sold).length}개 구매 가능`}
-                tutorialId="shop-rack"
-              >
-                {goods.map((item) => offerCard(
-                  item,
-                  props.money,
-                  props.onBuyOffer,
-                  item.offer.offerId === recommended?.offer.offerId ? "shop-pick" : undefined,
-                ))}
+            props.openedPack ? (
+              <Rack label={`${props.openedPack} 개봉`} hint="하나만 무료로 고르세요" tutorialId="dept-pack">
+                {shopOffers.map((item) => offerCard(item, props.money, props.onBuyOffer))}
               </Rack>
-
-              {packs.length > 0 ? (
-                <Rack label="꾸러미" hint="열면 후보 중 하나를 무료로" variant="packs">
-                  {packs.map((item) => offerCard(item, props.money, props.onBuyOffer))}
-                </Rack>
-              ) : null}
-            </>
+            ) : (
+              <div className="market-floor">
+                {DEPARTMENTS.map((dept) => {
+                  const items = shopOffers.filter((item) => dept.categories.includes(item.offer.category));
+                  if (items.length === 0) return null;
+                  return (
+                    <section
+                      className={`market-dept market-dept--${dept.categories[0]}`}
+                      key={dept.label}
+                      data-tutorial={dept.tutorialId}
+                    >
+                      <header className="market-dept__sign" data-asset-tag={dept.assetTag}>
+                        <span className="market-dept__mark" aria-hidden="true">IMG</span>
+                        <div>
+                          <strong>{dept.label}</strong>
+                          <span>{dept.blurb}</span>
+                        </div>
+                      </header>
+                      <div className="market-dept__items">
+                        {items.map((item) => offerCard(
+                          item,
+                          props.money,
+                          props.onBuyOffer,
+                          item.offer.offerId === recommended?.offer.offerId ? "shop-pick" : undefined,
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+            )
           ) : null}
 
           {props.mode === "contract" ? (

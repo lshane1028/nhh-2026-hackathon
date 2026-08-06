@@ -10,8 +10,9 @@ export type GameAction =
   | { type: "START_STAGE" }
   | { type: "SELECT_CARD"; cardId: string }
   | { type: "CLEAR_SELECTION" }
+  | { type: "SET_HAND_SORT"; mode: "month" | "kind" }
   | { type: "ASSIGN_CUP_ROLE"; cardId: string; role: "animal" | "double_chaff" }
-  | { type: "DECLARE_SHAKE" }
+  | { type: "RESOLVE_SHAKE"; choice: "shake" | "bomb" }
   | { type: "SUBMIT_HAND" }
   | { type: "DISCARD_SELECTED" }
   | { type: "DECLARE_GO" }
@@ -19,6 +20,8 @@ export type GameAction =
   | { type: "CONTINUE_AFTER_REWARD" }
   | { type: "BUY_OFFER"; offerId: string }
   | { type: "REROLL_SHOP" }
+  | { type: "PICK_PACK_CARD"; instanceId: string }
+  | { type: "CLOSE_PACK" }
   | { type: "SELECT_CONSUMABLE_TARGET"; cardId: string }
   | { type: "APPLY_CONSUMABLE"; option?: string }
   | { type: "CANCEL_CONSUMABLE" }

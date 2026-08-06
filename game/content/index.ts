@@ -19,7 +19,7 @@ import {
 } from "./upgrades";
 
 export const CONTENT_EXPECTED_COUNTS = {
-  talismans: 37,
+  talismans: 43,
   painters: 15,
   forbidden: 10,
   books: 13,
@@ -28,7 +28,7 @@ export const CONTENT_EXPECTED_COUNTS = {
   seals: 4,
   startDecks: 10,
   bosses: 12,
-  packs: 5,
+  packs: 2,
   contractPairs: 8,
   weather: 4,
 } as const;

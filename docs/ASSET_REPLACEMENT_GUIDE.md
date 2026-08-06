@@ -25,12 +25,19 @@ card-01-bright-crane
 
 플레이 화면의 모든 그림 자리는 이미 전용 슬롯으로 분리돼 있다. 마크업을 고칠 필요 없이 CSS 한 줄만 추가하면 된다.
 
-| 슬롯 | 선택자 | 태그 예시 |
-|---|---|---|
-| 화투패 그림 | `.hwatu-card__art[data-asset-tag="..."]` | `card-01-bright-crane` |
-| 카드 뒷면 | `.deck-stack__back[data-asset-tag="..."]` | `ui:card-back:hanji` |
-| 스테이지 배경 | `.play-rail__stage-plate[data-asset-tag="..."]` | `stage_01_pine_crane` |
-| 부적·두목·상점 등 | `.asset-placeholder[data-asset-tag="..."]` | `talisman:goblin-mirror` |
+| 슬롯 | 선택자 | 화면비 | 태그 예시 |
+|---|---|---|---|
+| 화투패 그림 | `.hwatu-card__art[data-asset-tag="..."]` | 카드 전체 (5:7) | `card-01-bright-crane` |
+| 카드 뒷면 | `.deck-stack__back[data-asset-tag="..."]` | 5:7 | `ui:card-back:hanji` |
+| 상점 상품 | `.market-card__art[data-asset-tag="..."]` | 카드 전체 (5:7) | `talisman:first-charm` |
+| 부적 슬롯 | `.talisman-strip__art[data-asset-tag="..."]` | 4:3 | `talisman:gambler-gut` |
+| 수집판 줄 아이콘 | `.collection-board__icon[data-asset-tag="..."]` | 정사각 | `collection:bright-five-slots` |
+| 상점 구역 간판 | `.market-dept__sign[data-asset-tag="..."]` | 가로 배너 | `shop:talisman` |
+| 스테이지 배경 | `.play-rail__stage-plate[data-asset-tag="..."]` | 정사각 | `stage_01_pine_crane` |
+| 묶음 후보 카드 | `.pack-pick__art[data-asset-tag="..."]` | 5:7 | `card-05-animal-bridge` |
+| 그 밖 (보상·계약) | `.market-art[data-asset-tag="..."]` | 5:4 | `reward:stage-1` |
+
+**모든 슬롯은 화면비가 CSS에 고정돼 있고 `background-size: cover`가 걸려 있습니다.** 그림 크기가 달라도 잘려 채워질 뿐 칸이 늘어나지 않습니다. 카드류는 5:7로 통일했으니 그 비율로 만들면 잘리는 부분 없이 들어갑니다.
 
 한 장씩 붙일 때는 이런 규칙을 추가한다.
 

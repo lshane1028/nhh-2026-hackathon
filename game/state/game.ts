@@ -31,10 +31,10 @@ import {
   applyPainterEffect,
   applyStartDeck,
 } from "../engine/consumables";
+import { rollCardEffectTag } from "../content/card-effects";
 import { calculateCollectionBonus } from "../engine/collection-bonus";
 import { createStandardHwatuDeck, isCupCard, type CupRole } from "../engine/deck";
 import {
-  canDeclareBomb,
   canDeclareShake,
   evaluateBakContract,
   getShakeResult,
@@ -85,6 +85,30 @@ import type {
 const DEFAULT_SEED = "FLOWER-2026";
 const MAX_SELECTED = 5;
 
+/** 광 → 동물 → 띠 → 피, the order a hwatu player reads a hand in. */
+const KIND_ORDER: Record<CardInstance["kind"], number> = {
+  bright: 0,
+  animal: 1,
+  ribbon: 2,
+  chaff: 3,
+};
+
+export function sortHand(
+  hand: readonly CardInstance[],
+  mode: GameState["handSort"],
+): CardInstance[] {
+  const byMonth = (left: CardInstance, right: CardInstance) => left.month - right.month;
+  const byKind = (left: CardInstance, right: CardInstance) =>
+    KIND_ORDER[left.kind] - KIND_ORDER[right.kind];
+  return [...hand].sort((left, right) => {
+    const primary = mode === "kind" ? byKind(left, right) : byMonth(left, right);
+    if (primary !== 0) return primary;
+    const secondary = mode === "kind" ? byMonth(left, right) : byKind(left, right);
+    if (secondary !== 0) return secondary;
+    return left.instanceId.localeCompare(right.instanceId);
+  });
+}
+
 function initialYakuLevels(): Record<string, YakuLevelState> {
   return Object.fromEntries(
     [...ALL_IMMEDIATE_YAKU_DEFINITIONS, ...COLLECTION_YAKU_DEFINITIONS].map((entry) => [
@@ -125,8 +149,11 @@ export function createInitialGameState(seed = DEFAULT_SEED): GameState {
     hand: [],
     usedPile: [],
     selectedCardIds: [],
+    handSort: "month",
     cupAssignments: {},
     pendingCupCardId: null,
+    pendingShakeChoice: false,
+    shakeChoice: null,
     handsRemaining: 4,
     discardsRemaining: 4,
     handSize: 8,
@@ -146,6 +173,7 @@ export function createInitialGameState(seed = DEFAULT_SEED): GameState {
     unlockedSecretYakuIds: [],
     shopOffers: [],
     shopType: null,
+    pendingPack: null,
     rerollCost: 2,
     pendingConsumableId: null,
     pendingTargetIds: [],
@@ -207,6 +235,15 @@ function effectiveHandSize(state: GameState): number {
   return state.handSize + countContract(state, "hand_size");
 }
 
+/**
+ * The one card effect tag the engine reads today. It is here rather than in a
+ * generic tag dispatcher because a player tests "버릴 수 없다" immediately, and
+ * a label that lies is worse than no label.
+ */
+export function isUndiscardable(card: CardInstance): boolean {
+  return card.effectTagId === "stubborn";
+}
+
 export function getEffectiveTalismanSlots(state: GameState): number {
   return state.talismanSlots + state.talismans.filter((item) => item.edition === "engraved").length;
 }
@@ -243,7 +280,7 @@ function refillHand(state: GameState, currentHand: CardInstance[]): GameState {
   return {
     ...state,
     rngCursor: cursor,
-    hand: [...currentHand, ...faceDownForBoss(drawn, boss)],
+    hand: sortHand([...currentHand, ...faceDownForBoss(drawn, boss)], state.handSort),
     drawPile: pile.slice(drawn.length),
     usedPile,
   };
@@ -303,7 +340,7 @@ function startStage(state: GameState): GameState {
   const discards = state.baseDiscards + countContract(state, "discards_per_round");
   const boss = stageBossId ? BOSS_BY_ID[stageBossId] ?? null : null;
   const handSize = effectiveHandSize(state);
-  const hand = faceDownForBoss(pileAfterYard.slice(0, handSize).map(cloneCard), boss);
+  const hand = sortHand(faceDownForBoss(pileAfterYard.slice(0, handSize).map(cloneCard), boss), state.handSort);
   const next: GameState = {
     ...state,
     screen: "play",
@@ -425,9 +462,7 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
   const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
   const rules = calculateTalismanRoundRuleModifiers(state.talismans);
   const capture = resolveYardCapture(submitted, state.yard, state.experimentalRules.yardMatching);
-  const shake = state.yard.shakeArmed
-    ? getShakeResult(canDeclareBomb(submitted, state.yard, state.experimentalRules))
-    : { settlementBonus: 0, bonusKkeut: 0, label: "" };
+  const shake = getShakeResult(state.shakeChoice);
   const confirmedCards = cardsFromIds(state, state.chain.collection.cardIds);
   const pendingCards: CardInstance[] = [];
   const heldCards = state.hand.filter((card) => !state.selectedCardIds.includes(card.instanceId));
@@ -629,15 +664,30 @@ function applyCardAftermath(state: GameState, scored: ScoredSelection): GameStat
   };
 }
 
-/** The score this round must reach right now, before the player may stop. */
-export function getRoundRequirement(state: GameState): number {
+/** Factors that make a called Go harder, from the boss and from talismans. */
+function goThresholdFactor(state: GameState): number {
   const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
   const talismanRules = calculateTalismanRoundRuleModifiers(state.talismans);
-  const bossFactor = boss?.ruleKey === "go_fail_tax" && state.chain.goCount > 0 ? 1.1 : 1;
+  const bossFactor = boss?.ruleKey === "go_fail_tax" ? 1.1 : 1;
+  return talismanRules.thresholdFactor * bossFactor;
+}
+
+/**
+ * The score this round must reach right now. Once a Go is called the bar is the
+ * value snapshotted at that moment, so it cannot drift as the player scores.
+ */
+export function getRoundRequirement(state: GameState): number {
+  return state.chain.goRequirement ?? getGoRequirement(state.targetScore, 0);
+}
+
+/** What the bar would become if the player called Go from here. */
+export function getNextGoRequirement(state: GameState): number | null {
+  if (!canDeclareGo(state.chain, state.handsRemaining)) return null;
   return getGoRequirement(
     state.targetScore,
-    state.chain.goCount,
-    talismanRules.thresholdFactor * bossFactor,
+    state.chain.goCount + 1,
+    goThresholdFactor(state),
+    state.chain.roundScore,
   );
 }
 
@@ -737,6 +787,15 @@ function loseRound(state: GameState, detail: string): GameState {
 
 function submitHand(state: GameState): GameState {
   if (state.screen !== "play" || state.handsRemaining <= 0 || state.pendingCupCardId) return state;
+  // Three of one month is worth either 흔들기 or 폭탄, and the player picks
+  // before the hand is scored because 폭탄 changes this hand's month sum.
+  if (
+    state.shakeChoice === null
+    && !state.pendingShakeChoice
+    && canDeclareShake(selectionInOrder(state), state.experimentalRules)
+  ) {
+    return { ...state, pendingShakeChoice: true };
+  }
   const scored = evaluateSelectedHand(state);
   if (!scored) {
     return { ...state, logs: logEntry(state, "system", "제출 불가", "1~5장의 카드를 골라 주세요.") };
@@ -761,6 +820,8 @@ function submitHand(state: GameState): GameState {
     handsRemaining,
     selectedCardIds: [],
     pendingCupCardId,
+    pendingShakeChoice: false,
+    shakeChoice: null,
     chain,
     lastScore: scored.breakdown,
     unlockedSecretYakuIds: unlockSecret(state, scored.breakdown.yakuId),
@@ -845,8 +906,16 @@ function discardSelected(state: GameState): GameState {
     return { ...state, logs: logEntry(state, "system", "버리기 불가", "세금쟁이에게 낼 냥이 없습니다.") };
   }
   const ids = new Set(state.selectedCardIds);
-  const discarded = state.hand.filter((card) => ids.has(card.instanceId));
-  const kept = state.hand.filter((card) => !ids.has(card.instanceId));
+  // 고집패 refuses to leave the hand even when bundled with other cards.
+  const stuck = state.hand.filter((card) => ids.has(card.instanceId) && isUndiscardable(card));
+  const discarded = state.hand.filter((card) => ids.has(card.instanceId) && !isUndiscardable(card));
+  if (discarded.length === 0) {
+    return {
+      ...state,
+      logs: logEntry(state, "system", "버리기 불가", "고집패는 버릴 수 없습니다."),
+    };
+  }
+  const kept = state.hand.filter((card) => !ids.has(card.instanceId) || isUndiscardable(card));
   let deck = state.deck;
   let cursor = state.rngCursor;
   const purpleResults: string[] = [];
@@ -876,7 +945,16 @@ function discardSelected(state: GameState): GameState {
     discardsRemaining: state.discardsRemaining - 1,
     money: state.money - cost,
     stats: { ...state.stats, discardsUsed: state.stats.discardsUsed + 1 },
-    logs: logEntry(state, "system", `${discarded.length}장 버림`, [cost ? "세금 1냥 지불" : "손패를 보충합니다.", ...purpleResults].join(" · ")),
+    logs: logEntry(
+      state,
+      "system",
+      `${discarded.length}장 버림`,
+      [
+        stuck.length ? `고집패 ${stuck.length}장은 남았습니다` : null,
+        cost ? "세금 1냥 지불" : "손패를 보충합니다.",
+        ...purpleResults,
+      ].filter(Boolean).join(" · "),
+    ),
   };
   return refillHand(next, kept);
 }
@@ -887,7 +965,7 @@ function offerPrice(state: GameState, price: number): number {
 
 type ShopCategory = NonNullable<GameState["shopType"]>;
 
-const SHOP_CATEGORIES: readonly ShopCategory[] = ["talisman", "painter", "book", "forbidden"];
+const SHOP_CATEGORIES: readonly ShopCategory[] = ["talisman", "book", "forbidden", "painter"];
 
 function categoryPool(shopType: ShopCategory) {
   return shopType === "talisman"
@@ -900,41 +978,69 @@ function categoryPool(shopType: ShopCategory) {
 }
 
 /**
- * The market is one screen: one card from each of the four shops, plus a pack.
- * The tutorial round always leads with the flat-multiplier charm so the first
- * purchase has an effect a new player can actually read.
+ * The market is one screen with four fixed departments:
+ *   부적전 2장 · 비결서점 2장 · 꾸러미 2장 · 금단장 1장
+ * Painters are deliberately not a department — a card that turns 1월 into 2월
+ * is not worth a quarter of the screen. They still appear inside 화공 묶음.
+ * The tutorial round leads with the flat-multiplier charm so the first purchase
+ * has an effect a new player can actually read.
  */
+const SHOP_DEPARTMENT_SIZES: Record<ShopCategory | "pack", number> = {
+  talisman: 2,
+  book: 2,
+  forbidden: 1,
+  // The deck workshop sells card packs plus one 소각 painter.
+  painter: 1,
+  pack: 2,
+};
+
+/** The workshop only ever stocks the burn painter, never the fiddly month edits. */
+const WORKSHOP_PAINTER_IDS = ["p_burn"];
+
 function generateShopOffers(state: GameState): { offers: ShopOffer[]; cursor: number } {
   let cursor = state.rngCursor;
   const offers: ShopOffer[] = [];
   const tutorialFirstShop = state.tutorialMode && state.stage === 1;
 
-  for (const shopType of SHOP_CATEGORIES) {
-    const pool = [...categoryPool(shopType)];
-    let definition = pool[Math.floor(randomAt(`${state.seed}:shop:${state.stage}:${shopType}`, cursor++) * pool.length)];
-    if (tutorialFirstShop && shopType === "talisman") {
-      definition = TALISMAN_BY_ID.t_first_charm ?? definition;
+  type Purchasable = { id: string; price: number };
+  const draw = (
+    pool: readonly Purchasable[],
+    count: number,
+    salt: string,
+  ): Purchasable[] => {
+    const remaining = [...pool];
+    const picked: Purchasable[] = [];
+    for (let index = 0; index < count && remaining.length > 0; index += 1) {
+      const at = Math.floor(randomAt(`${state.seed}:${salt}:${state.stage}`, cursor++) * remaining.length);
+      picked.push(remaining.splice(at, 1)[0]);
     }
-    if (!definition) continue;
+    return picked;
+  };
+
+  const push = (category: ShopOffer["category"], definition: { id: string; price: number }, index: number) => {
     offers.push({
-      offerId: `${state.runId}:offer:${state.stage}:${shopType}:${cursor}`,
-      category: shopType,
+      offerId: `${state.runId}:offer:${state.stage}:${category}:${index}:${cursor}`,
+      category,
       definitionId: definition.id,
       price: offerPrice(state, definition.price),
       sold: false,
     });
+  };
+
+  for (const category of SHOP_CATEGORIES) {
+    const size = SHOP_DEPARTMENT_SIZES[category];
+    if (size <= 0) continue;
+    const pool = category === "painter"
+      ? categoryPool(category).filter((entry) => WORKSHOP_PAINTER_IDS.includes(entry.id))
+      : categoryPool(category);
+    const picked = draw(pool, size, `shop:${category}`);
+    if (tutorialFirstShop && category === "talisman" && TALISMAN_BY_ID.t_first_charm) {
+      picked[0] = TALISMAN_BY_ID.t_first_charm;
+    }
+    picked.forEach((definition, index) => push(category, definition, index));
   }
 
-  if (!tutorialFirstShop) {
-    const pack = PACKS[Math.floor(randomAt(`${state.seed}:pack:${state.stage}`, cursor++) * PACKS.length)] ?? PACKS[0];
-    offers.push({
-      offerId: `${state.runId}:pack:${state.stage}:${cursor}`,
-      category: "pack",
-      definitionId: pack.id,
-      price: offerPrice(state, pack.price),
-      sold: false,
-    });
-  }
+  draw(PACKS, SHOP_DEPARTMENT_SIZES.pack, "pack").forEach((pack, index) => push("pack", pack, index));
 
   return { offers, cursor };
 }
@@ -954,19 +1060,35 @@ function generateOffers(state: GameState, shopType: ShopCategory, free = false):
       sold: false,
     });
   }
-  if (!free) {
-    const packPool = PACKS.filter((entry) => entry.category === shopType || entry.category === "card");
-    const pack = packPool[Math.floor(randomAt(`${state.seed}:pack:${state.stage}:${shopType}`, cursor++) * packPool.length)]
-      ?? PACKS[0];
-    offers.push({
-      offerId: `${state.runId}:pack:${state.stage}:${cursor}`,
-      category: "pack",
-      definitionId: pack.id,
-      price: offerPrice(state, pack.price),
-      sold: false,
+  return { offers, cursor };
+}
+
+/**
+ * Rolls the candidates a bought card pack puts on the table. Every candidate
+ * carries a random effect tag — a label only, see content/card-effects.ts.
+ */
+function openCardPack(state: GameState, pack: { id: string; name: string; choices: number; picks: number }): {
+  pendingPack: NonNullable<GameState["pendingPack"]>;
+  cursor: number;
+} {
+  let cursor = state.rngCursor;
+  const templates = createStandardHwatuDeck();
+  const candidates: CardInstance[] = [];
+  for (let index = 0; index < pack.choices; index += 1) {
+    const template = templates[Math.floor(randomAt(`${state.seed}:pack-card:${state.stage}:${pack.id}`, cursor++) * templates.length)];
+    if (!template) continue;
+    const tag = rollCardEffectTag(randomAt(`${state.seed}:pack-tag:${state.stage}:${pack.id}`, cursor++));
+    candidates.push({
+      ...template,
+      tags: [...template.tags],
+      instanceId: `pack:${state.runId}:${state.stage}:${pack.id}:${index}:${cursor}`,
+      effectTagId: tag.id,
     });
   }
-  return { offers, cursor };
+  return {
+    pendingPack: { packId: pack.id, name: pack.name, picksLeft: Math.min(pack.picks, candidates.length), candidates },
+    cursor,
+  };
 }
 
 function buyOffer(state: GameState, offerId: string): GameState {
@@ -975,34 +1097,14 @@ function buyOffer(state: GameState, offerId: string): GameState {
   if (offer.category === "pack") {
     const pack = PACK_BY_ID[offer.definitionId];
     if (!pack) return state;
-    if (pack.category === "card") {
-      const templates = createStandardHwatuDeck();
-      const pickIndex = Math.floor(randomAt(`${state.seed}:hwatu-pack:${state.stage}`, state.rngCursor) * templates.length);
-      const picked = templates[pickIndex];
-      if (!picked) return state;
-      const added: CardInstance = {
-        ...picked,
-        tags: [...picked.tags],
-        instanceId: `pack-card:${state.runId}:${state.stage}:${state.rngCursor}`,
-      };
-      return {
-        ...state,
-        rngCursor: state.rngCursor + 1,
-        money: state.money - offer.price,
-        deck: [...state.deck, added],
-        shopOffers: state.shopOffers.map((entry) => ({ ...entry, sold: entry.offerId === offer.offerId })),
-        logs: logEntry(state, "reward", `${pack.name} 개봉`, `${added.name}을 덱에 추가했습니다.`),
-      };
-    }
-    const category: ShopCategory = pack.category;
-    const generated = generateOffers({ ...state, money: state.money - offer.price }, category, true);
+    const opened = openCardPack(state, pack);
     return {
       ...state,
+      rngCursor: opened.cursor,
       money: state.money - offer.price,
-      rngCursor: generated.cursor,
-      shopOffers: generated.offers,
-      shopType: category,
-      logs: logEntry(state, "reward", `${pack.name} 개봉`, "무료 후보 3장 중 하나를 고르세요."),
+      pendingPack: opened.pendingPack,
+      shopOffers: state.shopOffers.map((entry) => entry.offerId === offer.offerId ? { ...entry, sold: true } : entry),
+      logs: logEntry(state, "reward", `${pack.name} 개봉`, `후보 ${opened.pendingPack.candidates.length}장 중 ${opened.pendingPack.picksLeft}장을 고르세요.`),
     };
   }
   if (offer.category === "talisman") {
@@ -1133,6 +1235,7 @@ function nextFromShop(state: GameState): GameState {
     screen: "round_intro",
     shopOffers: [],
     shopType: null,
+    pendingPack: null,
   };
 }
 
@@ -1168,6 +1271,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "CLEAR_SELECTION":
       return { ...state, selectedCardIds: [] };
+    case "SET_HAND_SORT":
+      return { ...state, handSort: action.mode, hand: sortHand(state.hand, action.mode) };
     case "ASSIGN_CUP_ROLE": {
       if (state.pendingCupCardId !== action.cardId) return state;
       const card = state.deck.find((entry) => entry.instanceId === action.cardId);
@@ -1183,18 +1288,19 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ),
       };
     }
-    case "DECLARE_SHAKE": {
-      const selected = selectionInOrder(state);
-      if (!canDeclareShake(selected, state.experimentalRules)) return state;
-      const declaring = !state.yard.shakeArmed;
-      return {
+    case "RESOLVE_SHAKE": {
+      if (!state.pendingShakeChoice) return state;
+      const armed: GameState = {
         ...state,
-        yard: { ...state.yard, shakeArmed: !state.yard.shakeArmed },
-        talismans: declaring
-          ? state.talismans.map((item) => item.definitionId === "t_shake_iron" ? { ...item, growth: item.growth + 1 } : item)
+        pendingShakeChoice: false,
+        shakeChoice: action.choice,
+        talismans: action.choice === "shake"
+          ? state.talismans.map((item) => item.definitionId === "t_shake_iron"
+              ? { ...item, growth: item.growth + 1 }
+              : item)
           : state.talismans,
-        logs: logEntry(state, "system", "흔들기 선언", canDeclareBomb(selected, state.yard, state.experimentalRules) ? "강화 흔들기 준비" : "이번 판 정산 보너스를 걸었습니다."),
       };
+      return submitHand(armed);
     }
     case "SUBMIT_HAND":
       return submitHand(state);
@@ -1203,7 +1309,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "DECLARE_GO": {
       if (state.screen !== "decision") return state;
       if (!canDeclareGo(state.chain, state.handsRemaining)) return state;
-      const chain = declareGo(state.chain);
+      const chain = declareGo(state.chain, state.targetScore, goThresholdFactor(state));
       const next: GameState = {
         ...state,
         chain,
@@ -1259,6 +1365,24 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           : state.rerollCost + (marketRumor ? 2 : 1);
       return { ...state, money: state.money - state.rerollCost, rngCursor: generated.cursor, shopOffers: generated.offers, rerollCost: nextCost };
     }
+    case "PICK_PACK_CARD": {
+      const pack = state.pendingPack;
+      if (!pack || pack.picksLeft <= 0) return state;
+      const card = pack.candidates.find((entry) => entry.instanceId === action.instanceId);
+      if (!card) return state;
+      const picksLeft = pack.picksLeft - 1;
+      const candidates = pack.candidates.filter((entry) => entry.instanceId !== card.instanceId);
+      return {
+        ...state,
+        deck: [...state.deck, card],
+        pendingPack: picksLeft > 0 && candidates.length > 0
+          ? { ...pack, picksLeft, candidates }
+          : null,
+        logs: logEntry(state, "reward", `${card.name} 획득`, `덱이 ${state.deck.length + 1}장이 되었습니다.`),
+      };
+    }
+    case "CLOSE_PACK":
+      return { ...state, pendingPack: null };
     case "SELECT_CONSUMABLE_TARGET": {
       const exists = state.pendingTargetIds.includes(action.cardId);
       const definition = getPendingConsumableDefinition(state);
