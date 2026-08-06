@@ -17,6 +17,28 @@ export interface EffectiveCardRole {
 
 export type CupRole = "animal" | "double_chaff";
 
+/**
+ * The September cup no longer has a single round-wide role. Each cup card is
+ * filed onto the collection board individually, so callers may pass either one
+ * role for a whole evaluation pass or a per-instance assignment map.
+ */
+export type CupRoleSource = CupRole | Readonly<Record<string, CupRole>>;
+
+export const DEFAULT_CUP_ROLE: CupRole = "animal";
+
+export function resolveCupRole(
+  source: CupRoleSource | undefined,
+  card: Pick<CardInstance, "instanceId">,
+): CupRole {
+  if (source === undefined) return DEFAULT_CUP_ROLE;
+  if (typeof source === "string") return source;
+  return source[card.instanceId] ?? DEFAULT_CUP_ROLE;
+}
+
+export function isCupCard(card: Pick<CardInstance, "tags">): boolean {
+  return card.tags.includes("cup");
+}
+
 export function getMonthName(month: Month): string {
   return ["", "송학", "매조", "벚꽃", "흑싸리", "난초", "모란", "홍싸리", "공산명월", "국화", "단풍", "오동", "비"][month];
 }

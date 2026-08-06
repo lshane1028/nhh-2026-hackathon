@@ -15,6 +15,8 @@ export interface HwatuCardProps {
   className?: string;
   ariaLabel?: string;
   testId?: string;
+  /** Compact face for the fanned hand. Detail moves into the tooltip. */
+  dense?: boolean;
 }
 
 const KIND_LABELS: Record<CardKind, string> = {
@@ -88,6 +90,7 @@ export function HwatuCard({
   className,
   ariaLabel,
   testId,
+  dense = false,
 }: HwatuCardProps) {
   const isDisabled = disabled || Boolean(card.disabledForRound);
   const kindLabel = getCardKindLabel(card, cupRole);
@@ -99,74 +102,37 @@ export function HwatuCard({
     ariaLabel ??
     `${card.month}월 ${card.name}, ${kindLabel}, 월값 ${monthValue}${selected ? ", 선택됨" : ""}${isDisabled ? ", 사용 불가" : ""}`;
 
+  const modifierLabels = [
+    card.enhancement ? ENHANCEMENT_LABELS[card.enhancement] : null,
+    card.edition ? EDITION_LABELS[card.edition] : null,
+    card.seal ? SEAL_LABELS[card.seal] : null,
+  ].filter(Boolean) as string[];
+
+  /* The face is the picture plus a month corner. Everything else lives in the
+     hover card below, so a hand of eight reads as eight pictures. */
   const content = (
     <>
-      <header className="hwatu-card__header">
-        <span className="hwatu-card__month">
-          <strong>{card.month}</strong>
-          <span>월</span>
-        </span>
-        <span className="hwatu-card__kind">{kindLabel}</span>
-      </header>
+      <span className="hwatu-card__art" data-asset-tag={card.assetTag}>
+        <span className="hwatu-card__art-mark" aria-hidden="true">IMG</span>
+        <span className="hwatu-card__art-motif" aria-hidden="true">{card.monthName}</span>
+        <code className="hwatu-card__art-tag">{card.assetTag}</code>
+      </span>
 
-      <div className="hwatu-card__motif">
-        <span className="hwatu-card__month-name" aria-hidden="true">
-          {card.monthName}
-        </span>
-        <strong className="hwatu-card__name">{card.name}</strong>
-        <code className="hwatu-card__asset-tag">{card.assetTag}</code>
-      </div>
+      <span className="hwatu-card__corner" aria-hidden="true">{card.month}</span>
 
-      <div className="hwatu-card__value-row">
-        <span className="hwatu-card__value">
-          <strong>{monthValue}</strong>
-          <span>월값</span>
-        </span>
-        {card.permanentKkeutBonus !== 0 ? (
-          <span className="hwatu-card__bonus">
-            {card.month}월 + 강화 {card.permanentKkeutBonus > 0 ? "+" : ""}
-            {card.permanentKkeutBonus}
-          </span>
-        ) : (
-          <span className="hwatu-card__bonus">이 패의 월 {card.month}</span>
-        )}
-      </div>
-
-      <div className="hwatu-card__tags" aria-label="카드 태그">
-        {ribbonLabel ? <span>{ribbonLabel}</span> : null}
-        {card.tags.map((tag, index) => (
-          <span key={`${tag}-${index}`}>#{tag}</span>
-        ))}
-      </div>
-
-      {card.enhancement || card.edition || card.seal ? (
-        <div className="hwatu-card__modifiers" aria-label="카드 강화">
-          {card.enhancement ? (
-            <span>손질 · {ENHANCEMENT_LABELS[card.enhancement]}</span>
-          ) : null}
-          {card.edition ? (
-            <span>판본 · {EDITION_LABELS[card.edition]}</span>
-          ) : null}
-          {card.seal ? <span>낙관 · {SEAL_LABELS[card.seal]}</span> : null}
-        </div>
-      ) : null}
-
-      <span className="hwatu-card__state" aria-hidden="true">
-        {isDisabled
-          ? "사용 불가"
-          : selected && scoring
-            ? "선택됨 · 점수 포함"
-            : selected
-              ? "선택됨"
-              : scoring
-                ? "점수 포함"
-                : "선택 가능"}
+      <span className="hwatu-card__hint" role="tooltip">
+        <b>{card.month}월 {monthValue > card.month ? `+${monthValue - card.month}` : ""}</b>
+        <em>{kindLabel}{ribbonLabel ? ` · ${ribbonLabel}` : ""}</em>
+        <i>월값 {monthValue}</i>
+        {modifierLabels.length > 0 ? <u>{modifierLabels.join(" · ")}</u> : null}
+        {isDisabled ? <s>이번 판 사용 불가</s> : null}
       </span>
     </>
   );
 
   const rootClassName = joinClassNames(
     "hwatu-card",
+    dense && "hwatu-card--dense",
     selected && "hwatu-card--selected",
     scoring && "hwatu-card--scoring",
     isDisabled && "hwatu-card--disabled",
@@ -176,10 +142,21 @@ export function HwatuCard({
     className,
   );
 
+  const detailTitle = [
+    card.name,
+    `월값 ${monthValue}`,
+    ribbonLabel,
+    ...modifierLabels,
+    card.tags.map((tag) => `#${tag}`).join(" "),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   const dataAttributes = {
     "data-testid": testId,
     "data-card-id": card.instanceId,
     "data-asset-tag": card.assetTag,
+    title: detailTitle,
     "data-enhancement": card.enhancement,
     "data-edition": card.edition,
     "data-seal": card.seal,

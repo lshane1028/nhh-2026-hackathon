@@ -5,14 +5,7 @@ import type {
   ShopOffer,
 } from "@/game/types";
 
-import { AssetPlaceholder } from "./AssetPlaceholder";
-import {
-  TutorialCoach,
-  type TutorialCoachProps,
-} from "./TutorialCoach";
 import "./screen-ui.css";
-
-export type MarketShopCategory = Exclude<ShopOffer["category"], "pack">;
 
 export interface MarketRewardView {
   assetTag: string;
@@ -20,15 +13,6 @@ export interface MarketRewardView {
   title?: string;
   description?: string;
   lines?: readonly string[];
-}
-
-export interface MarketShopChoice {
-  category: MarketShopCategory;
-  label: string;
-  description: string;
-  assetTag: string;
-  disabled?: boolean;
-  recommended?: boolean;
 }
 
 export interface MarketOfferView {
@@ -52,7 +36,6 @@ interface MarketScreenBaseProps {
   description?: string;
   money: number;
   stageLabel?: string;
-  coach?: TutorialCoachProps;
   onLeave?: () => void;
   className?: string;
 }
@@ -64,14 +47,10 @@ export type MarketScreenProps =
       onContinue: () => void;
     })
   | (MarketScreenBaseProps & {
-      mode: "shop_choice";
-      choices: readonly MarketShopChoice[];
-      selectedCategory?: MarketShopCategory | null;
-      onChooseShop: (category: MarketShopCategory) => void;
-    })
-  | (MarketScreenBaseProps & {
       mode: "shop";
       offers: readonly MarketOfferView[];
+      /** Set while a bought pack's free choices are filling the rack. */
+      openedPack?: string | null;
       rerollCost: number;
       canReroll: boolean;
       onBuyOffer: (offerId: string) => void;
@@ -93,255 +72,273 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat("ko-KR").format(value);
 }
 
-const MODE_LABELS: Record<MarketScreenProps["mode"], string> = {
-  reward: "판 보상",
-  shop_choice: "장터 선택",
-  shop: "상품 구매",
-  contract: "계절 계약",
+const CATEGORY_GUIDES: Record<ShopOffer["category"], string> = {
+  talisman: "사두면 매 손 자동으로 발동",
+  book: "이 족보의 배수가 영구히 성장",
+  painter: "내 카드 한 장을 영구히 바꿈",
+  forbidden: "강한 효과와 영구적인 대가",
+  pack: "후보 중 하나를 무료로",
 };
 
-const SHOP_CATEGORY_GUIDES: Record<ShopOffer["category"], string> = {
-  talisman: "부적 · 보유 중 자동 발동",
-  book: "비결서 · 족보 배수 영구 성장",
-  painter: "화공 · 카드 한 장 강화",
-  forbidden: "금단 계약 · 강력하지만 대가 있음",
-  pack: "꾸러미 · 여러 강화 중 하나를 골라 획득",
+const CATEGORY_NAMES: Record<ShopOffer["category"], string> = {
+  talisman: "부적",
+  book: "비결서",
+  painter: "화공",
+  forbidden: "금단",
+  pack: "꾸러미",
 };
+
+/** Text stand-in for a picture. Swap by styling [data-asset-tag]. */
+function ArtSlot({ assetTag, className }: { assetTag: string; className?: string }) {
+  return (
+    <span className={joinClassNames("market-art", className)} data-asset-tag={assetTag}>
+      <span className="market-art__mark" aria-hidden="true">IMG</span>
+      <code>{assetTag}</code>
+    </span>
+  );
+}
+
+interface MarketCardProps {
+  assetTag: string;
+  name: string;
+  kindLabel: string;
+  guide: string;
+  description: string;
+  priceLabel?: string;
+  ctaLabel: string;
+  detailLabel?: string;
+  selected?: boolean;
+  recommended?: boolean;
+  disabled?: boolean;
+  sold?: boolean;
+  tutorialId?: string;
+  onClick: () => void;
+}
+
+function MarketCard({
+  assetTag,
+  name,
+  kindLabel,
+  guide,
+  description,
+  priceLabel,
+  ctaLabel,
+  detailLabel,
+  selected,
+  recommended,
+  disabled,
+  sold,
+  tutorialId,
+  onClick,
+}: MarketCardProps) {
+  return (
+    <div className="market-card__wrap" data-tutorial={tutorialId}>
+      {priceLabel ? <span className="market-card__price" aria-hidden="true">{priceLabel}</span> : null}
+      <button
+        type="button"
+        className={joinClassNames(
+          "market-card",
+          selected && "market-card--selected",
+          recommended && "market-card--recommended",
+          sold && "market-card--sold",
+        )}
+        aria-pressed={selected}
+        disabled={disabled}
+        onClick={onClick}
+      >
+        {recommended ? <span className="market-card__flag">추천</span> : null}
+        <span className="market-card__kind">{kindLabel}</span>
+        <ArtSlot assetTag={assetTag} />
+        <strong className="market-card__name">{name}</strong>
+        <span className="market-card__guide">{guide}</span>
+        <p className="market-card__body">{description}</p>
+        {detailLabel ? <small className="market-card__detail">{detailLabel}</small> : null}
+        <span className="market-card__cta">{ctaLabel}</span>
+      </button>
+    </div>
+  );
+}
+
+function Rack({ label, hint, children, variant, tutorialId }: {
+  label: string;
+  hint?: string;
+  variant?: "packs";
+  tutorialId?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      className={joinClassNames("market-rack", variant && `market-rack--${variant}`)}
+      data-tutorial={tutorialId}
+    >
+      <h3 className="market-rack__label">
+        <span>{label}</span>
+        {hint ? <em>{hint}</em> : null}
+      </h3>
+      <div className="market-rack__items">{children}</div>
+    </section>
+  );
+}
+
+function offerCard(item: MarketOfferView, money: number, onBuy: (id: string) => void, tutorialId?: string) {
+  const cannotAfford = money < item.offer.price;
+  const isPack = item.offer.category === "pack";
+  return (
+    <MarketCard
+      key={item.offer.offerId}
+      assetTag={item.assetTag}
+      name={item.name}
+      kindLabel={CATEGORY_NAMES[item.offer.category]}
+      guide={item.rarityLabel ?? CATEGORY_GUIDES[item.offer.category]}
+      description={item.description}
+      detailLabel={item.detailLabel}
+      priceLabel={item.offer.price === 0 ? "무료" : `${formatNumber(item.offer.price)}냥`}
+      ctaLabel={item.offer.sold
+        ? (isPack ? "개봉 완료" : "구매 완료")
+        : cannotAfford ? "냥 부족" : isPack ? "개봉" : "구매"}
+      recommended={item.recommended}
+      sold={item.offer.sold}
+      disabled={item.offer.sold || cannotAfford}
+      tutorialId={tutorialId}
+      onClick={() => onBuy(item.offer.offerId)}
+    />
+  );
+}
 
 export function MarketScreen(props: MarketScreenProps) {
-  const title = props.title ?? MODE_LABELS[props.mode];
+  const shopOffers = props.mode === "shop" ? props.offers : [];
+  const goods = shopOffers.filter((item) => item.offer.category !== "pack");
+  const packs = shopOffers.filter((item) => item.offer.category === "pack");
+  const recommended = shopOffers.find((item) => item.recommended);
 
   return (
-    <main className={joinClassNames("market-screen", props.className)}>
-      <header className="market-screen__header">
-        <AssetPlaceholder
-          assetTag={props.assetTag}
-          label={title}
-          description={props.stageLabel ?? MODE_LABELS[props.mode]}
-          tone="neutral"
-        />
-        <div className="market-screen__heading-copy">
-          <p>{MODE_LABELS[props.mode]}</p>
-          <h1>{title}</h1>
-          {props.description ? <span>{props.description}</span> : null}
-        </div>
-        <div className="market-screen__wallet" aria-label={`보유 재화 ${props.money}냥`}>
-          <span>보유</span>
-          <strong>{formatNumber(props.money)}</strong>
-          <small>냥</small>
-        </div>
-      </header>
-
-      {props.coach ? <TutorialCoach {...props.coach} /> : null}
-
-      {props.mode === "reward" ? (
-        <section className="market-screen__reward" aria-labelledby="market-reward-title">
-          <AssetPlaceholder
-            assetTag={props.reward.assetTag}
-            label={props.reward.title ?? "이번 판 보상"}
-            description={`${formatNumber(props.reward.amount)}냥 획득`}
-            tone="score"
-          />
-          <div className="market-screen__reward-total">
-            <span id="market-reward-title">획득한 재화</span>
-            <strong>+{formatNumber(props.reward.amount)}냥</strong>
-            {props.reward.description ? <p>{props.reward.description}</p> : null}
+    <section className={joinClassNames("market-panel", props.className)} aria-label={props.title}>
+      <div className="market-panel__body">
+        <aside className="market-panel__actions" aria-label="장터 조작">
+          <div className="market-panel__wallet" data-tutorial="wallet">
+            <span>보유</span>
+            <strong>{formatNumber(props.money)}</strong>
+            <small>냥</small>
           </div>
-          {props.reward.lines && props.reward.lines.length > 0 ? (
-            <ul className="market-screen__reward-lines">
-              {props.reward.lines.map((line, index) => (
-                <li key={`${line}-${index}`}>{line}</li>
-              ))}
-            </ul>
+
+          {props.mode === "reward" ? (
+            <button
+              type="button"
+              className="market-action market-action--primary"
+              data-tutorial="reward-continue"
+              onClick={props.onContinue}
+            >
+              <strong>보상 받기</strong>
+              <span>+{formatNumber(props.reward.amount)}냥</span>
+            </button>
           ) : null}
-          <button
-            type="button"
-            className="screen-button screen-button--primary"
-            onClick={props.onContinue}
-          >
-            보상 받고 계속
-          </button>
-        </section>
-      ) : null}
 
-      {props.mode === "shop_choice" ? (
-        <section aria-labelledby="market-choice-title">
-          <div className="screen-section-heading">
-            <div>
-              <p>CHOOSE ONE</p>
-              <h2 id="market-choice-title">어느 장터로 갈까요?</h2>
-            </div>
-            <span>{props.choices.length}개 후보</span>
-          </div>
-          <div className="market-screen__choice-grid">
-            {props.choices.map((choice) => {
-              const selected = props.selectedCategory === choice.category;
-              return (
+          {props.mode === "shop" ? (
+            <>
+              {props.onLeave ? (
                 <button
                   type="button"
-                  key={choice.category}
-                  className={joinClassNames(
-                    "market-screen__choice",
-                    selected && "market-screen__choice--selected",
-                    choice.recommended && "market-screen__choice--recommended",
-                  )}
-                  aria-pressed={selected}
-                  disabled={choice.disabled}
-                  onClick={() => props.onChooseShop(choice.category)}
+                  className="market-action market-action--primary"
+                  data-tutorial="shop-leave"
+                  onClick={props.onLeave}
                 >
-                  {choice.recommended ? (
-                    <span className="market-screen__recommendation-badge">
-                      첫 방문 추천
-                    </span>
-                  ) : null}
-                  <AssetPlaceholder
-                    assetTag={choice.assetTag}
-                    label={choice.label}
-                    description={SHOP_CATEGORY_GUIDES[choice.category]}
-                    tone="neutral"
-                  />
-                  <span className="market-screen__choice-guide">
-                    {SHOP_CATEGORY_GUIDES[choice.category]}
-                  </span>
-                  <span className="market-screen__choice-description">
-                    {choice.description}
-                  </span>
-                  <strong aria-hidden="true">{selected ? "선택됨" : "선택"}</strong>
+                  <strong>다음 판으로</strong>
+                  <span>장터를 떠납니다</span>
                 </button>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
-
-      {props.mode === "shop" ? (
-        <section aria-labelledby="market-shop-title">
-          <div className="screen-section-heading">
-            <div>
-              <p>MARKET</p>
-              <h2 id="market-shop-title">오늘의 상품</h2>
-            </div>
-            <span>{props.offers.filter((item) => !item.offer.sold).length}개 구매 가능</span>
-          </div>
-          <div className="market-screen__offer-grid">
-            {props.offers.map((item) => {
-              const cannotAfford = props.money < item.offer.price;
-              const disabled = item.offer.sold || cannotAfford;
-
-              return (
-                <article
-                  className={joinClassNames(
-                    "market-screen__offer",
-                    item.offer.sold && "market-screen__offer--sold",
-                    item.recommended && "market-screen__offer--recommended",
-                  )}
-                  key={item.offer.offerId}
-                >
-                  {item.recommended ? (
-                    <span className="market-screen__recommendation-badge">
-                      첫 구매 추천
-                    </span>
-                  ) : null}
-                  <AssetPlaceholder
-                    assetTag={item.assetTag}
-                    label={item.name}
-                    description={
-                      item.rarityLabel ?? SHOP_CATEGORY_GUIDES[item.offer.category]
-                    }
-                    tone={item.offer.category === "talisman" ? "talisman" : "neutral"}
-                  />
-                  <span className="market-screen__offer-guide">
-                    {SHOP_CATEGORY_GUIDES[item.offer.category]}
-                  </span>
-                  <p>{item.description}</p>
-                  {item.detailLabel ? <small>{item.detailLabel}</small> : null}
-                  <div className="market-screen__offer-footer">
-                    <strong>{formatNumber(item.offer.price)}냥</strong>
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => props.onBuyOffer(item.offer.offerId)}
-                    >
-                      {item.offer.sold ? "판매 완료" : cannotAfford ? "냥 부족" : "구매"}
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-          <div className="market-screen__shop-actions">
-            {props.onReroll ? (
-              <button
-                type="button"
-                className="screen-button"
-                disabled={!props.canReroll || props.money < props.rerollCost}
-                onClick={props.onReroll}
-              >
-                새 상품 보기 · {formatNumber(props.rerollCost)}냥
-              </button>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
-
-      {props.mode === "contract" ? (
-        <section aria-labelledby="market-contract-title">
-          <div className="screen-section-heading">
-            <div>
-              <p>SEASON CONTRACT</p>
-              <h2 id="market-contract-title">런 동안 유지할 계약</h2>
-            </div>
-            <span>하나 선택</span>
-          </div>
-          <div className="market-screen__contract-grid">
-            {props.contracts.map(({ definition, disabled }) => {
-              const selected = definition.id === props.selectedContractId;
-              return (
+              ) : null}
+              {props.onReroll ? (
                 <button
                   type="button"
+                  className="market-action market-action--reroll"
+                  data-tutorial="shop-reroll"
+                  disabled={!props.canReroll || props.money < props.rerollCost}
+                  onClick={props.onReroll}
+                >
+                  <strong>새 상품</strong>
+                  <span>{formatNumber(props.rerollCost)}냥</span>
+                </button>
+              ) : null}
+            </>
+          ) : null}
+
+          {props.mode === "contract" ? (
+            <button
+              type="button"
+              className="market-action market-action--primary"
+              disabled={!props.selectedContractId}
+              onClick={props.onConfirmContract}
+            >
+              <strong>이 계약으로</strong>
+              <span>{props.selectedContractId ? "확정하고 계속" : "먼저 하나 고르세요"}</span>
+            </button>
+          ) : null}
+
+          {props.description ? <p className="market-panel__note">{props.description}</p> : null}
+        </aside>
+
+        <div className="market-panel__racks">
+          {props.mode === "reward" ? (
+            <Rack label="이번 판 보상" hint={`+${formatNumber(props.reward.amount)}냥`}>
+              <div className="market-reward">
+                <ArtSlot assetTag={props.reward.assetTag} className="market-art--wide" />
+                <div className="market-reward__copy">
+                  <strong>+{formatNumber(props.reward.amount)}냥</strong>
+                  {props.reward.description ? <p>{props.reward.description}</p> : null}
+                  {props.reward.lines?.length ? (
+                    <ul>
+                      {props.reward.lines.map((line, index) => <li key={`${line}-${index}`}>{line}</li>)}
+                    </ul>
+                  ) : null}
+                </div>
+              </div>
+            </Rack>
+          ) : null}
+
+          {props.mode === "shop" ? (
+            <>
+              <Rack
+                label={props.openedPack ? `${props.openedPack} 개봉` : "오늘의 장터"}
+                hint={props.openedPack
+                  ? "하나만 무료로 고르세요"
+                  : `${goods.filter((item) => !item.offer.sold).length}개 구매 가능`}
+                tutorialId="shop-rack"
+              >
+                {goods.map((item) => offerCard(
+                  item,
+                  props.money,
+                  props.onBuyOffer,
+                  item.offer.offerId === recommended?.offer.offerId ? "shop-pick" : undefined,
+                ))}
+              </Rack>
+
+              {packs.length > 0 ? (
+                <Rack label="꾸러미" hint="열면 후보 중 하나를 무료로" variant="packs">
+                  {packs.map((item) => offerCard(item, props.money, props.onBuyOffer))}
+                </Rack>
+              ) : null}
+            </>
+          ) : null}
+
+          {props.mode === "contract" ? (
+            <Rack label="런 동안 유지할 계약" hint="하나 선택">
+              {props.contracts.map(({ definition, disabled }) => (
+                <MarketCard
                   key={definition.id}
-                  className={joinClassNames(
-                    "market-screen__contract",
-                    selected && "market-screen__contract--selected",
-                  )}
-                  aria-pressed={selected}
+                  assetTag={definition.assetTag}
+                  name={definition.name}
+                  kindLabel="계약"
+                  guide={definition.description}
+                  description={`상위 · ${definition.upgradedName} — ${definition.upgradedDescription}`}
+                  ctaLabel={definition.id === props.selectedContractId ? "선택됨" : "선택"}
+                  selected={definition.id === props.selectedContractId}
                   disabled={disabled}
                   onClick={() => props.onSelectContract(definition.id)}
-                >
-                  <AssetPlaceholder
-                    assetTag={definition.assetTag}
-                    label={definition.name}
-                    description={definition.effectKey}
-                    tone="neutral"
-                  />
-                  <p>{definition.description}</p>
-                  <div>
-                    <span>상위 계약</span>
-                    <strong>{definition.upgradedName}</strong>
-                    <small>{definition.upgradedDescription}</small>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-          <button
-            type="button"
-            className="screen-button screen-button--primary market-screen__confirm"
-            disabled={!props.selectedContractId}
-            onClick={props.onConfirmContract}
-          >
-            이 계약으로 계속
-          </button>
-        </section>
-      ) : null}
-
-      {props.onLeave ? (
-        <footer className="market-screen__leave">
-          <button type="button" className="screen-button" onClick={props.onLeave}>
-            장터 나가기
-          </button>
-        </footer>
-      ) : null}
-    </main>
+                />
+              ))}
+            </Rack>
+          ) : null}
+        </div>
+      </div>
+    </section>
   );
 }

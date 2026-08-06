@@ -7,6 +7,17 @@ import type { TalismanDefinition } from "../types";
  */
 export const TALISMANS = [
   {
+    id: "t_first_charm",
+    name: "첫 부적",
+    description: "어떤 족보로 내든 배수 +4.",
+    rarity: "common",
+    price: 5,
+    weight: 18,
+    effectKey: "yaku_add_heung",
+    amount: 4,
+    assetTag: "talisman:first-charm",
+  },
+  {
     id: "t_pine_needles",
     name: "솔잎 부적",
     description: "득점하는 1~3월 카드마다 월 합 +4.",

@@ -19,7 +19,7 @@ import {
 } from "./upgrades";
 
 export const CONTENT_EXPECTED_COUNTS = {
-  talismans: 36,
+  talismans: 37,
   painters: 15,
   forbidden: 10,
   books: 13,
