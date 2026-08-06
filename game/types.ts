@@ -318,17 +318,17 @@ export interface MasteryEvent {
   reason: "played" | "collection" | "go_collection_bonus";
 }
 
+/**
+ * One round's running state. Go is a bet placed after the target is cleared,
+ * so there is no pending/confirmed split and nothing is ever rolled back.
+ */
 export interface GoChainState {
-  pot: number;
-  successfulGoCount: 0 | 1 | 2 | 3;
-  requirement: number | null;
-  confirmedScore: number;
-  confirmedGoCount: number;
-  confirmedCollection: CollectionState;
-  pendingCollection: CollectionState;
-  pendingMastery: MasteryEvent[];
-  armed: boolean;
-  lastHandScore: number;
+  /** Total score from every hand played this round. */
+  roundScore: number;
+  /** How many times Go has been called this round, 0 to 3. */
+  goCount: 0 | 1 | 2 | 3;
+  collection: CollectionState;
+  mastery: MasteryEvent[];
 }
 
 export interface TalismanInstance {
@@ -350,7 +350,6 @@ export type ScreenId =
   | "play"
   | "decision"
   | "reward"
-  | "shop_choice"
   | "shop"
   | "contract"
   | "deck_editor"
@@ -422,8 +421,13 @@ export interface GameState {
   hand: CardInstance[];
   usedPile: CardInstance[];
   selectedCardIds: string[];
-  manualYakuId: ImmediateYakuId | null;
-  cupRole: "animal" | "double_chaff";
+  /**
+   * Per-instance September cup roles. The player files each cup card onto the
+   * collection board after scoring, so there is no round-wide cup role.
+   */
+  cupAssignments: Record<string, "animal" | "double_chaff">;
+  /** Set while a submitted cup card is waiting for its collection choice. */
+  pendingCupCardId: string | null;
   handsRemaining: number;
   discardsRemaining: number;
   handSize: number;

@@ -7,14 +7,16 @@ import { CONTRACTS, WEATHER_BY_ID } from "@/game/content/meta";
 import { getStageDefinition } from "@/game/content/stages";
 import { TALISMAN_BY_ID } from "@/game/content/talismans";
 import { ALL_IMMEDIATE_YAKU_DEFINITIONS } from "@/game/content/yaku";
-import { calculateCollectionBonus } from "@/game/engine/collection-bonus";
-import { calculateGoRequirement, canGo, getNextHandMinimum } from "@/game/engine/go";
+import { calculateCollectionBonus, GODORI_MONTHS } from "@/game/engine/collection-bonus";
+import { canDeclareGo, getGoRequirement, getGoRewardFactor } from "@/game/engine/go";
 import { canDeclareShake } from "@/game/engine/experimental";
 import { findImmediateYakuCandidates } from "@/game/engine/yaku";
 import {
   createInitialGameState,
   evaluateSelectedHand,
   gameReducer,
+  getRoundRequirement,
+  mustDeclareGo,
   getDefinitionForOffer,
   getEffectiveTalismanSlots,
   getPendingConsumableDefinition,
@@ -24,20 +26,19 @@ import type {
   CardInstance,
   ExperimentalRules,
   GameState,
-  ImmediateYakuId,
 } from "@/game/types";
 
 import { AssetPlaceholder } from "./components/AssetPlaceholder";
 import { CollectionBoard, type CollectionBoardItem } from "./components/CollectionBoard";
 import { GameModal } from "./components/GameModal";
-import { GameTopBar } from "./components/GameTopBar";
 import { HwatuCard } from "./components/HwatuCard";
-import { MarketScreen, type MarketShopChoice } from "./components/MarketScreen";
+import { MarketScreen } from "./components/MarketScreen";
+import { PlayRail } from "./components/PlayRail";
 import { RunEndScreen } from "./components/RunEndScreen";
-import { ScoreFormula } from "./components/ScoreFormula";
 import { TalismanStrip } from "./components/TalismanStrip";
 import { TitleScreen, type ExperimentalRuleOption } from "./components/TitleScreen";
-import { TutorialCoach } from "./components/TutorialCoach";
+import { TutorialSpotlight } from "./components/TutorialSpotlight";
+import { TUTORIAL_STEPS } from "./components/tutorial-steps";
 import "./game.css";
 
 const EXPERIMENT_OPTIONS: ExperimentalRuleOption[] = [
@@ -47,12 +48,13 @@ const EXPERIMENT_OPTIONS: ExperimentalRuleOption[] = [
   { id: "nagariRetry", label: "나가리 재승부", description: "12월 최종 두목에게 한 번 패하면 제출 1회를 내고 재도전.", assetTag: "rule:nagari-retry" },
 ];
 
-const SHOP_CHOICES: MarketShopChoice[] = [
-  { category: "talisman", label: "부적전", description: "사두면 매 손 자동으로 발동하는 지속 효과를 팝니다.", assetTag: "shop:talisman" },
-  { category: "painter", label: "화공방", description: "내 덱의 카드 한 장을 영구 강화하거나 바꿉니다.", assetTag: "shop:painter" },
-  { category: "book", label: "비결서점", description: "족보의 기본 배수를 영구적으로 키웁니다.", assetTag: "shop:book" },
-  { category: "forbidden", label: "금단장", description: "강력한 효과를 얻는 대신 영구적인 대가를 치릅니다.", assetTag: "shop:forbidden" },
-];
+
+interface MarketBanner {
+  assetTag: string;
+  title: string;
+  subtitle?: string;
+  tone?: "shop" | "reward" | "contract";
+}
 
 function format(value: number): string {
   return new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 2 }).format(value);
@@ -71,10 +73,10 @@ function cardsFor(state: GameState, ids: readonly string[]): CardInstance[] {
 }
 
 function collectionItems(state: GameState): CollectionBoardItem[] {
-  const confirmedCards = cardsFor(state, state.chain.confirmedCollection.cardIds);
-  const pendingCards = cardsFor(state, state.chain.pendingCollection.cardIds);
-  const confirmed = calculateCollectionBonus(confirmedCards, state.cupRole);
-  const total = calculateCollectionBonus([...confirmedCards, ...pendingCards], state.cupRole);
+  const confirmedCards = cardsFor(state, state.chain.collection.cardIds);
+  const pendingCards: CardInstance[] = [];
+  const confirmed = calculateCollectionBonus(confirmedCards, state.cupAssignments);
+  const total = calculateCollectionBonus([...confirmedCards, ...pendingCards], state.cupAssignments);
   const pendingCount = (track: keyof typeof total.counts): number =>
     Math.max(0, total.counts[track] - confirmed.counts[track]);
 
@@ -98,14 +100,33 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       name: "동물",
       kind: "animal",
       assetTag: "collection:animal-track",
-      description: "동물 그림패 전체 · 고도리는 별도 보너스",
+      description: "동물 그림패 전체",
       confirmedCount: confirmed.counts.animal,
       pendingCount: pendingCount("animal"),
       slotCount: 10,
       milestones: [
-        { at: 3, label: "고도리", reward: "+2배수", active: total.completedSets.godori },
         { at: 5, label: "5장", reward: "+2배수" },
         { at: 6, label: "그 뒤", reward: "+0.5/장" },
+      ],
+    },
+    {
+      id: "godori",
+      name: "고도리",
+      kind: "godori",
+      assetTag: "collection:godori-track",
+      description: "2·4·8월 새 · 동물 줄에도 함께 집계",
+      confirmedCount: confirmed.counts.godori,
+      pendingCount: pendingCount("godori"),
+      slotLabels: GODORI_MONTHS.map((month) => `${month}월`),
+      slotStates: GODORI_MONTHS.map((month) =>
+        confirmed.matchedGodoriMonths.includes(month)
+          ? "confirmed"
+          : total.matchedGodoriMonths.includes(month)
+            ? "pending"
+            : "empty",
+      ),
+      milestones: [
+        { at: 3, label: "세 마리", reward: "+2배수", active: total.completedSets.godori },
       ],
     },
     {
@@ -290,6 +311,8 @@ export default function GameApp() {
   const [selectedContract, setSelectedContract] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [restartOpen, setRestartOpen] = useState(false);
+  const [tutorialIndex, setTutorialIndex] = useState(0);
+  const [tutorialOff, setTutorialOff] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSavedState(loadGame()), 0);
@@ -317,12 +340,18 @@ export default function GameApp() {
   });
   const yakuChoices = useMemo(() => {
     const candidates = findImmediateYakuCandidates(selectedCards, {
-      cupRole: state.cupRole,
+      cupRole: preview?.usedCupRole ?? "animal",
       connectYear: state.talismans.some((item) => item.definitionId === "t_leap_calendar"),
       includeSecretYaku: true,
     });
     return [...new Set(candidates.map((entry) => entry.yakuId))];
-  }, [selectedCards, state.cupRole, state.talismans]);
+  }, [selectedCards, preview?.usedCupRole, state.talismans]);
+  const appliedYaku = preview
+    ? ALL_IMMEDIATE_YAKU_DEFINITIONS.find((entry) => entry.id === preview.breakdown.yakuId) ?? null
+    : null;
+  const pendingCupCard = state.pendingCupCardId
+    ? state.deck.find((card) => card.instanceId === state.pendingCupCardId) ?? null
+    : null;
   const collections = useMemo(() => collectionItems(state), [state]);
   const talismanItems = state.talismans.flatMap((instance) => {
     const definition = TALISMAN_BY_ID[instance.definitionId];
@@ -335,6 +364,66 @@ export default function GameApp() {
     setRestartOpen(false);
     dispatch({ type: "RESET_RUN" });
   };
+
+  // The first month is scripted. Steps whose `when` fails are skipped, and
+  // steps with `doneWhen` advance the moment the player does the thing.
+  const tutorialActive = state.tutorialMode && !tutorialOff && state.stage === 1;
+  const tutorialStep = (() => {
+    if (!tutorialActive) return null;
+    for (let index = tutorialIndex; index < TUTORIAL_STEPS.length; index += 1) {
+      const step = TUTORIAL_STEPS[index];
+      if (step.when && !step.when(state)) continue;
+      if (step.doneWhen?.(state)) continue;
+      return { step, index };
+    }
+    return null;
+  })();
+
+
+  /**
+   * Market screens drop both rails. There is no hand to score and no
+   * collection to grow here, so the panel gets the whole viewport.
+   */
+  const marketShell = (banner: MarketBanner, caption: string, children: React.ReactNode) => (
+    <div className="market-shell">
+      <header className={`market-shell__banner market-shell__banner--${banner.tone ?? "shop"}`} data-asset-tag={banner.assetTag}>
+        <span className="market-shell__banner-mark" aria-hidden="true">IMG</span>
+        <div>
+          <strong>{banner.title}</strong>
+          {banner.subtitle ? <span>{banner.subtitle}</span> : null}
+        </div>
+        <code>{banner.assetTag}</code>
+        <p className="market-shell__caption">{caption}</p>
+      </header>
+      <main className="market-shell__body">{children}</main>
+      {tutorialStep ? (
+        <TutorialSpotlight
+          target={tutorialStep.step.target}
+          step={tutorialStep.index + 1}
+          total={TUTORIAL_STEPS.length}
+          title={tutorialStep.step.title}
+          body={tutorialStep.step.body}
+          actionHint={tutorialStep.step.actionHint}
+          nextLabel={tutorialStep.step.nextLabel}
+          onNext={() => setTutorialIndex(tutorialStep.index + 1)}
+          onSkip={() => setTutorialOff(true)}
+        />
+      ) : null}
+      <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />
+      <GameModal
+        id="restart-run"
+        open={restartOpen}
+        assetTag="ui:warning:restart"
+        title="현재 런을 끝낼까요?"
+        description="저장된 달력과 덱이 초기화됩니다."
+        onClose={() => setRestartOpen(false)}
+        actions={[
+          { id: "cancel", label: "계속 플레이", onClick: () => setRestartOpen(false) },
+          { id: "reset", label: "제목으로", variant: "danger", onClick: resetToTitle },
+        ]}
+      />
+    </div>
+  );
 
   if (state.screen === "title" || state.screen === "deck_select") {
     return (
@@ -352,7 +441,7 @@ export default function GameApp() {
           experimentalRules={state.experimentalRules}
           experimentalRuleOptions={EXPERIMENT_OPTIONS}
           canContinue={Boolean(savedState)}
-          continueSummary={savedState ? `${savedState.stage}월 · ${format(savedState.chain.confirmedScore)}점` : undefined}
+          continueSummary={savedState ? `${savedState.stage}월 · ${format(savedState.chain.roundScore)}점` : undefined}
           onToggleExperimentalRule={(key: keyof ExperimentalRules) => dispatch({ type: "TOGGLE_EXPERIMENT", key })}
           onNewGame={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode })}
           onContinue={savedState ? () => dispatch({ type: "CONTINUE_RUN", state: savedState }) : undefined}
@@ -375,93 +464,69 @@ export default function GameApp() {
   }
 
   if (state.screen === "reward") {
-    return (
-      <div className="game-root">
-        <MarketScreen
-          mode="reward"
-          assetTag="ui:reward:ink-pouch"
-          stageLabel={stage.name}
-          money={state.money}
-          reward={{ assetTag: `reward:stage-${state.stage}`, amount: state.lastRoundReward, title: "판돈과 박 보상", description: `${state.chain.confirmedScore.toLocaleString("ko-KR")}점으로 목표 달성`, lines: [`남은 제출 ${state.handsRemaining}회`, `${state.chain.confirmedGoCount}고 확정`, `달력 도장 ${state.calendarStamps.length}개`] }}
-          onContinue={() => dispatch({ type: "CONTINUE_AFTER_REWARD" })}
-        />
-      </div>
-    );
-  }
-
-  if (state.screen === "shop_choice") {
-    const firstShopTutorial = state.tutorialMode && state.stage === 1;
-    return (
-      <div className="game-root">
-        <MarketScreen
-          mode="shop_choice"
-          assetTag="ui:market:crossroads"
-          stageLabel={`${stage.name} 완료`}
-          money={state.money}
-          choices={SHOP_CHOICES.map((choice) => ({
-            ...choice,
-            recommended: firstShopTutorial && choice.category === "book",
-          }))}
-          coach={firstShopTutorial ? {
-            step: 1,
-            total: 2,
-            title: "장터는 내 덱을 고치는 곳입니다",
-            body: "매 스테이지 뒤에 상점 하나를 고릅니다. 부적은 자동 효과, 비결서는 족보 배수, 화공은 카드 강화, 금단장은 강한 효과와 대가를 다룹니다.",
-            actionHint: "첫 방문에는 규칙이 가장 단순한 ‘비결서점’을 선택해 보세요.",
-            targetLabel: "비결서점",
-          } : undefined}
-          onChooseShop={(shopType) => dispatch({ type: "CHOOSE_SHOP", shopType })}
-        />
-      </div>
+    return marketShell(
+      { assetTag: "ui:reward:ink-pouch", title: "판 승리", subtitle: "판돈을 받아 갑니다", tone: "reward" },
+      "판을 넘겼습니다",
+      <MarketScreen
+        mode="reward"
+        assetTag="ui:reward:ink-pouch"
+        stageLabel={stage.name}
+        money={state.money}
+        description={`${format(state.chain.roundScore)}점으로 목표 ${format(state.targetScore)}점을 넘겼습니다.`}
+        reward={{
+          assetTag: `reward:stage-${state.stage}`,
+          amount: state.lastRoundReward,
+          title: "판돈과 박 보상",
+          description: `${format(state.chain.roundScore)}점으로 목표 달성`,
+          lines: [`남은 제출 ${state.handsRemaining}회`, `${state.chain.goCount}고`, `달력 도장 ${state.calendarStamps.length}개`],
+        }}
+        onContinue={() => dispatch({ type: "CONTINUE_AFTER_REWARD" })}
+      />,
     );
   }
 
   if (state.screen === "shop") {
-    const baseOffers = state.shopOffers.flatMap((offer) => {
+    const offers = state.shopOffers.flatMap((offer) => {
       const definition = getDefinitionForOffer(offer);
       const detailLabel = offer.category === "pack"
-        ? "개봉하면 무료 후보 3개"
+        ? "개봉하면 무료 후보 3장"
         : offer.category === "talisman"
-          ? "구매 즉시 빈 부적 칸에 장착"
+          ? "빈 부적 칸에 바로 장착"
           : offer.category === "book"
-            ? "구매 즉시 족보 배수 레벨 +1"
-            : "구매 후 강화할 카드를 선택";
-      return definition ? [{ offer, name: definition.name, description: definition.description, assetTag: definition.assetTag, detailLabel }] : [];
+            ? "족보 배수 레벨 +1"
+            : offer.category === "painter"
+              ? "구매 후 바꿀 카드를 고름"
+              : "대가를 확인하고 사용";
+      return definition
+        ? [{
+            offer,
+            name: definition.name,
+            description: definition.description,
+            assetTag: definition.assetTag,
+            detailLabel,
+            recommended: tutorialActive && offer.definitionId === "t_first_charm" && !offer.sold,
+          }]
+        : [];
     });
-    const firstShopTutorial = state.tutorialMode && state.stage === 1;
-    const recommendedOffer = baseOffers.find(({ offer }) => !offer.sold && offer.price <= state.money)
-      ?? baseOffers.find(({ offer }) => !offer.sold);
-    const offers = baseOffers.map((entry) => ({
-      ...entry,
-      recommended: firstShopTutorial && entry.offer.offerId === recommendedOffer?.offer.offerId,
-    }));
-    return (
-      <div className="game-root">
-        <MarketScreen
-          mode="shop"
-          assetTag={`ui:shop:${state.shopType}`}
-          stageLabel={`${state.stage}월 장터`}
-          money={state.money}
-          offers={offers}
-          rerollCost={state.rerollCost}
-          canReroll={true}
-          coach={firstShopTutorial ? {
-            step: 2,
-            total: 2,
-            title: "상품은 한 번 사면 이번 런에 계속 남습니다",
-            body: state.shopType === "book"
-              ? "비결서는 적힌 족보의 배수를 영구적으로 한 단계 올립니다. 자주 만들기 쉬운 족보부터 키우면 안정적입니다."
-              : "가격과 효과를 읽고 지금 덱에 필요한 상품을 고르세요. 추천 표시는 현재 가진 냥으로 살 수 있는 첫 상품입니다.",
-            actionHint: recommendedOffer && recommendedOffer.offer.price <= state.money
-              ? `‘${recommendedOffer.name}’을 구매해 보세요.`
-              : "살 수 없다면 상점을 나가 다음 판을 시작하세요.",
-            targetLabel: recommendedOffer?.name,
-          } : undefined}
-          onBuyOffer={(offerId) => dispatch({ type: "BUY_OFFER", offerId })}
-          onReroll={() => dispatch({ type: "REROLL_SHOP" })}
-          onLeave={() => dispatch({ type: "NEXT_STAGE" })}
-        />
-      </div>
+    const openedPack = state.shopType
+      ? { talisman: "부적 묶음", painter: "화공 묶음", book: "비결 묶음", forbidden: "금단 묶음" }[state.shopType]
+      : null;
+    return marketShell(
+      { assetTag: "ui:shop:market", title: "장터", subtitle: "내 덱을 고칠 차례" },
+      `${state.stage}월 장터 · 남은 냥 ${format(state.money)}`,
+      <MarketScreen
+        mode="shop"
+        assetTag="ui:shop:market"
+        stageLabel={`${state.stage}월 장터`}
+        money={state.money}
+        offers={offers}
+        openedPack={openedPack}
+        rerollCost={state.rerollCost}
+        canReroll={true}
+        onBuyOffer={(offerId) => dispatch({ type: "BUY_OFFER", offerId })}
+        onReroll={() => dispatch({ type: "REROLL_SHOP" })}
+        onLeave={() => dispatch({ type: "NEXT_STAGE" })}
+      />,
     );
   }
 
@@ -470,10 +535,25 @@ export default function GameApp() {
       const definition = CONTRACTS.find((entry) => entry.id === id);
       return definition ? [{ definition }] : [];
     });
-    return (
-      <div className="game-root">
-        <MarketScreen mode="contract" assetTag="ui:contract:season-scroll" stageLabel={`${state.stage}월 계절 결산`} money={state.money} contracts={contracts} selectedContractId={selectedContract} onSelectContract={setSelectedContract} onConfirmContract={() => { if (selectedContract) { dispatch({ type: "CHOOSE_CONTRACT", contractId: selectedContract }); setSelectedContract(null); } }} />
-      </div>
+    return marketShell(
+      { assetTag: "ui:contract:season-scroll", title: "계절 결산", subtitle: "런 끝까지 남는 계약", tone: "contract" },
+      `${state.stage}월 계절 결산`,
+      <MarketScreen
+        mode="contract"
+        assetTag="ui:contract:season-scroll"
+        stageLabel={`${state.stage}월 계절 결산`}
+        money={state.money}
+        description="한 번 고르면 이번 런 내내 유지됩니다."
+        contracts={contracts}
+        selectedContractId={selectedContract}
+        onSelectContract={setSelectedContract}
+        onConfirmContract={() => {
+          if (selectedContract) {
+            dispatch({ type: "CHOOSE_CONTRACT", contractId: selectedContract });
+            setSelectedContract(null);
+          }
+        }}
+      />,
     );
   }
 
@@ -485,13 +565,13 @@ export default function GameApp() {
           assetTag={isWin ? "ending:twelve-months-complete" : "ending:nagari"}
           result={isWin ? "win" : "lose"}
           stageLabel={`${state.stage}월 · ${stage.name}`}
-          finalScore={state.chain.confirmedScore}
+          finalScore={state.chain.roundScore}
           targetScore={state.targetScore}
           money={state.money}
           seed={state.seed}
           stats={state.stats}
           summary={isWin ? "열두 달을 모두 도장 찍었습니다. 같은 덱으로 무한 달력을 이어갈 수 있습니다." : "덱은 사라지지 않았습니다. 같은 시드로 다시 설계해 보세요."}
-          failureReason={!isWin ? `${format(Math.max(0, state.targetScore - state.chain.confirmedScore))}점 부족` : undefined}
+          failureReason={!isWin ? `${format(Math.max(0, state.targetScore - state.chain.roundScore))}점 부족` : undefined}
           onRestart={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode: state.tutorialMode })}
           onReturnToTitle={resetToTitle}
           onCopySeed={() => void navigator.clipboard?.writeText(state.seed)}
@@ -505,155 +585,222 @@ export default function GameApp() {
     );
   }
 
-  const nextMinimum = getNextHandMinimum(state.chain);
-  const goAvailable = canGo(state.chain, state.targetScore, state.handsRemaining);
+  const requirement = getRoundRequirement(state);
+  const remainingToClear = Math.max(0, requirement - state.chain.roundScore);
+  const goAvailable = canDeclareGo(state.chain, state.handsRemaining);
   const nextGoRequirement = goAvailable
-    ? calculateGoRequirement(state.chain.pot, state.targetScore, (state.chain.successfulGoCount + 1) as 1 | 2 | 3)
+    ? getGoRequirement(state.targetScore, state.chain.goCount + 1)
     : null;
+  const goRequired = mustDeclareGo(state);
+  const baseReward = Math.floor(
+    (3 + Math.ceil(state.stage / 2) + state.handsRemaining) * getGoRewardFactor(state.chain.goCount),
+  );
+  const goRewardFactor = getGoRewardFactor(state.chain.goCount + 1);
   const shakeReady = canDeclareShake(selectedCards, state.experimentalRules);
-  const firstLesson = state.tutorialMode && state.stage === 1;
-  const playTutorial = state.screen === "decision"
-    ? {
-        step: 5,
-        total: 5,
-        title: "첫 점수를 안전하게 저장해 보세요",
-        body: "방금 만든 점수는 아직 ‘이번 승부’에 있습니다. 저장하면 누적 점수가 되고, 고를 누르면 다음 손까지 더 큰 점수를 노리는 대신 실패 위험이 생깁니다.",
-        actionHint: "이번에는 ‘저장하고 계속’을 눌러 보세요.",
-        targetLabel: "저장하고 계속",
-      }
-    : state.roundSubmissionIndex > 0 || state.chain.confirmedScore > 0
-      ? {
-          step: 5,
-          total: 5,
-          title: "기본 조작을 익혔어요",
-          body: "카드를 클릭해 월 합을 만들고, 족보 배수를 붙여 목표 점수를 채우면 됩니다. 필요 없는 카드는 버려 새 패를 뽑으세요.",
-          actionHint: `누적 ${format(state.chain.confirmedScore)} / 목표 ${format(state.targetScore)}점`,
-        }
-      : state.selectedCardIds.length === 0
-        ? {
-            step: 1,
-            total: 5,
-            title: "손패는 드래그하지 않고 클릭합니다",
-            body: "카드의 큰 숫자가 월값입니다. 선택한 카드들의 월 숫자를 더한 값이 점수식의 앞 숫자가 됩니다.",
-            actionHint: "같은 월 두 장이 보이면 둘 다 클릭하세요. 없으면 월 숫자가 큰 카드 두 장을 골라도 됩니다.",
-            targetLabel: "손패 카드",
-          }
-        : state.selectedCardIds.length === 1
-          ? {
-              step: 2,
-              total: 5,
-              title: "선택한 카드는 위로 올라옵니다",
-              body: "지금 선택한 카드가 첫 번째 점수 재료입니다. 한 장을 더 골라 월 합과 가능한 족보가 어떻게 바뀌는지 확인하세요.",
-              actionHint: "카드 한 장을 더 클릭해 보세요.",
-              targetLabel: "두 번째 카드",
-            }
-          : !state.manualYakuId
-            ? {
-                step: 3,
-                total: 5,
-                title: "이번 손의 족보를 직접 고르세요",
-                body: "선택한 카드로 가능한 족보만 버튼으로 나타납니다. 자동 최고점은 없으니 월 합과 배수를 보고 어떤 족보로 낼지 직접 정합니다.",
-                actionHint: "‘적용할 족보’에서 원하는 족보 버튼을 눌러 보세요.",
-                targetLabel: "적용할 족보",
-              }
-            : {
-                step: 4,
-                total: 5,
-                title: "월 합 × 배수가 이번 손 점수입니다",
-                body: "점수판의 왼쪽은 족보에 들어간 카드의 월 숫자 합, 오른쪽은 족보·수집·부적이 만든 배수입니다.",
-                actionHint: "예상 점수를 확인한 뒤 ‘족보 제출’을 눌러 보세요.",
-                targetLabel: "족보 제출",
-              };
+  const isDecision = state.screen === "decision";
+  const shownBreakdown = isDecision ? state.lastScore : preview?.breakdown ?? null;
+  const drawnCount = state.drawPile.length;
+  const deckTotal = state.deck.length;
+
   return (
-    <div className="game-root play-root">
-      <GameTopBar
-        assetTag={`ui:topbar:month-${stage.month}`}
+    <div className="play-shell">
+      <PlayRail
+        assetTag={`ui:rail:month-${stage.month}`}
+        stageAssetTag={stage.assetTag}
         stageLabel={`${stage.month}월 · ${stage.name}`}
-        roundLabel={`날씨 ${WEATHER_BY_ID[state.weatherId].name}`}
+        stageSubtitle={stage.subtitle}
+        weatherLabel={`날씨 ${WEATHER_BY_ID[state.weatherId].name}`}
         bossLabel={boss?.name ?? null}
         targetScore={state.targetScore}
-        confirmedScore={state.chain.confirmedScore}
-        potScore={state.chain.pot}
-        successfulGoCount={state.chain.successfulGoCount}
+        rewardLabel={`${3 + Math.ceil(state.stage / 2)}냥 +`}
+        roundScore={state.chain.roundScore}
+        goCount={state.chain.goCount}
+        breakdown={shownBreakdown}
+        formulaCaption={
+          shownBreakdown
+            ? isDecision
+              ? "방금 낸 점수"
+              : `월 합 × 배수 · 득점 ${shownBreakdown.scoringCardIds.length}장`
+            : state.selectedCardIds.length
+              ? "이 조합으로 만들 수 있는 족보가 없습니다"
+              : "카드를 고르면 최고점 족보가 자동으로 붙습니다"
+        }
         handsRemaining={state.handsRemaining}
         discardsRemaining={state.discardsRemaining}
         money={state.money}
+        stageIndex={state.stage}
+        stageTotal={12}
         seed={state.seed}
         onOpenDeck={() => dispatch({ type: "OPEN_SCREEN", screen: "deck_editor" })}
         onOpenRules={() => setRulesOpen(true)}
         onRestart={() => setRestartOpen(true)}
       />
 
-      {state.chain.armed ? <aside className="go-danger-banner" role="status"><strong>{state.chain.successfulGoCount + 1}고 진행 중</strong><span>이번 손까지 합쳐 {format(state.chain.requirement ?? 0)}점 이상 필요 · 지금 손 최소 {format(nextMinimum ?? 0)}점</span></aside> : null}
+      <main className="play-board">
+        <div className="play-board__top" data-tutorial="talisman">
+          <TalismanStrip assetTag="ui:talisman-strip" items={talismanItems} slots={getEffectiveTalismanSlots(state)} />
+        </div>
 
-      {firstLesson ? <TutorialCoach {...playTutorial} /> : null}
+        {state.chain.goCount > 0 && !isDecision ? (
+          <aside className="go-danger-banner" role="status">
+            <strong>{state.chain.goCount}고 진행 중</strong>
+            <span>
+              {format(requirement)}점 문턱까지 {format(remainingToClear)}점 남음 · 못 넘기면 런이 끝납니다
+            </span>
+          </aside>
+        ) : null}
 
-      <main className="play-layout">
-        <section className="play-table">
-          <header className="play-table__header">
-            <div><p className="eyebrow">HAND · 클릭해서 최대 5장 선택</p><h1>{state.screen === "decision" ? "저장할까요, 고를 외칠까요?" : "이번 손을 만드세요"}</h1></div>
-            <button type="button" disabled={!state.selectedCardIds.length || state.screen === "decision"} onClick={() => dispatch({ type: "CLEAR_SELECTION" })}>선택 모두 해제</button>
-          </header>
+        <div className="play-board__felt">
+          <p className="play-board__prompt">
+            {isDecision
+              ? `${format(state.chain.roundScore)}점 · 문턱 ${format(requirement)}점을 넘겼습니다`
+              : "손패를 눌러 최대 5장까지 고르세요"}
+          </p>
 
-          <div className="play-score-panel">
-            <ScoreFormula
-              assetTag="ui:score-formula:month-times-multiplier"
-              breakdown={state.screen === "decision" ? state.lastScore : preview?.breakdown}
-              label={state.screen === "decision" ? "방금 낸 점수" : "선택 카드 예상 점수"}
-              emptyMessage={state.selectedCardIds.length > 0 ? "적용할 족보를 직접 고르면 계산식이 열립니다." : "카드를 선택하면 가능한 족보가 표시됩니다."}
-              showOperations={false}
-            />
-          </div>
+          <div className="play-board__stage">
+            <ul className="hand-fan" aria-label="내 손패" data-tutorial="hand" style={{ "--n": state.hand.length } as React.CSSProperties}>
+              {state.hand.map((card, index) => (
+                <li key={card.instanceId} style={{ "--i": index } as React.CSSProperties}>
+                  <HwatuCard
+                    dense
+                    card={card}
+                    selected={state.selectedCardIds.includes(card.instanceId)}
+                    scoring={Boolean(preview?.breakdown.scoringCardIds.includes(card.instanceId))}
+                    disabled={isDecision}
+                    cupRole={card.tags.includes("cup") ? state.cupAssignments[card.instanceId] : undefined}
+                    onSelect={(selected) => dispatch({ type: "SELECT_CARD", cardId: selected.instanceId })}
+                  />
+                </li>
+              ))}
+            </ul>
 
-          <div className="hand-cards" aria-label="내 손패">
-            {state.hand.map((card) => <HwatuCard key={card.instanceId} card={card} selected={state.selectedCardIds.includes(card.instanceId)} scoring={Boolean(preview?.breakdown.scoringCardIds.includes(card.instanceId))} disabled={state.screen === "decision"} cupRole={card.tags.includes("cup") ? state.cupRole : undefined} onSelect={(selected) => dispatch({ type: "SELECT_CARD", cardId: selected.instanceId })} />)}
-          </div>
-
-          <div className="hand-options">
-            <section className="yaku-picker" aria-label="메인 족보 선택">
-              <div><strong>적용할 족보를 직접 선택</strong><span>{state.selectedCardIds.length ? "하나를 골라야 점수를 낼 수 있습니다" : "먼저 카드를 고르세요"}</span></div>
-              {yakuChoices.map((id) => {
-                const definition = ALL_IMMEDIATE_YAKU_DEFINITIONS.find((entry) => entry.id === id);
-                return (
-                  <button type="button" className={state.manualYakuId === id ? "active" : ""} key={id} onClick={() => dispatch({ type: "SET_MANUAL_YAKU", yakuId: id as ImmediateYakuId })}>
-                    <strong>{definition?.name ?? id}</strong>
-                    <span>×{definition?.baseHeung ?? 1} · {definition?.description}</span>
-                  </button>
-                );
-              })}
-            </section>
-
-            <div className="cup-role-switch" role="group" aria-label="9월 술잔 역할">
-              <span>9월 술잔을 어디에 셀까요?</span>
-              <button type="button" className={state.cupRole === "animal" ? "active" : ""} onClick={() => dispatch({ type: "SET_CUP_ROLE", role: "animal" })}>동물패 1장</button>
-              <button type="button" className={state.cupRole === "double_chaff" ? "active" : ""} onClick={() => dispatch({ type: "SET_CUP_ROLE", role: "double_chaff" })}>피 2장</button>
+            <div className="deck-stack" aria-label={`남은 덱 ${drawnCount}장`}>
+              <div className="deck-stack__back" data-asset-tag="ui:card-back:hanji">
+                <span aria-hidden="true">IMG</span>
+                <code>ui:card-back:hanji</code>
+              </div>
+              <strong>{drawnCount} / {deckTotal}</strong>
             </div>
           </div>
 
-          {state.screen === "play" ? (
-            <footer className="hand-actions">
-              {state.experimentalRules.bombsAndShake ? <button type="button" disabled={!shakeReady} className={state.yard.shakeArmed ? "active" : ""} onClick={() => dispatch({ type: "DECLARE_SHAKE" })}>같은 월 3장 흔들기</button> : null}
-              <button type="button" disabled={!state.selectedCardIds.length || state.discardsRemaining <= 0} onClick={() => dispatch({ type: "DISCARD_SELECTED" })}>선택 버리기 ({state.discardsRemaining})</button>
-              <button type="button" className="primary-action" disabled={!state.selectedCardIds.length || !state.manualYakuId || state.handsRemaining <= 0} onClick={() => dispatch({ type: "SUBMIT_HAND" })}>족보 제출 ({state.handsRemaining})</button>
-            </footer>
-          ) : (
-            <footer className="decision-actions">
-              <button type="button" onClick={() => dispatch({ type: "BANK_CHAIN" })}><strong>저장하고 계속</strong><span>이번 승부 점수를 누적 점수에 더합니다</span></button>
-              <button type="button" className="go-action" disabled={!goAvailable} onClick={() => dispatch({ type: "DECLARE_GO" })}><strong>{state.chain.successfulGoCount + 1}고 도전</strong><span>{goAvailable ? `다음 손까지 합계 ${format(nextGoRequirement ?? 0)}점 넘기기` : "이번 승부가 목표의 15% 이상이고 다음 손이 남아야 합니다"}</span></button>
-              <button type="button" className="stop-action" onClick={() => dispatch({ type: "STOP_ROUND" })}><strong>스톱하고 판정</strong><span>현재 점수를 저장하고 스테이지 결과를 확인합니다</span></button>
-            </footer>
-          )}
-        </section>
+          <div className="hand-meta">
+            <span>{state.selectedCardIds.length} / 5 선택</span>
+            <span className="hand-meta__yaku">
+              {appliedYaku ? appliedYaku.name : "족보 없음"}
+              {yakuChoices.length > 1 ? (
+                <em>
+                  +{yakuChoices.length - 1} 함께 성립
+                </em>
+              ) : null}
+            </span>
+            <span>손패 {state.hand.length}장</span>
+          </div>
+        </div>
 
-        <aside className="play-support">
-          <CollectionBoard assetTag="ui:collection-board" items={collections} />
-        </aside>
+        {state.screen === "play" ? (
+          <footer className="hand-actions">
+            <button type="button" disabled={!state.selectedCardIds.length} onClick={() => dispatch({ type: "CLEAR_SELECTION" })}>선택 해제</button>
+            {state.experimentalRules.bombsAndShake ? <button type="button" disabled={!shakeReady} className={state.yard.shakeArmed ? "active" : ""} data-tutorial="shake" onClick={() => dispatch({ type: "DECLARE_SHAKE" })}>흔들기</button> : null}
+            <button type="button" className="primary-action" disabled={!preview || state.handsRemaining <= 0} data-tutorial="submit" onClick={() => dispatch({ type: "SUBMIT_HAND" })}><strong>족보 제출</strong><span>{state.handsRemaining}회 남음</span></button>
+            <button type="button" className="discard-action" disabled={!state.selectedCardIds.length || state.discardsRemaining <= 0} data-tutorial="discard" onClick={() => dispatch({ type: "DISCARD_SELECTED" })}><strong>버리기</strong><span>{state.discardsRemaining}회 남음</span></button>
+          </footer>
+        ) : (
+          <footer className="decision-actions decision-actions--two">
+            <button
+              type="button"
+              className="stop-action"
+              data-tutorial="stop"
+              disabled={goRequired}
+              onClick={() => dispatch({ type: "STOP_ROUND" })}
+            >
+              <strong>스톱</strong>
+              <span>
+                {goRequired
+                  ? "이 두목은 고를 한 번 외쳐야 합니다"
+                  : `판돈 ${format(baseReward)}냥을 받고 판을 끝냅니다`}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="go-action"
+              data-tutorial="go"
+              disabled={!goAvailable}
+              onClick={() => dispatch({ type: "DECLARE_GO" })}
+            >
+              <strong>{state.chain.goCount + 1}고</strong>
+              <span>
+                {goAvailable
+                  ? `문턱 ${format(nextGoRequirement ?? 0)}점 · 판돈 ×${goRewardFactor}`
+                  : state.chain.goCount >= 3
+                    ? "3고가 최대입니다"
+                    : "남은 제출이 없습니다"}
+              </span>
+            </button>
+          </footer>
+        )}
       </main>
 
-      <TalismanStrip assetTag="ui:talisman-strip" items={talismanItems} slots={getEffectiveTalismanSlots(state)} />
+      <aside className="play-side" data-tutorial="collection">
+        <CollectionBoard assetTag="ui:collection-board" items={collections} />
+      </aside>
+
+      <CupChoiceModal
+        card={pendingCupCard}
+        onChoose={(role) => {
+          if (state.pendingCupCardId) {
+            dispatch({ type: "ASSIGN_CUP_ROLE", cardId: state.pendingCupCardId, role });
+          }
+        }}
+      />
+      {tutorialStep ? (
+        <TutorialSpotlight
+          target={tutorialStep.step.target}
+          step={tutorialStep.index + 1}
+          total={TUTORIAL_STEPS.length}
+          title={tutorialStep.step.title}
+          body={tutorialStep.step.body}
+          actionHint={tutorialStep.step.actionHint}
+          nextLabel={tutorialStep.step.nextLabel}
+          onNext={() => setTutorialIndex(tutorialStep.index + 1)}
+          onSkip={() => setTutorialOff(true)}
+        />
+      ) : null}
       <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />
       <GameModal id="restart-run" open={restartOpen} assetTag="ui:warning:restart" title="현재 런을 끝낼까요?" description="저장된 달력과 덱이 초기화됩니다." onClose={() => setRestartOpen(false)} actions={[{ id: "cancel", label: "계속 플레이", onClick: () => setRestartOpen(false) }, { id: "reset", label: "제목으로", variant: "danger", onClick: resetToTitle }]} />
     </div>
+  );
+}
+
+function CupChoiceModal({ card, onChoose }: {
+  card: CardInstance | null;
+  onChoose: (role: "animal" | "double_chaff") => void;
+}) {
+  return (
+    <GameModal
+      id="cup-role"
+      open={Boolean(card)}
+      assetTag={card?.assetTag ?? "card-09-animal-cup"}
+      title="술잔을 수집판 어디에 기록할까요?"
+      description="이번 손의 점수는 이미 확정됐습니다. 이 선택은 수집판 기록과 앞으로의 지속 배수에만 적용됩니다."
+      closeOnBackdrop={false}
+      closeLabel="나중에"
+      onClose={() => onChoose("animal")}
+      actions={[
+        { id: "animal", label: "동물로 기록 · 동물 1장", variant: "primary", onClick: () => onChoose("animal") },
+        { id: "chaff", label: "피로 기록 · 피 2점", variant: "primary", onClick: () => onChoose("double_chaff") },
+      ]}
+    >
+      <div className="rules-copy">
+        <section>
+          <h3>동물로 기록</h3>
+          <p>동물 줄이 한 칸 채워집니다. 동물 5장 <strong>+2배수</strong>와 그 뒤 장당 <strong>+0.5배수</strong>를 노릴 때 유리합니다.</p>
+        </section>
+        <section>
+          <h3>피로 기록</h3>
+          <p>피 줄이 두 칸 채워집니다. 피 5점 <strong>+1배수</strong>, 10점 <strong>+4배수</strong> 문턱을 앞당길 때 유리합니다.</p>
+        </section>
+      </div>
+    </GameModal>
   );
 }
 
@@ -662,9 +809,9 @@ function RulesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     <GameModal id="rules" open={open} assetTag="ui:rules:scroll" title="꽃판 규칙 요약" description="월 합 × 배수와 고·스톱의 선택을 간단히 정리했습니다." onClose={onClose}>
       <div className="rules-copy">
         <section><h3>1. 카드를 클릭</h3><p>손패에서 1~5장을 클릭합니다. 드래그는 없습니다. 선택한 카드들의 월 숫자를 더한 값이 점수식의 앞 숫자입니다.</p></section>
-        <section><h3>2. 족보를 직접 선택</h3><p>선택 카드로 가능한 족보 중 하나를 직접 고릅니다. 자동 최고점은 없으며, 족보를 골라야 예상 점수와 제출 버튼이 열립니다.</p></section>
-        <section><h3>3. 월 합 × 배수</h3><p>족보에 들어간 카드의 월 숫자 합이 앞 숫자, 족보와 광·동물·띠·피 수집 및 부적이 만든 값이 배수입니다.</p></section>
-        <section><h3>4. 저장 / 고 / 스톱</h3><p>저장은 이번 승부 점수를 누적하고 계속합니다. 고는 다음 손까지 더 높은 문턱에 도전하며, 실패하면 이번 승부에서 모은 점수를 잃습니다. 스톱은 지금 점수로 판을 끝냅니다.</p></section>
+        <section><h3>2. 족보는 자동 적용</h3><p>선택한 카드로 만들 수 있는 족보 중 점수가 가장 높은 것이 자동으로 적용됩니다. 어떤 족보가 붙었는지는 손패 아래에 표시됩니다.</p></section>
+        <section><h3>3. 월 합 × 배수</h3><p>족보에 들어간 카드의 월 숫자 합이 앞 숫자, 족보와 광·동물·고도리·띠·피 수집 및 부적이 만든 값이 배수입니다. 9월 술잔은 점수를 낸 뒤 동물과 피 중 어디에 기록할지 직접 고릅니다.</p></section>
+        <section><h3>4. 고 · 스톱</h3><p>제출한 점수는 이번 판에 계속 쌓입니다. 목표를 넘긴 순간에만 고와 스톱을 고릅니다. 스톱은 지금 판돈을 받고 끝내고, 고는 문턱을 1.5배 → 2.2배 → 3.2배로 올리는 대신 판돈을 1.5배 → 2.25배 → 3.4배로 불립니다. 남은 제출로 그 문턱을 못 넘기면 런이 끝납니다.</p></section>
         <section><h3>5. 덱빌딩</h3><p>모든 런은 기본 48장으로 시작합니다. 매달 장터에서 부적·족보 성장·영구 카드 강화·금단 계약을 골라 나만의 덱으로 바꿉니다.</p></section>
       </div>
     </GameModal>

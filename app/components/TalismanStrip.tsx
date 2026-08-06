@@ -49,58 +49,42 @@ export function TalismanStrip({
       data-asset-tag={assetTag}
     >
       <div className="talisman-strip__header">
-        <div>
-          <span>부적 · {items.length}/{slots}칸</span>
-          <strong>보유한 동안 항상 발동</strong>
-        </div>
-        <code>{assetTag}</code>
+        <span>부적 {items.length}/{slots}</span>
+        <em>가지고 있는 동안 매 손 자동으로 발동합니다</em>
       </div>
 
       <div className="talisman-strip__slots">
         {Array.from({ length: slotCount }, (_, index) => {
           const item = items[index];
 
+          // Empty slots are just dashed outlines — no label, no instructions.
           if (!item) {
             return (
               <div
                 className="talisman-strip__empty"
+                aria-hidden="true"
                 data-asset-tag={`${assetTag}:empty:${index + 1}`}
                 key={`empty-${index}`}
-              >
-                <span className="talisman-strip__empty-mark" aria-hidden="true">
-                  +
-                </span>
-                <strong>빈 부적 칸 {index + 1}</strong>
-                <span>장터에서 구매하면 이곳에 장착됩니다</span>
-              </div>
+              />
             );
           }
 
           const isSelected = selectedInstanceId === item.instance.instanceId;
           const itemContent = (
             <>
-              <div className="talisman-strip__item-heading">
-                <div>
-                  <span>{RARITY_LABELS[item.definition.rarity]} 부적</span>
-                  <strong>{item.definition.name}</strong>
-                </div>
+              <span className="talisman-strip__art" data-asset-tag={item.definition.assetTag}>
+                <span aria-hidden="true">IMG</span>
                 <code>{item.definition.assetTag}</code>
-              </div>
-              <span className="talisman-strip__always-on">
-                항상 발동 중
               </span>
-              <p className="talisman-strip__description">
-                {item.definition.description}
-              </p>
-              <div className="talisman-strip__meta">
-                <span>{item.definition.price}냥</span>
-                {item.instance.growth !== 0 ? (
-                  <span>성장 +{item.instance.growth}</span>
-                ) : null}
-                {item.contributionLabel ? (
-                  <strong>{item.contributionLabel}</strong>
-                ) : null}
-              </div>
+              <strong className="talisman-strip__name">{item.definition.name}</strong>
+
+              <span className="talisman-strip__hint" role="tooltip">
+                <b>{item.definition.name}</b>
+                <em>{RARITY_LABELS[item.definition.rarity]} · {item.definition.price}냥</em>
+                <p>{item.definition.description}</p>
+                {item.instance.growth !== 0 ? <i>성장 +{item.instance.growth}</i> : null}
+                {item.contributionLabel ? <u>{item.contributionLabel}</u> : null}
+              </span>
             </>
           );
           const itemClassName = joinClassNames(

@@ -210,9 +210,11 @@ function effectsForDefinition(
       break;
     }
     case "yaku_add_heung": {
+      const yakuIds = csvValues(params.yakuIds);
       if (params.trigger === "shake_declared") {
         addEffect(effects, makeEffect(talisman, definition, "add_heung", Math.max(0, finiteOr(talisman.growth))));
-      } else if (csvValues(params.yakuIds).includes(context.candidate.yakuId)) {
+      } else if (yakuIds.length === 0 || yakuIds.includes(context.candidate.yakuId)) {
+        // No yakuIds listed means the bonus is unconditional.
         addEffect(effects, makeEffect(talisman, definition, "add_heung", amount));
       }
       break;

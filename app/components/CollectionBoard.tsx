@@ -1,6 +1,11 @@
 "use client";
 
-export type CollectionTrackKind = "bright" | "animal" | "ribbon" | "chaff";
+export type CollectionTrackKind =
+  | "bright"
+  | "animal"
+  | "godori"
+  | "ribbon"
+  | "chaff";
 
 export interface CollectionMilestone {
   at: number;
@@ -17,8 +22,18 @@ export interface CollectionBoardItem {
   assetTag: string;
   confirmedCount: number;
   pendingCount?: number;
-  /** animal/ribbon track length. Bright is always 5 and chaff is always 10. */
+  /**
+   * animal/ribbon track length. Bright is always 5, godori always 3, and
+   * chaff always 10.
+   */
   slotCount?: number;
+  /** Per-slot labels, used by the godori track to name 2·4·8월. */
+  slotLabels?: readonly string[];
+  /**
+   * Explicit per-slot state. Tracks whose slots mean specific cards (godori)
+   * must pass this, otherwise slots fill left to right from the counts.
+   */
+  slotStates?: readonly ("empty" | "confirmed" | "pending")[];
   description?: string;
   milestones?: readonly CollectionMilestone[];
 }
@@ -35,6 +50,7 @@ function joinClassNames(...values: Array<string | false | undefined>): string {
 
 function normalizedSlotCount(item: CollectionBoardItem): number {
   if (item.kind === "bright") return 5;
+  if (item.kind === "godori") return 3;
   if (item.kind === "chaff") return 10;
   return Math.max(1, Math.floor(item.slotCount ?? 10));
 }
@@ -95,19 +111,28 @@ export function CollectionBoard({
                     aria-valuemax={slotCount}
                     aria-valuenow={Math.min(total, slotCount)}
                   >
-                    {Array.from({ length: slotCount }, (_, index) => (
-                      <span
-                        aria-hidden="true"
-                        className={joinClassNames(
-                          "collection-board__slot",
-                          index < total && "collection-board__slot--filled",
-                          index >= confirmedCount &&
-                            index < total &&
-                            "collection-board__slot--pending",
-                        )}
-                        key={index}
-                      />
-                    ))}
+                    {Array.from({ length: slotCount }, (_, index) => {
+                      const slotState = item.slotStates?.[index]
+                        ?? (index >= total
+                          ? "empty"
+                          : index >= confirmedCount
+                            ? "pending"
+                            : "confirmed");
+
+                      return (
+                        <span
+                          aria-hidden="true"
+                          className={joinClassNames(
+                            "collection-board__slot",
+                            slotState !== "empty" && "collection-board__slot--filled",
+                            slotState === "pending" && "collection-board__slot--pending",
+                          )}
+                          key={index}
+                        >
+                          {item.slotLabels?.[index] ?? null}
+                        </span>
+                      );
+                    })}
                     {overflow > 0 ? (
                       <strong className="collection-board__overflow">+{overflow}</strong>
                     ) : null}

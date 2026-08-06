@@ -1,4 +1,4 @@
-import type { ExperimentalRules, ImmediateYakuId, ScreenId } from "../types";
+import type { ExperimentalRules, ScreenId } from "../types";
 
 export type GameAction =
   | { type: "HYDRATE"; payload: unknown }
@@ -10,16 +10,13 @@ export type GameAction =
   | { type: "START_STAGE" }
   | { type: "SELECT_CARD"; cardId: string }
   | { type: "CLEAR_SELECTION" }
-  | { type: "SET_MANUAL_YAKU"; yakuId: ImmediateYakuId | null }
-  | { type: "SET_CUP_ROLE"; role: "animal" | "double_chaff" }
+  | { type: "ASSIGN_CUP_ROLE"; cardId: string; role: "animal" | "double_chaff" }
   | { type: "DECLARE_SHAKE" }
   | { type: "SUBMIT_HAND" }
   | { type: "DISCARD_SELECTED" }
-  | { type: "BANK_CHAIN" }
   | { type: "DECLARE_GO" }
   | { type: "STOP_ROUND" }
   | { type: "CONTINUE_AFTER_REWARD" }
-  | { type: "CHOOSE_SHOP"; shopType: "talisman" | "painter" | "book" | "forbidden" }
   | { type: "BUY_OFFER"; offerId: string }
   | { type: "REROLL_SHOP" }
   | { type: "SELECT_CONSUMABLE_TARGET"; cardId: string }

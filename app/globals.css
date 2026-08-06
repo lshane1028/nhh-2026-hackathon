@@ -18,7 +18,7 @@
 html { min-width: 320px; background: #24221f; }
 
 body {
-  min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   background:
     linear-gradient(90deg, rgb(255 255 255 / 2%) 1px, transparent 1px) 0 0 / 32px 32px,

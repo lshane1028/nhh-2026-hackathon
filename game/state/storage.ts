@@ -49,6 +49,8 @@ function normalizeGameState(game: GameState): GameState {
     roundTalismanUses: game.roundTalismanUses ?? {},
     scoredMonthsThisRound: game.scoredMonthsThisRound ?? [],
     returnScreen: game.returnScreen ?? null,
+    cupAssignments: game.cupAssignments ?? {},
+    pendingCupCardId: game.pendingCupCardId ?? null,
   };
 }
 

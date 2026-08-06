@@ -1,4 +1,4 @@
-:where(.asset-placeholder, .hwatu-card, .score-formula, .collection-board, .talisman-strip, .game-top-bar, .game-modal) {
+:where(.asset-placeholder, .hwatu-card, .collection-board, .talisman-strip, .play-rail, .game-modal) {
   --game-ink: #1d1b18;
   --game-paper: #f7f0df;
   --game-paper-deep: #e8dcc2;
@@ -14,9 +14,9 @@
   font-family: var(--font-geist-sans, Pretendard, "Noto Sans KR", system-ui, sans-serif);
 }
 
-:where(.asset-placeholder, .hwatu-card, .score-formula, .collection-board, .talisman-strip, .game-top-bar, .game-modal) *,
-:where(.asset-placeholder, .hwatu-card, .score-formula, .collection-board, .talisman-strip, .game-top-bar, .game-modal) *::before,
-:where(.asset-placeholder, .hwatu-card, .score-formula, .collection-board, .talisman-strip, .game-top-bar, .game-modal) *::after {
+:where(.asset-placeholder, .hwatu-card, .collection-board, .talisman-strip, .play-rail, .game-modal) *,
+:where(.asset-placeholder, .hwatu-card, .collection-board, .talisman-strip, .play-rail, .game-modal) *::before,
+:where(.asset-placeholder, .hwatu-card, .collection-board, .talisman-strip, .play-rail, .game-modal) *::after {
   box-sizing: inherit;
 }
 
@@ -88,14 +88,12 @@
   --card-seal: transparent;
   position: relative;
   isolation: isolate;
-  display: flex;
+  display: block;
   width: 8.25rem;
-  min-height: 11.75rem;
+  height: 11.55rem;
   flex: 0 0 8.25rem;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.62rem;
-  overflow: hidden;
+  padding: 0.3rem;
+  overflow: visible;
   border: 1px solid color-mix(in srgb, var(--card-accent) 38%, var(--game-line));
   border-radius: 0.68rem;
   background:
@@ -148,6 +146,153 @@ button.hwatu-card:hover:not(:disabled) { transform: translateY(-0.22rem); }
   transform: translateY(-0.35rem);
 }
 .hwatu-card--disabled { opacity: 0.55; filter: grayscale(0.45); }
+
+/*
+  IMAGE SLOT — the whole card face.
+  Drop a real picture in later with one rule, no markup change:
+    .hwatu-card__art[data-asset-tag="card-01-bright-crane"] {
+      background-image: url("/assets/cards/card-01-bright-crane.webp");
+    }
+*/
+.hwatu-card__art {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-content: center;
+  gap: 0.1rem;
+  padding: 0.2rem;
+  overflow: hidden;
+  border: 1px dashed color-mix(in srgb, var(--card-accent) 32%, var(--game-line));
+  border-radius: 0.4rem;
+  background-color: color-mix(in srgb, var(--game-paper) 62%, white);
+  background-position: center;
+  background-size: cover;
+  text-align: center;
+}
+.hwatu-card__art-mark {
+  justify-self: center;
+  padding: 0.02rem 0.26rem;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 40%, transparent);
+  border-radius: 0.25rem;
+  color: var(--game-muted);
+  font: 700 0.46rem/1.35 var(--font-geist-mono, monospace);
+  letter-spacing: 0.06em;
+}
+.hwatu-card__art-motif {
+  color: color-mix(in srgb, var(--card-accent) 62%, transparent);
+  font-family: Georgia, "Noto Serif KR", serif;
+  font-size: 0.92rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+}
+.hwatu-card__art-tag {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--game-blue);
+  font-size: 0.4rem;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Month marker — the only text that stays on the face. */
+.hwatu-card__corner {
+  position: absolute;
+  z-index: 2;
+  top: 0.28rem;
+  left: 0.28rem;
+  display: grid;
+  min-width: 1.3rem;
+  place-items: center;
+  padding: 0.04rem 0.22rem;
+  border: 1px solid rgb(255 255 255 / 55%);
+  border-radius: 0.32rem;
+  background: color-mix(in srgb, var(--card-accent) 88%, black);
+  color: #fffaf0;
+  font-size: 0.88rem;
+  font-weight: 950;
+  line-height: 1.2;
+  text-shadow: 0 1px 1px rgb(0 0 0 / 45%);
+  pointer-events: none;
+}
+
+/* Hover card — holds everything the face no longer prints. */
+.hwatu-card__hint {
+  position: absolute;
+  z-index: 60;
+  bottom: calc(100% + 0.4rem);
+  left: 50%;
+  display: grid;
+  width: max-content;
+  max-width: 12rem;
+  gap: 0.06rem;
+  padding: 0.4rem 0.55rem;
+  transform: translateX(-50%) translateY(0.25rem);
+  border: 1px solid #4a4436;
+  border-radius: 0.5rem;
+  background: #241f19;
+  box-shadow: 0 0.5rem 1.2rem rgb(0 0 0 / 45%);
+  opacity: 0;
+  text-align: left;
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+}
+.hwatu-card__hint::after {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 0.5rem;
+  height: 0.5rem;
+  transform: translate(-50%, -55%) rotate(45deg);
+  border-right: 1px solid #4a4436;
+  border-bottom: 1px solid #4a4436;
+  background: #241f19;
+  content: "";
+}
+.hwatu-card:hover .hwatu-card__hint,
+.hwatu-card:focus-visible .hwatu-card__hint {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.hwatu-card__hint b { color: #f7f0df; font-size: 0.8rem; }
+.hwatu-card__hint em { color: #e8b34f; font-size: 0.68rem; font-style: normal; font-weight: 800; }
+.hwatu-card__hint i { color: #9fada3; font-size: 0.62rem; font-style: normal; }
+.hwatu-card__hint u { color: #a9a0f0; font-size: 0.6rem; text-decoration: none; }
+.hwatu-card__hint s { color: #e08078; font-size: 0.6rem; text-decoration: none; }
+
+/* Dense face for the fanned hand. */
+.hwatu-card--dense {
+  width: clamp(4.4rem, 7.4vw, 7.4rem);
+  height: clamp(6.2rem, 24vh, 10.4rem);
+  flex: 0 0 auto;
+  padding: 0.24rem;
+  border-radius: 0.5rem;
+}
+.hwatu-card--dense .hwatu-card__art-motif { font-size: clamp(0.62rem, 1.1vw, 0.92rem); }
+.hwatu-card--dense .hwatu-card__corner { min-width: 1.1rem; font-size: 0.72rem; }
+.hwatu-card--dense::before { inset: 0.12rem; border-radius: 0.36rem; }
+
+/* Godori gets its own labelled 3-slot track. */
+.collection-board__track--godori {
+  --track-color: #2f6f7a;
+  --track-glow: rgb(47 111 122 / 42%);
+}
+.collection-board__track--godori .collection-board__slot {
+  display: grid;
+  width: auto;
+  min-width: 1.9rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  place-items: center;
+  border-radius: 0.35rem;
+  color: #cfc6b6;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.collection-board__track--godori .collection-board__slot--filled { color: #fffaf0; }
 
 .hwatu-card--enhancement-inked {
   --card-accent: #27231f;
@@ -219,96 +364,11 @@ button.hwatu-card:hover:not(:disabled) { transform: translateY(-0.22rem); }
 }
 
 .hwatu-card:focus-visible,
-.collection-board__item:focus-visible,
-.talisman-strip__item:focus-visible,
-.game-top-bar button:focus-visible,
 .game-modal button:focus-visible {
   outline: 3px solid var(--game-focus);
   outline-offset: 3px;
 }
 
-.hwatu-card__header,
-.hwatu-card__value-row,
-.hwatu-card__modifiers {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.35rem;
-}
-
-.hwatu-card__month { display: inline-flex; align-items: baseline; gap: 0.08rem; }
-.hwatu-card__month strong { font-size: 1.45rem; line-height: 1; }
-.hwatu-card__month span { color: var(--game-muted); font-size: 0.68rem; }
-.hwatu-card__kind {
-  padding: 0.18rem 0.42rem;
-  border-radius: 999px;
-  background: var(--card-accent);
-  color: white;
-  font-size: 0.68rem;
-  font-weight: 800;
-}
-.hwatu-card__motif {
-  position: relative;
-  display: flex;
-  min-height: 3.85rem;
-  flex: 1;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: 0.25rem 0.2rem 0.45rem;
-  overflow: hidden;
-  border-bottom: 1px solid color-mix(in srgb, var(--card-accent) 28%, var(--game-line));
-}
-.hwatu-card__month-name {
-  position: absolute;
-  top: 0.05rem;
-  right: 0.05rem;
-  color: color-mix(in srgb, var(--card-accent) 22%, transparent);
-  font-family: Georgia, "Noto Serif KR", serif;
-  font-size: 1.6rem;
-  font-weight: 900;
-  letter-spacing: -0.08em;
-  white-space: nowrap;
-}
-.hwatu-card__name {
-  max-width: 90%;
-  font-family: Georgia, "Noto Serif KR", serif;
-  font-size: 0.82rem;
-  line-height: 1.25;
-}
-.hwatu-card__asset-tag {
-  max-width: 100%;
-  margin-top: 0.18rem;
-  overflow: hidden;
-  color: var(--game-muted);
-  font-size: 0.48rem;
-  line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.hwatu-card__value { display: inline-flex; align-items: baseline; gap: 0.18rem; color: var(--card-accent); }
-.hwatu-card__value strong { font-size: 1.22rem; font-weight: 950; line-height: 1; }
-.hwatu-card__value span { font-size: 0.6rem; font-weight: 850; }
-.hwatu-card__bonus { color: var(--game-muted); font-size: 0.58rem; text-align: right; }
-.hwatu-card__tags { display: flex; min-height: 1.1rem; flex-wrap: wrap; gap: 0.18rem; }
-.hwatu-card__tags span,
-.hwatu-card__modifiers span {
-  padding: 0.1rem 0.28rem;
-  border: 1px solid color-mix(in srgb, var(--card-accent) 26%, var(--game-line));
-  border-radius: 999px;
-  background: rgb(255 255 255 / 58%);
-  font-size: 0.54rem;
-}
-.hwatu-card__modifiers { justify-content: flex-start; flex-wrap: wrap; }
-.hwatu-card__state {
-  margin-top: auto;
-  padding-right: 0.85rem;
-  color: var(--game-muted);
-  font-size: 0.58rem;
-  font-weight: 700;
-  text-align: center;
-}
-
-.score-formula,
 .collection-board,
 .talisman-strip {
   display: flex;
@@ -321,9 +381,7 @@ button.hwatu-card:hover:not(:disabled) { transform: translateY(-0.22rem); }
   background: rgb(247 240 223 / 92%);
 }
 
-.score-formula__header,
-.collection-board__header,
-.talisman-strip__header {
+.collection-board__header {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -332,30 +390,20 @@ button.hwatu-card:hover:not(:disabled) { transform: translateY(-0.22rem); }
   padding-bottom: 0.55rem;
   border-bottom: 1px solid var(--game-paper-deep);
 }
-.score-formula__header > div,
-.collection-board__header > div,
-.talisman-strip__header > div {
+.collection-board__header > div {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 0.08rem;
 }
-.score-formula__header span,
-.collection-board__header span,
-.talisman-strip__header span {
+.collection-board__header span {
   color: var(--game-muted);
   font-size: 0.6rem;
   font-weight: 800;
   letter-spacing: 0.04em;
 }
-.score-formula__header strong,
-.collection-board__header strong,
-.talisman-strip__header strong { font-size: 0.84rem; }
-.score-formula__header code,
-.collection-board__header code,
-.talisman-strip__header code,
-.collection-board__item-heading code,
-.talisman-strip__item-heading code {
+.collection-board__header strong { font-size: 0.84rem; }
+.collection-board__header code {
   max-width: 8.5rem;
   overflow: hidden;
   color: var(--game-blue);
@@ -364,39 +412,11 @@ button.hwatu-card:hover:not(:disabled) { transform: translateY(-0.22rem); }
   white-space: nowrap;
 }
 
-.score-formula__empty,
-.collection-board__empty,
-.collection-board__more {
+.collection-board__empty {
   margin: 0;
   color: var(--game-muted);
   font-size: 0.78rem;
 }
-.score-formula__heading { display: flex; justify-content: space-between; gap: 0.75rem; }
-.score-formula__heading span { color: var(--game-muted); font-size: 0.72rem; }
-.score-formula__equation {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1.2fr);
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.8rem;
-  border: 1px solid #dfc988;
-  border-radius: 0.7rem;
-  background: linear-gradient(145deg, #fffaf0, #f8e9bd);
-}
-.score-formula__equation > span { display: flex; flex-direction: column; text-align: center; }
-.score-formula__equation strong { font-size: clamp(1.1rem, 3vw, 1.65rem); }
-.score-formula__equation small { color: var(--game-muted); font-size: 0.62rem; font-weight: 800; }
-.score-formula__equation b { color: var(--game-gold); font-size: 1.15rem; }
-.score-formula__total strong { color: var(--game-red); }
-.score-formula__summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; margin: 0; }
-.score-formula__summary div { padding: 0.45rem; border: 1px solid var(--game-paper-deep); border-radius: 0.45rem; }
-.score-formula__summary dt { color: var(--game-muted); font-size: 0.62rem; }
-.score-formula__summary dd { margin: 0.15rem 0 0; font-size: 0.72rem; font-weight: 700; }
-.score-formula__operations { display: grid; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
-.score-formula__operations li { display: grid; grid-template-columns: minmax(5rem, 1fr) auto minmax(7rem, 1.2fr); gap: 0.45rem; align-items: center; padding: 0.35rem 0.45rem; border-bottom: 1px dotted var(--game-line); font-size: 0.68rem; }
-.score-formula__operation-label { font-weight: 700; }
-.score-formula__operations code { color: var(--game-blue); font-weight: 800; }
-.score-formula__operations li > span:last-child { text-align: right; }
 
 .collection-board__header > p {
   max-width: 25rem;
@@ -404,11 +424,6 @@ button.hwatu-card:hover:not(:disabled) { transform: translateY(-0.22rem); }
   color: var(--game-muted);
   font-size: 0.64rem;
   text-align: right;
-}
-
-.collection-board__items {
-  display: grid;
-  gap: 0.42rem;
 }
 
 .collection-board__track {
@@ -563,126 +578,7 @@ button.hwatu-card:hover:not(:disabled) { transform: translateY(-0.22rem); }
   color: white;
   box-shadow: 0 0 0.55rem var(--track-glow);
 }
-
-.talisman-strip__slots {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-  gap: 0.5rem;
-  padding: 0.2rem 0.15rem;
-}
-.talisman-strip__item,
-.talisman-strip__empty {
-  display: flex;
-  min-width: 0;
-  min-height: 8rem;
-  flex-direction: column;
-  gap: 0.45rem;
-  padding: 0.55rem;
-  border: 1px solid var(--game-line);
-  border-radius: 0.65rem;
-  background: #fdfaf2;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
 button.talisman-strip__item { cursor: pointer; }
-.talisman-strip__item--selected { border-color: #724d92; box-shadow: 0 0 0 2px rgb(114 77 146 / 18%); }
-.talisman-strip__item--disabled { opacity: 0.55; }
-.talisman-strip__item-heading {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.4rem;
-}
-.talisman-strip__item-heading > div { display: flex; min-width: 0; flex-direction: column; gap: 0.08rem; }
-.talisman-strip__item-heading span { color: #724d92; font-size: 0.56rem; font-weight: 800; }
-.talisman-strip__item-heading strong { font-size: 0.78rem; }
-.talisman-strip__always-on {
-  align-self: flex-start;
-  padding: 0.14rem 0.38rem;
-  border-radius: 999px;
-  background: #e5f2e7;
-  color: var(--game-green);
-  font-size: 0.56rem;
-  font-weight: 850;
-}
-.talisman-strip__empty {
-  align-items: center;
-  justify-content: center;
-  border-style: dashed;
-  background: rgb(255 255 255 / 30%);
-  color: var(--game-muted);
-  text-align: center;
-}
-.talisman-strip__empty-mark {
-  display: grid;
-  width: 2rem;
-  height: 2rem;
-  place-items: center;
-  border: 1px dashed #8a769d;
-  border-radius: 50%;
-  color: #724d92;
-  font-size: 1.25rem;
-  line-height: 1;
-}
-.talisman-strip__empty strong { color: var(--game-ink); font-size: 0.72rem; }
-.talisman-strip__empty > span:last-child { max-width: 8rem; font-size: 0.6rem; line-height: 1.4; }
-.talisman-strip__description { margin: 0; color: var(--game-muted); font-size: 0.67rem; line-height: 1.45; }
-.talisman-strip__meta { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: auto; font-size: 0.62rem; }
-.talisman-strip__meta strong { color: var(--game-red); }
-
-.game-top-bar {
-  display: flex;
-  min-height: 3rem;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  align-items: center;
-  width: 100%;
-  padding: 0.38rem 0.52rem;
-  border: 1px solid var(--game-line);
-  border-radius: 0.72rem;
-  background: rgb(247 240 223 / 97%);
-  box-shadow: 0 0.25rem 0.75rem rgb(25 20 14 / 14%);
-  white-space: nowrap;
-}
-.game-top-bar--boss { border-color: color-mix(in srgb, var(--game-red) 55%, var(--game-line)); }
-.game-top-bar__identity {
-  display: flex;
-  min-width: max-content;
-  align-items: center;
-  gap: 0.4rem;
-  padding-right: 0.25rem;
-}
-.game-top-bar__title { color: var(--game-red); font-family: Georgia, "Noto Serif KR", serif; font-size: 0.82rem; }
-.game-top-bar__stage { font-size: 0.7rem; font-weight: 900; }
-.game-top-bar__round { color: var(--game-muted); font-size: 0.6rem; }
-.game-top-bar__boss {
-  padding: 0.14rem 0.38rem;
-  border-radius: 999px;
-  background: #f3dcd6;
-  color: #7e251f;
-  font-size: 0.57rem;
-  font-weight: 850;
-}
-.game-top-bar__scores,
-.game-top-bar__resources { display: flex; flex: 0 0 auto; align-items: center; gap: 0; margin: 0; }
-.game-top-bar__scores div,
-.game-top-bar__resources div {
-  position: relative;
-  display: flex;
-  align-items: baseline;
-  gap: 0.22rem;
-  min-width: max-content;
-  padding: 0.12rem 0.48rem;
-  border-left: 1px solid var(--game-paper-deep);
-}
-.game-top-bar dt { color: var(--game-muted); font-size: 0.55rem; }
-.game-top-bar dd { margin: 0; font-size: 0.78rem; font-weight: 950; }
-.game-top-bar__pot dd { color: var(--game-red); }
-.game-top-bar__pot small { color: var(--game-red); font-size: 0.5rem; font-weight: 850; }
-.game-top-bar__actions { display: flex; flex: 0 0 auto; gap: 0.22rem; }
-.game-top-bar__actions button,
 .game-modal__close,
 .game-modal__action {
   min-height: 2.5rem;
@@ -696,20 +592,108 @@ button.talisman-strip__item { cursor: pointer; }
   font-weight: 750;
   cursor: pointer;
 }
-.game-root .game-top-bar__actions button {
-  min-height: 1.82rem !important;
-  padding: 0.26rem 0.48rem !important;
-  border-radius: 0.42rem !important;
-  font-size: 0.6rem;
-}
-.game-top-bar__meta {
+
+.talisman-strip__header {
   display: flex;
-  min-width: max-content;
-  gap: 0.3rem;
-  margin-left: auto;
-  color: var(--game-muted);
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
 }
-.game-top-bar__meta code { max-width: 8rem; overflow: hidden; font-size: 0.46rem; text-overflow: ellipsis; }
+.talisman-strip__header > span { color: var(--game-ink); font-size: 0.72rem; font-weight: 900; }
+.talisman-strip__header > em { color: var(--game-muted); font-size: 0.58rem; font-style: normal; }
+
+.talisman-strip__slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
+  gap: 0.35rem;
+  padding: 0.1rem;
+}
+.talisman-strip__item,
+.talisman-strip__empty {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+  padding: 0.3rem;
+  border: 1px solid var(--game-line);
+  border-radius: 0.5rem;
+  background: #fdfaf2;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+}
+button.talisman-strip__item { cursor: pointer; }
+.talisman-strip__item--selected { border-color: #724d92; box-shadow: 0 0 0 2px rgb(114 77 146 / 18%); }
+.talisman-strip__item--disabled { opacity: 0.55; }
+
+/* Empty slots are outlines only — no label, no instructions. */
+.talisman-strip__empty {
+  min-height: 3.4rem;
+  border-style: dashed;
+  border-color: #5b5344;
+  background: rgb(255 255 255 / 4%);
+}
+
+.talisman-strip__art {
+  display: grid;
+  aspect-ratio: 4 / 3;
+  place-content: center;
+  gap: 0.06rem;
+  padding: 0.15rem;
+  overflow: hidden;
+  border: 1px dashed var(--game-line);
+  border-radius: 0.32rem;
+  background-color: #fffdf6;
+  background-position: center;
+  background-size: cover;
+}
+.talisman-strip__art > span { color: var(--game-muted); font: 700 0.42rem/1.3 var(--font-geist-mono, monospace); }
+.talisman-strip__art > code {
+  overflow: hidden;
+  color: var(--game-blue);
+  font-size: 0.34rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.talisman-strip__name {
+  overflow: hidden;
+  font-size: 0.58rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Hover card carries the effect text. */
+.talisman-strip__hint {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 0.4rem);
+  left: 50%;
+  display: grid;
+  width: max-content;
+  max-width: 14rem;
+  gap: 0.1rem;
+  padding: 0.45rem 0.6rem;
+  transform: translateX(-50%) translateY(-0.25rem);
+  border: 1px solid #4a4436;
+  border-radius: 0.5rem;
+  background: #241f19;
+  box-shadow: 0 0.5rem 1.2rem rgb(0 0 0 / 45%);
+  opacity: 0;
+  text-align: left;
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+}
+.talisman-strip__item:hover .talisman-strip__hint,
+.talisman-strip__item:focus-visible .talisman-strip__hint {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.talisman-strip__hint b { color: #f7f0df; font-size: 0.76rem; }
+.talisman-strip__hint em { color: #c3a6e0; font-size: 0.6rem; font-style: normal; font-weight: 800; }
+.talisman-strip__hint p { margin: 0.1rem 0 0; color: #c9c0b2; font-size: 0.66rem; line-height: 1.5; }
+.talisman-strip__hint i { color: #7fc08f; font-size: 0.6rem; font-style: normal; }
+.talisman-strip__hint u { color: #e8b34f; font-size: 0.6rem; text-decoration: none; }
 
 .game-modal__backdrop {
   position: fixed;
@@ -759,24 +743,11 @@ button.talisman-strip__item { cursor: pointer; }
     flex-basis: clamp(6.25rem, 30vw, 7.2rem);
     padding: 0.5rem;
   }
-  .hwatu-card__motif { min-height: 3.4rem; }
-  .hwatu-card__month strong { font-size: 1.2rem; }
 
-  .score-formula,
   .collection-board,
-  .talisman-strip { padding: 0.65rem; }
+.talisman-strip { padding: 0.65rem; }
   .collection-board__header > p { display: none; }
   .collection-board__track { grid-template-columns: 1fr; gap: 0.4rem; }
-  .score-formula__summary { grid-template-columns: 1fr; }
-  .score-formula__operations li { grid-template-columns: 1fr auto; }
-  .score-formula__operations li > span:last-child { grid-column: 1 / -1; text-align: left; }
-
-  .game-top-bar { gap: 0.22rem; padding: 0.32rem 0.4rem; }
-  .game-top-bar__title { font-size: 0.74rem; }
-  .game-top-bar__stage { font-size: 0.64rem; }
-  .game-top-bar__meta code:first-child { display: none; }
-
-  .talisman-strip__slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .game-modal__backdrop { align-items: end; padding: 0; }
   .game-modal { width: 100%; max-height: 92vh; border-radius: 1rem 1rem 0 0; }
   .game-modal__actions { position: sticky; bottom: 0; flex-direction: column-reverse; background: var(--game-paper); }
@@ -786,11 +757,10 @@ button.talisman-strip__item { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .hwatu-card { transition: none; }
   button.hwatu-card:hover:not(:disabled),
-  .hwatu-card--selected { transform: none; }
+.hwatu-card--selected { transform: none; }
 }
 
 @media (forced-colors: active) {
-  .hwatu-card--selected,
-  .talisman-strip__item--selected { outline: 3px solid Highlight; }
+  .hwatu-card--selected { outline: 3px solid Highlight; }
   .collection-board__slot--filled { background: Highlight; }
 }

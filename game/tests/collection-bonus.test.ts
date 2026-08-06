@@ -35,6 +35,26 @@ describe("persistent collection bonuses", () => {
     });
   });
 
+  it("tracks Godori as its own count while still counting the birds as animals", () => {
+    const birdOf = (month: number) => deck.find((card) => card.month === month && card.kind === "animal" && card.tags.includes("bird"))!;
+
+    const partial = calculateCollectionBonus([birdOf(2), birdOf(8)]);
+    expect(partial.counts).toMatchObject({ animal: 2, godori: 2 });
+    expect(partial.matchedGodoriMonths).toEqual([2, 8]);
+    expect(partial.completedSets.godori).toBe(false);
+    expect(partial.multiplierBonus).toBe(0);
+
+    const full = calculateCollectionBonus([birdOf(2), birdOf(4), birdOf(8)]);
+    expect(full.counts).toMatchObject({ animal: 3, godori: 3 });
+    expect(full.matchedGodoriMonths).toEqual([2, 4, 8]);
+    expect(full.multiplierBonus).toBe(2);
+
+    // The December bird is not a Godori month but still an animal.
+    const december = deck.find((card) => card.month === 12 && card.tags.includes("bird"))!;
+    const withDecember = calculateCollectionBonus([birdOf(2), december]);
+    expect(withDecember.counts).toMatchObject({ animal: 2, godori: 1 });
+  });
+
   it("grows ribbon bonuses and awards each traditional ribbon set", () => {
     const mixedFive = [1, 4, 6, 12, 2].map((month) => deck.find((card) => card.month === month && card.kind === "ribbon")!);
     expect(calculateCollectionBonus(mixedFive).multiplierBonus).toBe(2);
@@ -61,5 +81,18 @@ describe("persistent collection bonuses", () => {
     const cup = deck.find((card) => card.tags.includes("cup"))!;
     expect(calculateCollectionBonus([cup], "animal").counts).toMatchObject({ animal: 1, chaff: 0 });
     expect(calculateCollectionBonus([cup], "double_chaff").counts).toMatchObject({ animal: 0, chaff: 2 });
+  });
+
+  it("reads per-instance cup assignments and defaults unfiled cups to animal", () => {
+    const cup = deck.find((card) => card.tags.includes("cup"))!;
+    const chaff = deck.find((card) => card.kind === "chaff" && card.chaffValue === 1)!;
+
+    expect(calculateCollectionBonus([cup, chaff], {}).counts).toMatchObject({ animal: 1, chaff: 1 });
+    expect(
+      calculateCollectionBonus([cup, chaff], { [cup.instanceId]: "double_chaff" }).counts,
+    ).toMatchObject({ animal: 0, chaff: 3 });
+    expect(
+      calculateCollectionBonus([cup, chaff], { "some-other-card": "double_chaff" }).counts,
+    ).toMatchObject({ animal: 1, chaff: 1 });
   });
 });

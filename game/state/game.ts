@@ -23,7 +23,6 @@ import {
   bossAllowsYaku,
   bossVictoryConditionMet,
   getBossDiscardMoneyCost,
-  getBossGoFailureScoreFactor,
   getBossKkeutAdjustment,
   getBossSettlementFactor,
 } from "../engine/boss";
@@ -33,7 +32,7 @@ import {
   applyStartDeck,
 } from "../engine/consumables";
 import { calculateCollectionBonus } from "../engine/collection-bonus";
-import { createStandardHwatuDeck } from "../engine/deck";
+import { createStandardHwatuDeck, isCupCard, type CupRole } from "../engine/deck";
 import {
   canDeclareBomb,
   canDeclareShake,
@@ -43,15 +42,13 @@ import {
   weatherCardModifier,
 } from "../engine/experimental";
 import {
-  armGo,
-  bankChain,
-  choosePostHandTransition,
-  commitMasteryEvents,
+  addHandToRound,
+  canDeclareGo,
   createGoChainState,
-  forceOrAutoSettle,
-  resolveGoAttempt,
-  stopRound,
-  type SettlementResolution,
+  declareGo,
+  getGoRequirement,
+  isRequirementCleared,
+  settleRound,
 } from "../engine/go";
 import { randomAt, shuffleDeterministic } from "../engine/rng";
 import {
@@ -128,8 +125,8 @@ export function createInitialGameState(seed = DEFAULT_SEED): GameState {
     hand: [],
     usedPile: [],
     selectedCardIds: [],
-    manualYakuId: null,
-    cupRole: "animal",
+    cupAssignments: {},
+    pendingCupCardId: null,
     handsRemaining: 4,
     discardsRemaining: 4,
     handSize: 8,
@@ -318,7 +315,7 @@ function startStage(state: GameState): GameState {
     hand,
     usedPile: [],
     selectedCardIds: [],
-    manualYakuId: null,
+    pendingCupCardId: null,
     handsRemaining: hands,
     discardsRemaining: discards,
     chain: createGoChainState(),
@@ -400,19 +397,39 @@ interface ScoredSelection {
   settlementBonus: number;
   captureLabel: string;
   usedUnifyMonth: number | null;
+  /** The cup role that produced this score, before the player files the card. */
+  usedCupRole: CupRole;
+}
+
+/**
+ * Cup cards in a submission are scored with whichever role pays more. The
+ * player still chooses where the card is filed on the collection board once the
+ * hand is over, which is what `pendingCupCardId` drives.
+ */
+function cupRoleVariantsFor(
+  state: GameState,
+  cards: readonly CardInstance[],
+): { variants: CupRole[]; unassignedIds: string[] } {
+  const cupCards = cards.filter(isCupCard);
+  const unassignedIds = cupCards
+    .filter((card) => !state.cupAssignments[card.instanceId])
+    .map((card) => card.instanceId);
+  if (unassignedIds.length > 0) return { variants: ["animal", "double_chaff"], unassignedIds };
+  const assigned = cupCards.map((card) => state.cupAssignments[card.instanceId]);
+  return { variants: [assigned[0] ?? "animal"], unassignedIds };
 }
 
 export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
   const submitted = selectionInOrder(state);
-  if (!state.manualYakuId || submitted.length === 0 || submitted.length > MAX_SELECTED) return null;
+  if (submitted.length === 0 || submitted.length > MAX_SELECTED) return null;
   const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
   const rules = calculateTalismanRoundRuleModifiers(state.talismans);
   const capture = resolveYardCapture(submitted, state.yard, state.experimentalRules.yardMatching);
   const shake = state.yard.shakeArmed
     ? getShakeResult(canDeclareBomb(submitted, state.yard, state.experimentalRules))
     : { settlementBonus: 0, bonusKkeut: 0, label: "" };
-  const confirmedCards = cardsFromIds(state, state.chain.confirmedCollection.cardIds);
-  const pendingCards = cardsFromIds(state, state.chain.pendingCollection.cardIds);
+  const confirmedCards = cardsFromIds(state, state.chain.collection.cardIds);
+  const pendingCards: CardInstance[] = [];
   const heldCards = state.hand.filter((card) => !state.selectedCardIds.includes(card.instanceId));
   const canUnify = rules.unifyMonthUses > (state.roundTalismanUses.t_twelve_month_painter ?? 0);
   const unifyVariants: Array<number | null> = [null];
@@ -420,7 +437,12 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
     for (let month = 1; month <= 12; month += 1) unifyVariants.push(month);
   }
   const highestYakuLevel = Math.max(1, ...Object.values(state.yakuLevels).map((entry) => entry.level));
-  const evaluatedVariants: Array<{ breakdown: ScoreBreakdown; unifyMonth: number | null }> = [];
+  const cupVariants = cupRoleVariantsFor(state, [...submitted, ...capture.captured]);
+  const evaluatedVariants: Array<{
+    breakdown: ScoreBreakdown;
+    unifyMonth: number | null;
+    cupRole: CupRole;
+  }> = [];
 
   const decorateCard = (card: CardInstance, index: number, unifyMonth: number | null): CardInstance => ({
     ...card,
@@ -437,22 +459,24 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
   });
 
   for (const unifyMonth of unifyVariants) {
+  for (const cupRole of cupVariants.variants) {
+    const cupRoleMap: Record<string, CupRole> = { ...state.cupAssignments };
+    for (const id of cupVariants.unassignedIds) cupRoleMap[id] = cupRole;
     const evaluatedSubmission = submitted.map((card, index) => decorateCard(card, index, unifyMonth));
     const evaluatedCaptured = capture.captured.map((card, index) => decorateCard(card, index, null));
     const collection: CollectionEvaluationInput = {
       confirmedCards,
       pendingCards,
       submittedCards: [...evaluatedSubmission, ...evaluatedCaptured],
-      confirmedCompletedYakuIds: state.chain.confirmedCollection.completedYakuIds,
-      pendingCompletedYakuIds: state.chain.pendingCollection.completedYakuIds,
-      cupRole: state.cupRole,
+      confirmedCompletedYakuIds: state.chain.collection.completedYakuIds,
+      cupRole,
     };
     const baseInput = {
       submittedCards: evaluatedSubmission,
       heldCards,
       collection,
       yakuLevels: state.yakuLevels,
-      cupRole: state.cupRole,
+      cupRole,
       connectYear: rules.connectsDecemberToJanuary,
       includeSecretYaku: true,
     } as const;
@@ -482,10 +506,10 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
         scoringCards,
         heldCards,
         newCollectionYakuIds: base.newCollectionYakuIds,
-        cupRole: state.cupRole,
+        cupRole,
         money: state.money,
         emptyTalismanSlots: Math.max(0, getEffectiveTalismanSlots(state) - state.talismans.length),
-        successfulGoCount: state.chain.successfulGoCount,
+        successfulGoCount: state.chain.goCount,
         scoredMonthsThisRound: state.scoredMonthsThisRound,
       });
       const stateEffects = scoreEffectsForState(
@@ -498,7 +522,7 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
       );
       const collectionEffects = calculateCollectionBonus(
         [...confirmedCards, ...pendingCards, ...evaluatedSubmission, ...evaluatedCaptured],
-        state.cupRole,
+        cupRoleMap,
       ).effects;
       const fortuneEffects: OrderedScoreEffect[] = scoringCards
         .filter((card) => card.enhancement === "fortune" && randomAt(`${state.seed}:fortune-heung:${state.stage}:${state.roundSubmissionIndex}:${card.instanceId}`, 0) < 0.2)
@@ -516,16 +540,13 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
           ...talismanEffects,
         ],
       });
-      evaluatedVariants.push({ breakdown, unifyMonth });
+      evaluatedVariants.push({ breakdown, unifyMonth, cupRole });
     }
   }
+  }
   if (evaluatedVariants.length === 0) return null;
-  const eligible = evaluatedVariants.filter(
-    (entry) => entry.breakdown.yakuId === state.manualYakuId,
-  );
-  if (eligible.length === 0) return null;
-  const breakdown = chooseDefaultCandidate(eligible.map((entry) => entry.breakdown));
-  const chosen = eligible.find((entry) => entry.breakdown === breakdown) ?? eligible[0];
+  const breakdown = chooseDefaultCandidate(evaluatedVariants.map((entry) => entry.breakdown));
+  const chosen = evaluatedVariants.find((entry) => entry.breakdown === breakdown) ?? evaluatedVariants[0];
   return {
     breakdown,
     submitted,
@@ -535,6 +556,7 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
     settlementBonus: shake.settlementBonus,
     captureLabel: [capture.label, shake.label].filter(Boolean).join(" · "),
     usedUnifyMonth: chosen.unifyMonth,
+    usedCupRole: chosen.cupRole,
   };
 }
 
@@ -607,45 +629,28 @@ function applyCardAftermath(state: GameState, scored: ScoredSelection): GameStat
   };
 }
 
-function settle(
-  state: GameState,
-  resolution: SettlementResolution,
-): GameState {
+/** The score this round must reach right now, before the player may stop. */
+export function getRoundRequirement(state: GameState): number {
   const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
   const talismanRules = calculateTalismanRoundRuleModifiers(state.talismans);
-  const factor = getBossSettlementFactor(boss, state.chain.successfulGoCount)
-    * (1 + state.roundSettlementBonus)
-    * talismanRules.settlementFactor;
-  const adjustedValue = Math.floor(resolution.settlementValue * factor);
-  const scoreDelta = adjustedValue - resolution.settlementValue;
-  const chain = {
-    ...resolution.state,
-    confirmedScore: Math.max(0, resolution.state.confirmedScore + scoreDelta),
-  };
-  const levels = commitMasteryEvents(state.yakuLevels, resolution.committedMasteryEvents);
-  const money = state.money + resolution.moneyBonus;
-  const next = {
-    ...state,
-    chain,
-    yakuLevels: levels,
-    money,
-    selectedCardIds: [],
-    roundSettlementBonus: state.startDeckId === "deck_master" ? 0.1 : 0,
-    logs: logEntry(
-      state,
-      "bank",
-      `${resolution.reason === "stop" ? "스톱" : "정산"} ${adjustedValue.toLocaleString("ko-KR")}점`,
-      `확정 ${chain.confirmedScore.toLocaleString("ko-KR")} / 목표 ${state.targetScore.toLocaleString("ko-KR")}`,
-    ),
-  };
-  const won = chain.confirmedScore >= state.targetScore
-    && bossVictoryConditionMet(boss, chain.confirmedGoCount);
-  if (won) return finishRound(next);
-  if (state.handsRemaining <= 0) return loseRound(next);
-  return refillHand({ ...next, screen: "play" }, next.hand);
+  const bossFactor = boss?.ruleKey === "go_fail_tax" && state.chain.goCount > 0 ? 1.1 : 1;
+  return getGoRequirement(
+    state.targetScore,
+    state.chain.goCount,
+    talismanRules.thresholdFactor * bossFactor,
+  );
+}
+
+/** True while the player still owes the boss a called Go before stopping. */
+export function mustDeclareGo(state: GameState): boolean {
+  const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
+  return !bossVictoryConditionMet(boss, state.chain.goCount);
 }
 
 function finishRound(state: GameState): GameState {
+  const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
+  const talismanRules = calculateTalismanRoundRuleModifiers(state.talismans);
+  const settlement = settleRound(state.chain, state.yakuLevels);
   const talismanReward = calculateTalismanRoundRewardAdjustment({
     talismans: state.talismans,
     won: true,
@@ -656,22 +661,30 @@ function finishRound(state: GameState): GameState {
     : [];
   const bak = evaluateBakContract(
     scoringKinds,
-    state.chain.confirmedCollection.completedYakuIds,
+    state.chain.collection.completedYakuIds,
     state.experimentalRules.bakContracts,
   );
   const rewardBreakdown = calculateRoundReward({
     won: true,
     baseWinReward: 3 + Math.ceil(state.stage / 2),
     remainingHands: state.handsRemaining,
-    successfulGoCount: state.chain.confirmedGoCount,
-    confirmedScore: state.chain.confirmedScore,
+    successfulGoCount: state.chain.goCount,
+    confirmedScore: state.chain.roundScore,
     targetScore: state.targetScore,
     adjustment: talismanReward.moneyDelta + bak.bonusMoney,
   });
   const heldCoinMoney = state.hand.filter((card) => card.enhancement === "coin").length * 2;
   const blueSeals = state.hand.filter((card) => card.seal === "blue").length;
-  const reward = rewardBreakdown.total + heldCoinMoney;
-  let yakuLevels = state.yakuLevels;
+  // Going further multiplies the whole purse, and the boss/deck settlement
+  // modifiers now land on the money instead of on a separate banked score.
+  const settlementFactor = getBossSettlementFactor(boss, state.chain.goCount)
+    * (1 + state.roundSettlementBonus)
+    * talismanRules.settlementFactor;
+  const reward = Math.max(
+    0,
+    Math.floor((rewardBreakdown.total + heldCoinMoney) * settlement.rewardFactor * settlementFactor),
+  );
+  let yakuLevels = settlement.masteryLevels;
   if (state.lastScore && blueSeals > 0) {
     const current = yakuLevels[state.lastScore.yakuId] ?? { level: 1, mastery: 0 };
     yakuLevels = {
@@ -693,38 +706,50 @@ function finishRound(state: GameState): GameState {
     money: state.money + reward,
     yakuLevels,
     lastRoundReward: reward,
+    roundSettlementBonus: 0,
+    selectedCardIds: [],
     calendarStamps: stamp ? [...state.calendarStamps, stamp] : state.calendarStamps,
     stats: {
       ...state.stats,
+      goSuccesses: state.stats.goSuccesses + state.chain.goCount,
       moneyEarned: state.stats.moneyEarned + reward,
     },
   };
   return {
     ...next,
-    logs: logEntry(next, "reward", `판돈 ${reward}냥`, `${bak.name} · ${bak.description}`),
+    logs: logEntry(
+      next,
+      "reward",
+      `판돈 ${reward}냥`,
+      `${state.chain.goCount}고 · ×${settlement.rewardFactor} · ${bak.name}`,
+    ),
   };
 }
 
-function loseRound(state: GameState): GameState {
+function loseRound(state: GameState, detail: string): GameState {
   return {
     ...state,
     screen: "run_lose",
     selectedCardIds: [],
-    logs: logEntry(state, "fail", "판 패배", "확정 점수가 목표에 닿지 못했습니다."),
+    logs: logEntry(state, "fail", "판 패배", detail),
   };
 }
 
 function submitHand(state: GameState): GameState {
-  if (state.screen !== "play" || state.handsRemaining <= 0 || !state.manualYakuId) return state;
+  if (state.screen !== "play" || state.handsRemaining <= 0 || state.pendingCupCardId) return state;
   const scored = evaluateSelectedHand(state);
   if (!scored) {
     return { ...state, logs: logEntry(state, "system", "제출 불가", "1~5장의 카드를 골라 주세요.") };
   }
+  const pendingCupCardId = [...scored.submitted, ...scored.captured]
+    .filter(isCupCard)
+    .map((card) => card.instanceId)
+    .find((id) => !state.cupAssignments[id]) ?? null;
   const submittedIds = new Set(scored.submitted.map((card) => card.instanceId));
   const remainingHand = state.hand.filter((card) => !submittedIds.has(card.instanceId));
   const handsRemaining = state.handsRemaining - 1;
   const mastery = createMasteryEvents(scored.breakdown);
-  const go = resolveGoAttempt(state.chain, scored.breakdown.score, {
+  const chain = addHandToRound(state.chain, scored.breakdown.score, {
     submittedCardIds: [...scored.submitted, ...scored.captured].map((card) => card.instanceId),
     completedCollectionYakuIds: scored.breakdown.newCollectionYakuIds,
     masteryEvents: mastery,
@@ -735,8 +760,8 @@ function submitHand(state: GameState): GameState {
     usedPile: [...state.usedPile, ...scored.submitted],
     handsRemaining,
     selectedCardIds: [],
-    manualYakuId: null,
-    chain: go.state,
+    pendingCupCardId,
+    chain,
     lastScore: scored.breakdown,
     unlockedSecretYakuIds: unlockSecret(state, scored.breakdown.yakuId),
     yard: {
@@ -755,7 +780,6 @@ function submitHand(state: GameState): GameState {
     stats: {
       ...state.stats,
       handsPlayed: state.stats.handsPlayed + 1,
-      goSuccesses: state.stats.goSuccesses + Number(go.outcome === "success"),
       highestHand: Math.max(state.stats.highestHand, scored.breakdown.score),
       yakusPlayed: {
         ...state.stats.yakusPlayed,
@@ -771,42 +795,47 @@ function submitHand(state: GameState): GameState {
   };
   next = applyCardAftermath(next, scored);
 
-  if (go.outcome === "failure") {
-    const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
-    const confirmedScore = Math.floor(go.state.confirmedScore * getBossGoFailureScoreFactor(boss));
-    const talismanFailure = calculateTalismanGoFailureAdjustment({
-      talismans: next.talismans,
-      failed: true,
-      rescueRoll: randomAt(`${state.seed}:go-rescue:${state.stage}`, next.rngCursor),
-    });
-    next = {
-      ...next,
-      rngCursor: next.rngCursor + 1,
-      money: Math.max(0, next.money - next.failMoneyPenalty + talismanFailure.moneyDelta),
-      chain: { ...go.state, confirmedScore },
-      stats: {
-        ...next.stats,
-        goFailures: next.stats.goFailures + 1,
-      },
-      logs: logEntry(next, "fail", "고 실패", `${go.combinedScore.toLocaleString("ko-KR")} < ${go.threshold?.toLocaleString("ko-KR")}`),
-    };
-    if (handsRemaining <= 0) {
-      const won = confirmedScore >= state.targetScore && bossVictoryConditionMet(boss, go.state.confirmedGoCount);
-      return won ? finishRound(next) : loseRound(next);
+  const requirement = getRoundRequirement(next);
+  const cleared = isRequirementCleared(next.chain, requirement);
+
+  // Clearing the bar opens the Go/Stop decision. Nothing else ends the round.
+  if (cleared) {
+    if (mustDeclareGo(next) && !canDeclareGo(next.chain, handsRemaining)) {
+      return loseRound(next, "두목이 요구한 고를 선언할 기회가 남지 않았습니다.");
     }
-    return refillHand({ ...next, screen: "play" }, remainingHand);
+    return { ...next, screen: "decision" };
   }
 
-  const transition = choosePostHandTransition(go, handsRemaining);
-  if (transition === "auto_settle" || transition === "force_settle") {
-    const resolution = forceOrAutoSettle(go.state, transition === "force_settle" ? "force" : "auto", {
-      target: state.targetScore,
-      handsRemaining,
-      requiresSettledGo: state.bossId === "boss_stubborn",
-    });
-    return settle(next, resolution);
+  if (handsRemaining <= 0) {
+    // A called Go that never landed is the classic 고박: the run ends here.
+    if (next.chain.goCount > 0) {
+      const talismanFailure = calculateTalismanGoFailureAdjustment({
+        talismans: next.talismans,
+        failed: true,
+        rescueRoll: randomAt(`${state.seed}:go-rescue:${state.stage}`, next.rngCursor),
+      });
+      const failed: GameState = {
+        ...next,
+        rngCursor: next.rngCursor + 1,
+        money: Math.max(0, next.money - next.failMoneyPenalty + talismanFailure.moneyDelta),
+        stats: { ...next.stats, goFailures: next.stats.goFailures + 1 },
+      };
+      if (talismanFailure.rescued) {
+        return finishRound({
+          ...failed,
+          chain: { ...failed.chain, goCount: (failed.chain.goCount - 1) as GameState["chain"]["goCount"] },
+          logs: logEntry(failed, "system", "고 실패 구제", "부적이 고 한 단계를 물러 주었습니다."),
+        });
+      }
+      return loseRound(
+        failed,
+        `${failed.chain.goCount}고 문턱 ${requirement.toLocaleString("ko-KR")}점에 ${(requirement - failed.chain.roundScore).toLocaleString("ko-KR")}점 부족`,
+      );
+    }
+    return loseRound(next, `목표 ${requirement.toLocaleString("ko-KR")}점에 닿지 못했습니다.`);
   }
-  return { ...next, screen: "decision" };
+
+  return refillHand({ ...next, screen: "play" }, remainingHand);
 }
 
 function discardSelected(state: GameState): GameState {
@@ -858,16 +887,61 @@ function offerPrice(state: GameState, price: number): number {
 
 type ShopCategory = NonNullable<GameState["shopType"]>;
 
-function generateOffers(state: GameState, shopType: ShopCategory, free = false): { offers: ShopOffer[]; cursor: number } {
-  let cursor = state.rngCursor;
-  const source = shopType === "talisman"
+const SHOP_CATEGORIES: readonly ShopCategory[] = ["talisman", "painter", "book", "forbidden"];
+
+function categoryPool(shopType: ShopCategory) {
+  return shopType === "talisman"
     ? TALISMANS
     : shopType === "painter"
       ? PAINTER_CARDS
       : shopType === "book"
         ? BOOKS
         : FORBIDDEN_CARDS;
-  const pool = [...source];
+}
+
+/**
+ * The market is one screen: one card from each of the four shops, plus a pack.
+ * The tutorial round always leads with the flat-multiplier charm so the first
+ * purchase has an effect a new player can actually read.
+ */
+function generateShopOffers(state: GameState): { offers: ShopOffer[]; cursor: number } {
+  let cursor = state.rngCursor;
+  const offers: ShopOffer[] = [];
+  const tutorialFirstShop = state.tutorialMode && state.stage === 1;
+
+  for (const shopType of SHOP_CATEGORIES) {
+    const pool = [...categoryPool(shopType)];
+    let definition = pool[Math.floor(randomAt(`${state.seed}:shop:${state.stage}:${shopType}`, cursor++) * pool.length)];
+    if (tutorialFirstShop && shopType === "talisman") {
+      definition = TALISMAN_BY_ID.t_first_charm ?? definition;
+    }
+    if (!definition) continue;
+    offers.push({
+      offerId: `${state.runId}:offer:${state.stage}:${shopType}:${cursor}`,
+      category: shopType,
+      definitionId: definition.id,
+      price: offerPrice(state, definition.price),
+      sold: false,
+    });
+  }
+
+  if (!tutorialFirstShop) {
+    const pack = PACKS[Math.floor(randomAt(`${state.seed}:pack:${state.stage}`, cursor++) * PACKS.length)] ?? PACKS[0];
+    offers.push({
+      offerId: `${state.runId}:pack:${state.stage}:${cursor}`,
+      category: "pack",
+      definitionId: pack.id,
+      price: offerPrice(state, pack.price),
+      sold: false,
+    });
+  }
+
+  return { offers, cursor };
+}
+
+function generateOffers(state: GameState, shopType: ShopCategory, free = false): { offers: ShopOffer[]; cursor: number } {
+  let cursor = state.rngCursor;
+  const pool = [...categoryPool(shopType)];
   const offers: ShopOffer[] = [];
   for (let index = 0; index < Math.min(3, pool.length); index += 1) {
     const pick = Math.floor(randomAt(`${state.seed}:shop:${state.stage}:${shopType}`, cursor++) * pool.length);
@@ -928,7 +1002,7 @@ function buyOffer(state: GameState, offerId: string): GameState {
       rngCursor: generated.cursor,
       shopOffers: generated.offers,
       shopType: category,
-      logs: logEntry(state, "reward", `${pack.name} 개봉`, "무료 후보 3개 중 하나를 고르세요."),
+      logs: logEntry(state, "reward", `${pack.name} 개봉`, "무료 후보 3장 중 하나를 고르세요."),
     };
   }
   if (offer.category === "talisman") {
@@ -1090,24 +1164,25 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const hand = card.tags.includes("face_down")
         ? state.hand.map((entry) => entry.instanceId === card.instanceId ? { ...entry, tags: entry.tags.filter((tag) => tag !== "face_down") } : entry)
         : state.hand;
-      const selectionChanged = selectedCardIds !== state.selectedCardIds;
-      return {
-        ...state,
-        hand,
-        selectedCardIds,
-        manualYakuId: selectionChanged ? null : state.manualYakuId,
-      };
+      return { ...state, hand, selectedCardIds };
     }
     case "CLEAR_SELECTION":
-      return { ...state, selectedCardIds: [], manualYakuId: null };
-    case "SET_MANUAL_YAKU":
-      return { ...state, manualYakuId: action.yakuId };
-    case "SET_CUP_ROLE":
+      return { ...state, selectedCardIds: [] };
+    case "ASSIGN_CUP_ROLE": {
+      if (state.pendingCupCardId !== action.cardId) return state;
+      const card = state.deck.find((entry) => entry.instanceId === action.cardId);
       return {
         ...state,
-        cupRole: action.role,
-        manualYakuId: action.role === state.cupRole ? state.manualYakuId : null,
+        cupAssignments: { ...state.cupAssignments, [action.cardId]: action.role },
+        pendingCupCardId: null,
+        logs: logEntry(
+          state,
+          "system",
+          "술잔 기록",
+          `${card?.name ?? "9월 술잔"} → ${action.role === "animal" ? "동물 1장" : "피 2점"}`,
+        ),
       };
+    }
     case "DECLARE_SHAKE": {
       const selected = selectionInOrder(state);
       if (!canDeclareShake(selected, state.experimentalRules)) return state;
@@ -1125,49 +1200,55 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return submitHand(state);
     case "DISCARD_SELECTED":
       return discardSelected(state);
-    case "BANK_CHAIN": {
-      if (state.screen !== "decision") return state;
-      return settle(state, bankChain(state.chain, { target: state.targetScore, handsRemaining: state.handsRemaining, requiresSettledGo: state.bossId === "boss_stubborn" }));
-    }
     case "DECLARE_GO": {
       if (state.screen !== "decision") return state;
-      try {
-        const armed = armGo(state.chain, state.targetScore, state.handsRemaining);
-        const thresholdFactor = calculateTalismanRoundRuleModifiers(state.talismans).thresholdFactor;
-        const chain = {
-          ...armed,
-          requirement: armed.requirement === null ? null : Math.ceil(armed.requirement * thresholdFactor),
-        };
-        const next = {
-          ...state,
-          screen: "play" as const,
-          chain,
-          stats: { ...state.stats, goAttempts: state.stats.goAttempts + 1 },
-          logs: logEntry(state, "go", `${chain.successfulGoCount + 1}고 선언`, `합계 ${chain.requirement?.toLocaleString("ko-KR")}점을 넘어야 합니다.`),
-        };
-        return refillHand(next, state.hand);
-      } catch {
-        return state;
-      }
+      if (!canDeclareGo(state.chain, state.handsRemaining)) return state;
+      const chain = declareGo(state.chain);
+      const next: GameState = {
+        ...state,
+        chain,
+        stats: { ...state.stats, goAttempts: state.stats.goAttempts + 1 },
+      };
+      const requirement = getRoundRequirement(next);
+      const logged: GameState = {
+        ...next,
+        logs: logEntry(
+          next,
+          "go",
+          `${chain.goCount}고 선언`,
+          `이번 판에서 ${requirement.toLocaleString("ko-KR")}점을 넘겨야 합니다.`,
+        ),
+      };
+      // A hand big enough to clear the new bar outright re-opens the decision.
+      if (isRequirementCleared(logged.chain, requirement)) return logged;
+      return refillHand({ ...logged, screen: "play" }, logged.hand);
     }
     case "STOP_ROUND": {
       if (state.screen !== "decision") return state;
-      return settle(state, stopRound(state.chain, { target: state.targetScore, handsRemaining: state.handsRemaining, requiresSettledGo: state.bossId === "boss_stubborn" }));
+      if (mustDeclareGo(state)) return state;
+      return finishRound(state);
     }
-    case "CONTINUE_AFTER_REWARD":
+    case "CONTINUE_AFTER_REWARD": {
       if (state.stage === 12 && state.infiniteLap === 0) return { ...state, screen: "run_win" };
-      return { ...state, screen: "shop_choice" };
-    case "CHOOSE_SHOP": {
-      const generated = generateOffers(state, action.shopType);
+      const generated = generateShopOffers(state);
       const baseReroll = Math.max(0, 2 - Math.min(1, countContract(state, "reroll_cost")));
       const firstFree = state.talismans.some((item) => item.definitionId === "t_market_rumor");
-      return { ...state, screen: "shop", shopType: action.shopType, shopOffers: generated.offers, rngCursor: generated.cursor, rerollCost: firstFree ? 0 : baseReroll };
+      return {
+        ...state,
+        screen: "shop",
+        shopType: null,
+        shopOffers: generated.offers,
+        rngCursor: generated.cursor,
+        rerollCost: firstFree ? 0 : baseReroll,
+      };
     }
     case "BUY_OFFER":
       return buyOffer(state, action.offerId);
     case "REROLL_SHOP": {
-      if (!state.shopType || state.money < state.rerollCost) return state;
-      const generated = generateOffers({ ...state, rngCursor: state.rngCursor + 1 }, state.shopType);
+      if (state.money < state.rerollCost) return state;
+      const generated = state.shopType
+        ? generateOffers({ ...state, rngCursor: state.rngCursor + 1 }, state.shopType)
+        : generateShopOffers({ ...state, rngCursor: state.rngCursor + 1 });
       const bargainingLevel = countContract(state, "reroll_cost");
       const baseReroll = Math.max(0, 2 - Math.min(1, bargainingLevel));
       const marketRumor = state.talismans.some((item) => item.definitionId === "t_market_rumor");

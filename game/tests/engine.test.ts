@@ -8,7 +8,7 @@ import {
   IMMEDIATE_YAKU_DEFINITIONS,
   SECRET_YAKU_DEFINITIONS,
 } from "../content/yaku";
-import type { CardInstance, CollectionYakuId, ImmediateYakuId, MasteryEvent, YakuCandidate } from "../types";
+import type { CardInstance, ImmediateYakuId, MasteryEvent, YakuCandidate } from "../types";
 import { getBossKkeutAdjustment } from "../engine/boss";
 import {
   createStandardHwatuDeck,
@@ -17,12 +17,15 @@ import {
   validateStandardDeck,
 } from "../engine/deck";
 import {
-  armGo,
-  choosePostHandTransition,
+  addHandToRound,
+  canDeclareGo,
   commitMasteryEvents,
   createGoChainState,
-  forceOrAutoSettle,
-  resolveGoAttempt,
+  declareGo,
+  getGoRequirement,
+  getGoRewardFactor,
+  isRequirementCleared,
+  settleRound,
 } from "../engine/go";
 import {
   GOLD_LEAF_MONTH_BONUS,
@@ -301,82 +304,83 @@ describe("collection board and score evaluation", () => {
   });
 });
 
-describe("Go pot state machine", () => {
+describe("Go as an end-of-round bet", () => {
   const played: MasteryEvent = { yakuId: "month_pair", amount: 1, reason: "played" };
   const collection: MasteryEvent = { yakuId: "godori", amount: 1, reason: "collection" };
 
-  it("sets R on arm, accepts equality, and clears R on success", () => {
-    const first = resolveGoAttempt(createGoChainState(), 1_230, { masteryEvents: [played] });
-    const armed = armGo(first.state, 6_000, 3);
-    expect(armed.requirement).toBe(2_153);
-    const success = resolveGoAttempt(armed, 923, { masteryEvents: [played] });
-    expect(success.outcome).toBe("success");
-    expect(success.state.pot).toBe(2_153);
-    expect(success.state.successfulGoCount).toBe(1);
-    expect(success.state.requirement).toBeNull();
-  });
-
-  it("loses P/Q/M on failure while preserving confirmed state", () => {
-    const initial = {
-      ...createGoChainState(),
-      confirmedScore: 300,
-      confirmedGoCount: 1,
-      confirmedCollection: { cardIds: ["safe"], completedYakuIds: ["hongdan" as CollectionYakuId] },
-    };
-    const first = resolveGoAttempt(initial, 1_230, {
-      submittedCardIds: ["risky"],
-      completedCollectionYakuIds: ["godori"],
-      masteryEvents: [played, collection],
-    });
-    const failure = resolveGoAttempt(armGo(first.state, 6_000, 3), 922);
-    expect(failure.outcome).toBe("failure");
-    expect(failure.state).toMatchObject({
-      pot: 0,
-      successfulGoCount: 0,
-      requirement: null,
-      confirmedScore: 300,
-      confirmedGoCount: 1,
-      confirmedCollection: { cardIds: ["safe"], completedYakuIds: ["hongdan"] },
-      pendingCollection: { cardIds: [], completedYakuIds: [] },
-      pendingMastery: [],
-    });
-  });
-
-  it("atomically settles score, C, A, normal mastery, and Hansum bonus", () => {
-    const base = createGoChainState();
-    const first = resolveGoAttempt(base, 1_230, {
-      submittedCardIds: ["a"],
-      completedCollectionYakuIds: ["godori"],
-      masteryEvents: [played, collection],
-    });
-    const success = resolveGoAttempt(armGo(first.state, 6_000, 3), 1_000, {
+  it("accumulates every hand into one round score that never rolls back", () => {
+    let round = createGoChainState();
+    round = addHandToRound(round, 1_230, { submittedCardIds: ["a"], masteryEvents: [played] });
+    round = addHandToRound(round, 920, {
       submittedCardIds: ["b"],
-      masteryEvents: [{ yakuId: "single", amount: 1, reason: "played" }],
+      completedCollectionYakuIds: ["godori"],
+      masteryEvents: [collection],
     });
-    const settled = forceOrAutoSettle(success.state, "auto", { target: 6_000, handsRemaining: 0 });
-    expect(settled.settlementValue).toBe(2_564);
-    expect(settled.state.confirmedScore).toBe(2_564);
-    expect(settled.state.confirmedGoCount).toBe(1);
-    expect(settled.state.confirmedCollection).toEqual({ cardIds: ["a", "b"], completedYakuIds: ["godori"] });
-    expect(settled.state.pot).toBe(0);
-    expect(settled.state.pendingMastery).toEqual([]);
-    expect(settled.committedMasteryEvents.filter((event) => event.yakuId === "godori").reduce((sum, event) => sum + event.amount, 0)).toBe(2);
-    expect(settled.masteryLevels).toMatchObject({ month_pair: { level: 1, mastery: 1 }, godori: { level: 1, mastery: 2 } });
-    expect(settled.moneyBonus).toBe(2);
+
+    expect(round.roundScore).toBe(2_150);
+    expect(round.goCount).toBe(0);
+    expect(round.collection).toEqual({ cardIds: ["a", "b"], completedYakuIds: ["godori"] });
+    expect(round.mastery).toHaveLength(2);
   });
 
-  it("uses AUTO before FORCE on the final third-Go hand and settles once", () => {
-    const resolution = {
-      state: { ...createGoChainState(), pot: 5_630, successfulGoCount: 3 as const },
-      outcome: "success" as const,
-      threshold: 5_595,
-      combinedScore: 5_630,
-    };
-    expect(choosePostHandTransition(resolution, 0)).toBe("auto_settle");
-    const settled = forceOrAutoSettle(resolution.state, "auto", { target: 6_000, handsRemaining: 0 });
-    expect(settled.settlementValue).toBe(9_571);
-    expect(settled.state.confirmedScore).toBe(9_571);
-    expect(settled.state.confirmedGoCount).toBe(3);
+  it("raises the bar on each Go and caps at three", () => {
+    expect(getGoRequirement(1_000, 0)).toBe(1_000);
+    expect(getGoRequirement(1_000, 1)).toBe(1_500);
+    expect(getGoRequirement(1_000, 2)).toBe(2_200);
+    expect(getGoRequirement(1_000, 3)).toBe(3_200);
+    expect(getGoRequirement(1_000, 1, 1.1)).toBe(1_650);
+
+    let round = createGoChainState();
+    expect(canDeclareGo(round, 2)).toBe(true);
+    round = declareGo(declareGo(declareGo(round)));
+    expect(round.goCount).toBe(3);
+    expect(canDeclareGo(round, 2)).toBe(false);
+    expect(() => declareGo(round)).toThrow();
+  });
+
+  it("never lets a Go be called without a hand left to play it", () => {
+    expect(canDeclareGo(createGoChainState(), 0)).toBe(false);
+  });
+
+  it("reports whether the current bar is cleared", () => {
+    const round = addHandToRound(createGoChainState(), 1_500);
+    expect(isRequirementCleared(round, getGoRequirement(1_000, 0))).toBe(true);
+    expect(isRequirementCleared(round, getGoRequirement(1_000, 1))).toBe(true);
+    expect(isRequirementCleared(round, getGoRequirement(1_000, 2))).toBe(false);
+  });
+
+  it("multiplies the purse by the Go level and doubles collection mastery", () => {
+    expect(getGoRewardFactor(0)).toBe(1);
+    expect(getGoRewardFactor(1)).toBe(1.5);
+    expect(getGoRewardFactor(3)).toBe(3.4);
+
+    const round = declareGo(
+      addHandToRound(createGoChainState(), 2_000, {
+        completedCollectionYakuIds: ["godori"],
+        masteryEvents: [played, collection],
+      }),
+    );
+    const settled = settleRound(round, {});
+    expect(settled.rewardFactor).toBe(1.5);
+    expect(
+      settled.masteryEvents
+        .filter((event) => event.yakuId === "godori")
+        .reduce((sum, event) => sum + event.amount, 0),
+    ).toBe(2);
+    expect(settled.masteryLevels).toMatchObject({
+      month_pair: { level: 1, mastery: 1 },
+      godori: { level: 1, mastery: 2 },
+    });
+  });
+
+  it("grants no Go mastery bonus when the round is stopped at zero Go", () => {
+    const round = addHandToRound(createGoChainState(), 900, {
+      completedCollectionYakuIds: ["godori"],
+      masteryEvents: [collection],
+    });
+    const settled = settleRound(round, {});
+    expect(settled.rewardFactor).toBe(1);
+    expect(settled.masteryEvents).toHaveLength(1);
   });
 
   it("commits 3→5→7 mastery thresholds deterministically", () => {

@@ -21,6 +21,33 @@ card-01-bright-crane
 → public/assets/cards/card-01-bright-crane.webp
 ```
 
+## 이미지 슬롯 위치
+
+플레이 화면의 모든 그림 자리는 이미 전용 슬롯으로 분리돼 있다. 마크업을 고칠 필요 없이 CSS 한 줄만 추가하면 된다.
+
+| 슬롯 | 선택자 | 태그 예시 |
+|---|---|---|
+| 화투패 그림 | `.hwatu-card__art[data-asset-tag="..."]` | `card-01-bright-crane` |
+| 카드 뒷면 | `.deck-stack__back[data-asset-tag="..."]` | `ui:card-back:hanji` |
+| 스테이지 배경 | `.play-rail__stage-plate[data-asset-tag="..."]` | `stage_01_pine_crane` |
+| 부적·두목·상점 등 | `.asset-placeholder[data-asset-tag="..."]` | `talisman:goblin-mirror` |
+
+한 장씩 붙일 때는 이런 규칙을 추가한다.
+
+```css
+.hwatu-card__art[data-asset-tag="card-01-bright-crane"] {
+  background-image: url("/assets/cards/card-01-bright-crane.webp");
+}
+```
+
+슬롯은 이미 `background-size: cover`와 `background-position: center`를 갖고 있다. 그림이 들어간 슬롯의 텍스트 스탠드인을 감추려면 다음 한 줄이면 된다.
+
+```css
+.hwatu-card__art[style*="--has-art"] > * { display: none; }
+```
+
+`IMG` 배지와 태그 텍스트는 그림이 없는 슬롯을 한눈에 찾기 위한 표시이므로, 전부 교체하기 전까지는 남겨 두는 편이 낫다.
+
 ## 나중에 붙이는 순서
 
 1. `assets/manifest.json`의 `tagSources`에서 필요한 태그를 검색한다.
