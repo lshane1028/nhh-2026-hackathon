@@ -7,11 +7,12 @@ import type {
   Month,
   YakuCandidate,
 } from "../types";
-import { getEffectiveCardRole, getSeason, type CupRole } from "./deck";
+import { getEffectiveCardRole, type CupRole } from "./deck";
 
 export interface YakuMatchContext {
   cupRole?: CupRole;
-  connectYear?: boolean;
+  /** 짓 may also settle on a multiple of five. Sold as a talisman. */
+  allowFiveMultipleJit?: boolean;
   includeSecretYaku?: boolean;
 }
 
@@ -24,22 +25,14 @@ export interface CollectionEvaluationInput {
   cupRole?: CupRole;
 }
 
-function combinations<T>(items: readonly T[], size: number): T[][] {
-  const results: T[][] = [];
-  const selected: T[] = [];
-  const visit = (start: number): void => {
-    if (selected.length === size) {
-      results.push([...selected]);
-      return;
-    }
-    for (let index = start; index <= items.length - (size - selected.length); index += 1) {
-      selected.push(items[index]);
-      visit(index + 1);
-      selected.pop();
-    }
-  };
-  if (size >= 0 && size <= items.length) visit(0);
-  return results;
+export const MIN_SUBMISSION = 2;
+export const MAX_SUBMISSION = 5;
+
+/** 돌패 always counts as twelve; everything else is its printed month plus edits. */
+export function getEffectiveMonth(card: CardInstance): number {
+  if (card.tags.includes("zero_base")) return 0;
+  if (card.enhancement === "stone") return 12;
+  return card.month + card.permanentKkeutBonus;
 }
 
 function uniqueCards(cards: readonly CardInstance[]): CardInstance[] {
@@ -51,167 +44,150 @@ function uniqueCards(cards: readonly CardInstance[]): CardInstance[] {
   });
 }
 
-function orderedIds(cards: readonly CardInstance[], submitted: readonly CardInstance[]): string[] {
-  const indices = new Map(submitted.map((card, index) => [card.instanceId, index]));
-  return [...cards]
-    .sort((left, right) => (indices.get(left.instanceId) ?? 0) - (indices.get(right.instanceId) ?? 0))
-    .map((card) => card.instanceId);
-}
-
-function hasKind(card: CardInstance, kind: "bright" | "animal" | "ribbon" | "chaff", cupRole: CupRole): boolean {
+function isBright(card: CardInstance, cupRole: CupRole): boolean {
   if (card.enhancement === "stone") return false;
   if (card.enhancement === "wild" || card.tags.includes("all_kind_wild")) return true;
-  if (kind === "bright" && card.tags.includes("counts_as_bright")) return true;
-  return getEffectiveCardRole(card, cupRole).kind === kind;
+  if (card.tags.includes("counts_as_bright")) return true;
+  return getEffectiveCardRole(card, cupRole).kind === "bright";
 }
 
-function monthGroups(cards: readonly CardInstance[]): Map<Month, CardInstance[]> {
-  const groups = new Map<Month, CardInstance[]>();
-  for (const card of cards) {
-    if (card.enhancement === "stone") continue;
-    const group = groups.get(card.month) ?? [];
-    group.push(card);
-    groups.set(card.month, group);
+/** The named 섯다 pairs, in the order a player would read them. */
+const SPECIAL_PAIRS: ReadonlyArray<{ id: ImmediateYakuId; months: readonly [number, number] }> = [
+  { id: "ali", months: [1, 2] },
+  { id: "doksa", months: [1, 4] },
+  { id: "gupping", months: [1, 9] },
+  { id: "jangpping", months: [1, 10] },
+  { id: "jangsa", months: [4, 10] },
+  { id: "seryuk", months: [4, 6] },
+];
+
+export interface KkeutPairResult {
+  yakuId: ImmediateYakuId;
+  /** Added on top of the definition's base, so 9끗 beats 1끗. */
+  rankBonusHeung: number;
+  rankLabel: string;
+}
+
+/**
+ * Judges the two-card 끗패. Exactly one result per pair — 광땡, then 땡, then a
+ * named pair, then the plain 끗 ladder.
+ */
+export function judgeKkeutPair(
+  left: CardInstance,
+  right: CardInstance,
+  context: YakuMatchContext = {},
+): KkeutPairResult {
+  const cupRole = context.cupRole ?? "animal";
+  const a = getEffectiveMonth(left);
+  const b = getEffectiveMonth(right);
+  const months = [a, b].sort((x, y) => x - y) as [number, number];
+
+  if (context.includeSecretYaku !== false && isBright(left, cupRole) && isBright(right, cupRole)) {
+    const key = `${months[0]}-${months[1]}`;
+    if (key === "3-8") return { yakuId: "gwangttaeng_38", rankBonusHeung: 0, rankLabel: "" };
+    if (key === "1-8") return { yakuId: "gwangttaeng_18", rankBonusHeung: 0, rankLabel: "" };
+    if (key === "1-3") return { yakuId: "gwangttaeng_13", rankBonusHeung: 0, rankLabel: "" };
   }
-  return groups;
-}
 
-function candidate(id: ImmediateYakuId, cards: readonly CardInstance[], submitted: readonly CardInstance[]): YakuCandidate {
-  return { yakuId: id, scoringCardIds: orderedIds(cards, submitted), label: getImmediateYakuDefinition(id).name };
-}
+  if (a === b) {
+    if (a === 10) return { yakuId: "jangttaeng", rankBonusHeung: 0, rankLabel: "" };
+    // 1땡 is the floor; every month above it adds 0.6.
+    return {
+      yakuId: "ttaeng",
+      rankBonusHeung: Number(((Math.max(1, a) - 1) * 0.6).toFixed(4)),
+      rankLabel: `${a}땡`,
+    };
+  }
 
-function runMonthSequences(length: number, connectYear: boolean): Month[][] {
-  const sequences: Month[][] = [];
-  const lastStart = connectYear ? 12 : 13 - length;
-  for (let start = 1; start <= lastStart; start += 1) {
-    const months: Month[] = [];
-    for (let offset = 0; offset < length; offset += 1) {
-      months.push((((start - 1 + offset) % 12) + 1) as Month);
+  for (const pair of SPECIAL_PAIRS) {
+    if (months[0] === pair.months[0] && months[1] === pair.months[1]) {
+      return { yakuId: pair.id, rankBonusHeung: 0, rankLabel: "" };
     }
-    sequences.push(months);
   }
-  return sequences;
+
+  const rank = (a + b) % 10;
+  if (rank === 9) return { yakuId: "gabo", rankBonusHeung: 0, rankLabel: "" };
+  if (rank === 0) return { yakuId: "mangtong", rankBonusHeung: 0, rankLabel: "" };
+  return {
+    yakuId: "kkeut",
+    rankBonusHeung: Number((rank * 0.3).toFixed(4)),
+    rankLabel: `${rank}끗`,
+  };
 }
 
-function cartesian<T>(groups: readonly (readonly T[])[]): T[][] {
-  return groups.reduce<T[][]>(
-    (products, group) => products.flatMap((product) => group.map((item) => [...product, item])),
-    [[]],
-  );
+/** True when a set of 짓 cards settles on a legal total. */
+export function isValidJit(sum: number, allowFiveMultiple = false): boolean {
+  if (sum <= 0) return false;
+  if (sum % 10 === 0) return true;
+  return allowFiveMultiple && sum % 5 === 0;
 }
 
-function dedupeCandidates(candidates: readonly YakuCandidate[]): YakuCandidate[] {
-  const seen = new Set<string>();
-  return candidates.filter((entry) => {
-    const key = `${entry.yakuId}:${[...entry.scoringCardIds].sort().join("|")}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+function combinationsOfTwo<T>(items: readonly T[]): Array<[number, number]> {
+  const pairs: Array<[number, number]> = [];
+  for (let i = 0; i < items.length; i += 1) {
+    for (let j = i + 1; j < items.length; j += 1) pairs.push([i, j]);
+  }
+  return pairs;
 }
 
+/**
+ * Every legal way to split the submission into 짓 + 끗패.
+ *
+ * The rule is uniform across hand sizes: two cards are the 끗패 and everything
+ * else is the 짓, whose month sum must land on a multiple of ten. A bare pair
+ * has no 짓 at all, which is why it always submits — that is the beginner's
+ * escape hatch. There are no exemptions beyond that one.
+ */
 export function findImmediateYakuCandidates(
   submittedCards: readonly CardInstance[],
   context: YakuMatchContext = {},
 ): YakuCandidate[] {
-  const submitted = uniqueCards(submittedCards).filter((card) => !card.disabledForRound).slice(0, 5);
-  if (submitted.length === 0) return [];
-  const cupRole = context.cupRole ?? "animal";
-  const groups = monthGroups(submitted);
+  const submitted = uniqueCards(submittedCards)
+    .filter((card) => !card.disabledForRound)
+    .slice(0, MAX_SUBMISSION);
+  if (submitted.length < MIN_SUBMISSION) return [];
+
   const candidates: YakuCandidate[] = [];
+  const allIds = submitted.map((card) => card.instanceId);
 
-  for (const cards of groups.values()) {
-    for (const pair of combinations(cards, 2)) candidates.push(candidate("month_pair", pair, submitted));
-    for (const triple of combinations(cards, 3)) candidates.push(candidate("triple_month", triple, submitted));
-    for (const four of combinations(cards, 4)) candidates.push(candidate("four_of_month", four, submitted));
+  for (const [i, j] of combinationsOfTwo(submitted)) {
+    const pair = [submitted[i], submitted[j]];
+    const jit = submitted.filter((_, index) => index !== i && index !== j);
+    const jitSum = jit.reduce((sum, card) => sum + getEffectiveMonth(card), 0);
+
+    // A bare pair is always legal; anything longer must make its 짓 work.
+    if (jit.length > 0 && !isValidJit(jitSum, context.allowFiveMultipleJit)) continue;
+
+    const judged = judgeKkeutPair(pair[0], pair[1], context);
+    const definition = getImmediateYakuDefinition(judged.yakuId);
+    candidates.push({
+      yakuId: judged.yakuId,
+      scoringCardIds: allIds,
+      jitCardIds: jit.map((card) => card.instanceId),
+      jitSum,
+      label: definition.name,
+      rankBonusHeung: judged.rankBonusHeung || undefined,
+      rankLabel: judged.rankLabel || undefined,
+    });
   }
 
-  const pairGroups = [...groups.entries()].filter(([, cards]) => cards.length >= 2);
-  for (const [leftIndex, [leftMonth, leftCards]] of pairGroups.entries()) {
-    for (const [rightMonth, rightCards] of pairGroups.slice(leftIndex + 1)) {
-      if (leftMonth === rightMonth) continue;
-      for (const leftPair of combinations(leftCards, 2)) {
-        for (const rightPair of combinations(rightCards, 2)) {
-          candidates.push(candidate("two_pairs", [...leftPair, ...rightPair], submitted));
-        }
-      }
-    }
-  }
-
-  for (const [length, id] of [
-    [3, "three_run"],
-    [4, "four_run"],
-    [5, "five_run"],
-  ] as const) {
-    for (const months of runMonthSequences(length, context.connectYear ?? false)) {
-      const monthCards = months.map((month) => groups.get(month) ?? []);
-      if (monthCards.every((cards) => cards.length > 0)) {
-        for (const cards of cartesian(monthCards)) candidates.push(candidate(id, cards, submitted));
-      }
-    }
-  }
-
-  const chaffCards = submitted.filter((card) => hasKind(card, "chaff", cupRole));
-  if (chaffCards.reduce((sum, card) => sum + getEffectiveCardRole(card, cupRole).chaffValue, 0) >= 5) {
-    candidates.push(candidate("chaff_field", chaffCards, submitted));
-  }
-
-  const ribbonCards = submitted.filter((card) => hasKind(card, "ribbon", cupRole));
-  for (const cards of combinations(ribbonCards, 4)) candidates.push(candidate("four_ribbons", cards, submitted));
-  const animalCards = submitted.filter((card) => hasKind(card, "animal", cupRole));
-  for (const cards of combinations(animalCards, 4)) candidates.push(candidate("four_animals", cards, submitted));
-
-  const seasonGroups = new Map<string, CardInstance[]>();
-  for (const card of submitted.filter((entry) => entry.enhancement !== "stone")) {
-    const season = getSeason(card.month);
-    seasonGroups.set(season, [...(seasonGroups.get(season) ?? []), card]);
-  }
-  for (const cards of seasonGroups.values()) {
-    for (const hand of combinations(cards, 5)) candidates.push(candidate("same_season", hand, submitted));
-  }
-
-  for (const [tripleMonth, tripleCards] of groups.entries()) {
-    if (tripleCards.length < 3) continue;
-    for (const [pairMonth, pairCards] of groups.entries()) {
-      if (tripleMonth === pairMonth || pairCards.length < 2) continue;
-      for (const triple of combinations(tripleCards, 3)) {
-        for (const pair of combinations(pairCards, 2)) {
-          candidates.push(candidate("house_party", [...triple, ...pair], submitted));
-        }
-      }
-    }
-  }
-
-  if (context.includeSecretYaku !== false && submitted.length === 5) {
-    for (const cards of groups.values()) {
-      if (cards.length === 5) candidates.push(candidate("five_of_month", cards, submitted));
-    }
-    if (submitted.every((card) => card.tags.includes("bird"))) {
-      const months = new Set(submitted.map((card) => card.month));
-      if ([2, 4, 8].every((month) => months.has(month as Month))) {
-        candidates.push(candidate("double_godori", submitted, submitted));
-      }
-    }
-    if (submitted.every((card) => card.month === 1) && submitted.filter((card) => hasKind(card, "bright", cupRole)).length >= 2) {
-      candidates.push(candidate("ten_thousand_pines", submitted, submitted));
-    }
-    if (submitted.every((card) => card.tags.includes("rain")) && submitted.filter((card) => hasKind(card, "bright", cupRole)).length >= 3) {
-      candidates.push(candidate("rain_bright_world", submitted, submitted));
-    }
-  }
-
-  const distinct = dedupeCandidates(candidates);
-  if (distinct.length > 0) return distinct;
-
-  const bestKkeut = Math.max(...submitted.map((card) => getEffectiveCardRole(card, cupRole).baseKkeut + card.permanentKkeutBonus));
-  return submitted
-    .filter((card) => getEffectiveCardRole(card, cupRole).baseKkeut + card.permanentKkeutBonus === bestKkeut)
-    .map((card) => candidate("single", [card], submitted));
+  return candidates;
 }
 
 export function getScoringCards(candidateEntry: YakuCandidate, submitted: readonly CardInstance[]): CardInstance[] {
   const ids = new Set(candidateEntry.scoringCardIds);
   return submitted.filter((card) => ids.has(card.instanceId));
+}
+
+function hasKind(
+  card: CardInstance,
+  kind: "bright" | "animal" | "ribbon" | "chaff",
+  cupRole: CupRole,
+): boolean {
+  if (card.enhancement === "stone") return false;
+  if (card.enhancement === "wild" || card.tags.includes("all_kind_wild")) return true;
+  if (kind === "bright" && card.tags.includes("counts_as_bright")) return true;
+  return getEffectiveCardRole(card, cupRole).kind === kind;
 }
 
 function requiredMonthProgress(
@@ -253,10 +229,7 @@ export function getCollectionProgress(input: CollectionEvaluationInput): Collect
 }
 
 export function detectNewCollectionCompletions(input: CollectionEvaluationInput): CollectionYakuId[] {
-  const before = getCollectionProgress({
-    ...input,
-    submittedCards: [],
-  });
+  const before = getCollectionProgress({ ...input, submittedCards: [] });
   const after = getCollectionProgress(input);
   const completedIds = new Set<CollectionYakuId>([
     ...(input.confirmedCompletedYakuIds ?? []),
@@ -282,7 +255,7 @@ export function detectNewCollectionCompletions(input: CollectionEvaluationInput)
 
 export function validateYakuDefinitions(): string[] {
   const issues: string[] = [];
-  const expectedImmediate = 17;
+  const expectedImmediate = 14;
   if (ALL_IMMEDIATE_YAKU_DEFINITIONS.length !== expectedImmediate) {
     issues.push(`expected ${expectedImmediate} immediate/secret definitions, got ${ALL_IMMEDIATE_YAKU_DEFINITIONS.length}`);
   }

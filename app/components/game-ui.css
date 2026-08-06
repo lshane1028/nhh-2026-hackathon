@@ -218,6 +218,40 @@ button.hwatu-card:hover:not(:disabled) { transform: translateY(-0.22rem); }
   pointer-events: none;
 }
 
+/* 짓고땡 split marker. The selection is read as 짓(월 합) + 끗패(배수), so the
+   two halves need to be tellable apart at a glance in the fanned hand. */
+.hwatu-card__split {
+  position: absolute;
+  z-index: 2;
+  top: 0.28rem;
+  right: 0.28rem;
+  display: grid;
+  min-width: 1.15rem;
+  place-items: center;
+  padding: 0.04rem 0.2rem;
+  border: 1px solid rgb(255 255 255 / 62%);
+  border-radius: 0.32rem;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1.25;
+  text-shadow: 0 1px 1px rgb(0 0 0 / 45%);
+  pointer-events: none;
+}
+
+.hwatu-card--split-jit .hwatu-card__split {
+  background: #2f5d8c;
+  color: #f2f8ff;
+}
+
+.hwatu-card--split-kkeut .hwatu-card__split {
+  background: #8c2f3d;
+  color: #fff2f4;
+}
+
+.hwatu-card--split-jit { box-shadow: 0 0 0 2px #2f5d8c inset; }
+.hwatu-card--split-kkeut { box-shadow: 0 0 0 2px #8c2f3d inset; }
+.hwatu-card--dense .hwatu-card__split { min-width: 1rem; font-size: 0.64rem; }
+
 /* Hover card — holds everything the face no longer prints. */
 /* Effect-tag marker. Label only until the tags are wired to real behaviour. */
 .hwatu-card__effect {

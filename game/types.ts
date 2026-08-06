@@ -49,24 +49,22 @@ export interface CardInstance extends Omit<CardTemplate, "month" | "kind" | "rib
   effectTagId?: string;
 }
 
+/** 끗패 족보. The 짓 contributes the 월 합, these contribute the 배수. */
 export type ImmediateYakuId =
-  | "single"
-  | "month_pair"
-  | "two_pairs"
-  | "three_run"
-  | "chaff_field"
-  | "triple_month"
-  | "four_run"
-  | "four_ribbons"
-  | "four_animals"
-  | "same_season"
-  | "house_party"
-  | "five_run"
-  | "four_of_month"
-  | "five_of_month"
-  | "double_godori"
-  | "ten_thousand_pines"
-  | "rain_bright_world";
+  | "mangtong"
+  | "kkeut"
+  | "gabo"
+  | "seryuk"
+  | "jangsa"
+  | "jangpping"
+  | "gupping"
+  | "doksa"
+  | "ali"
+  | "ttaeng"
+  | "jangttaeng"
+  | "gwangttaeng_13"
+  | "gwangttaeng_18"
+  | "gwangttaeng_38";
 
 export type CollectionYakuId =
   | "hongdan"
@@ -111,10 +109,11 @@ export type ScoreEffectKey =
   | "exact_submit_add"
   | "exact_scoring_add"
   | "yaku_add_heung"
+  | "jit_add_heung"
   | "collection_add_heung"
   | "bird_retrigger"
   | "double_chaff_boost"
-  | "connect_year"
+  | "five_multiple_jit"
   | "empty_slots_add_heung"
   | "money_add_heung"
   | "all_cards_score_bonus"
@@ -279,8 +278,16 @@ export interface WeatherDefinition {
 
 export interface YakuCandidate {
   yakuId: ImmediateYakuId;
+  /** Everything submitted — 짓 and 끗패 both score and both get collected. */
   scoringCardIds: string[];
+  /** The cards forming the 짓. Empty when only a 끗패 was played. */
+  jitCardIds: string[];
+  /** Month sum of the 짓, always a multiple of ten. 0 for a bare 끗패. */
+  jitSum: number;
   label: string;
+  /** Rank on top of the family base, e.g. 9끗 over plain 끗. */
+  rankBonusHeung?: number;
+  rankLabel?: string;
 }
 
 export interface CollectionProgress {
@@ -303,6 +310,12 @@ export interface ScoreBreakdown {
   yakuId: ImmediateYakuId;
   yakuName: string;
   scoringCardIds: string[];
+  /** The 짓 half of the split. The rest of `scoringCardIds` is the 끗패. */
+  jitCardIds: string[];
+  /** 월 합 the 짓 contributed. 0 for a bare two-card 끗패. */
+  jitSum: number;
+  /** "9끗" / "6땡" when the family covers a range of ranks. */
+  rankLabel?: string;
   newCollectionYakuIds: CollectionYakuId[];
   startingKkeut: number;
   startingHeung: number;
@@ -391,7 +404,6 @@ export interface RoundLogEntry {
 
 export interface ExperimentalRules {
   yardMatching: boolean;
-  bombsAndShake: boolean;
   bakContracts: boolean;
   weather: boolean;
   nagariRetry: boolean;
@@ -400,7 +412,6 @@ export interface ExperimentalRules {
 export interface YardState {
   cards: CardInstance[];
   sweptCount: number;
-  shakeArmed: boolean;
 }
 
 export interface RunStats {
@@ -447,10 +458,6 @@ export interface GameState {
   cupAssignments: Record<string, "animal" | "double_chaff">;
   /** Set while a submitted cup card is waiting for its collection choice. */
   pendingCupCardId: string | null;
-  /** True while a three-of-a-month submission waits for 흔들기 or 폭탄. */
-  pendingShakeChoice: boolean;
-  /** The pick made for the hand being submitted right now. */
-  shakeChoice: "shake" | "bomb" | null;
   handsRemaining: number;
   discardsRemaining: number;
   handSize: number;

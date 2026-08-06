@@ -1,6 +1,8 @@
 import type { GameState } from "../types";
 
-export const SAVE_KEY = "flower-board-go:v1";
+// v2 = 짓고땡. A v1 save holds the old poker-style yaku ids, which no longer
+// resolve, so bumping the key is the cheapest way to drop them.
+export const SAVE_KEY = "flower-board-go:v2";
 
 export interface SaveEnvelope {
   schemaVersion: 1;
@@ -39,7 +41,7 @@ function normalizeGameState(game: GameState): GameState {
   return {
     ...game,
     experimentalRules: { ...game.experimentalRules, yardMatching: false },
-    yard: { cards: [], sweptCount: 0, shakeArmed: false },
+    yard: { cards: [], sweptCount: 0 },
     baseHands: game.baseHands ?? 4,
     baseDiscards: game.baseDiscards ?? 4,
     targetMultiplier: game.targetMultiplier ?? 1,

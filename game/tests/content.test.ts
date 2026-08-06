@@ -20,6 +20,7 @@ import {
   assertContentCatalogComplete,
 } from "../content";
 import { createStandardHwatuDeck } from "../engine/deck";
+import { findImmediateYakuCandidates } from "../engine/yaku";
 import {
   calculateContractModifiers,
   calculateDiscountedPrice,
@@ -58,6 +59,7 @@ function owned(definitionId: string, growth = 0): TalismanInstance {
   return { instanceId: `owned:${definitionId}`, definitionId, growth };
 }
 
+/** 1월 두 장이면 끗패는 1땡. 짓이 없으니 월 합은 1에서 시작한다. */
 function januaryPair(): { cards: CardInstance[]; candidate: YakuCandidate } {
   const january = createStandardHwatuDeck().filter((card) => card.month === 1);
   const bright = january.find((card) => card.kind === "bright");
@@ -67,9 +69,11 @@ function januaryPair(): { cards: CardInstance[]; candidate: YakuCandidate } {
   return {
     cards,
     candidate: {
-      yakuId: "month_pair",
+      yakuId: "ttaeng",
       scoringCardIds: cards.map((card) => card.instanceId),
-      label: "월쌍",
+      jitCardIds: [],
+      jitSum: 0,
+      label: "땡",
     },
   };
 }
@@ -77,13 +81,13 @@ function januaryPair(): { cards: CardInstance[]; candidate: YakuCandidate } {
 describe("complete content catalog", () => {
   it("matches every required catalog count", () => {
     expect(CONTENT_ACTUAL_COUNTS).toEqual(CONTENT_EXPECTED_COUNTS);
-    expect(CONTENT_CATALOG_VALIDATION.totalEntries).toBe(133);
+    expect(CONTENT_CATALOG_VALIDATION.totalEntries).toBe(134);
     expect(CONTENT_CATALOG_COMPLETE).toBe(true);
     expect(assertContentCatalogComplete()).toBe(true);
   });
 
   it("has globally unique IDs and asset tags with usable descriptions", () => {
-    expect(catalogEntries).toHaveLength(133);
+    expect(catalogEntries).toHaveLength(134);
     expect(new Set(catalogEntries.map((entry) => entry.id)).size).toBe(catalogEntries.length);
     expect(new Set(ALL_CONTENT_ASSET_TAGS).size).toBe(ALL_CONTENT_ASSET_TAGS.length);
     for (const entry of catalogEntries) {
@@ -120,15 +124,47 @@ describe("talisman engine", () => {
       submittedCards: cards,
       orderedTalismanEffects: effects,
     });
-    expect(score.finalHeung).toBe(4);
-    expect(score.score).toBe(8);
+    expect(score.finalHeung).toBe(10);
+    expect(score.score).toBe(10);
+  });
+
+  it("pays 짓모루 per card sitting in the 짓", () => {
+    const deck = createStandardHwatuDeck();
+    // 짓 4월+6월 = 10, 끗패 1월광+3월광.
+    const cards = [
+      deck.find((card) => card.month === 4 && card.kind === "chaff")!,
+      deck.find((card) => card.month === 6 && card.kind === "chaff")!,
+      deck.find((card) => card.month === 1 && card.kind === "bright")!,
+      deck.find((card) => card.month === 3 && card.kind === "bright")!,
+    ];
+    const candidate = findImmediateYakuCandidates(cards)[0];
+    expect(candidate.jitCardIds).toHaveLength(2);
+
+    const effects = buildOrderedTalismanScoreEffects({
+      talismans: [owned("t_jit_anvil")],
+      candidate,
+      submittedCards: cards,
+      scoringCards: cards,
+    });
+    expect(effects).toEqual([
+      expect.objectContaining({ operation: "add_heung", value: 2 }),
+    ]);
+
+    // 짓이 없는 두 장 제출에는 아무것도 붙지 않는다.
+    const bare = [cards[2], cards[3]];
+    expect(buildOrderedTalismanScoreEffects({
+      talismans: [owned("t_jit_anvil")],
+      candidate: findImmediateYakuCandidates(bare)[0],
+      submittedCards: bare,
+      scoringCards: bare,
+    })).toEqual([]);
   });
 
   it("evaluates every catalog effect key without unsafe score values", () => {
     const { cards, candidate } = januaryPair();
     const talismans = TALISMANS.map((definition) => owned(
       definition.id,
-      definition.id === "t_shake_iron" ? 2 : definition.id === "t_cremation_deed" ? 0.16 : 0,
+      definition.id === "t_cremation_deed" ? 0.16 : 0,
     ));
     const evaluated = evaluateTalismanEffects({
       talismans,
@@ -148,7 +184,7 @@ describe("talisman engine", () => {
       && ["add_kkeut", "add_heung", "multiply_heung", "set_kkeut"].includes(effect.operation)
     )).toBe(true);
     expect(evaluated.structuralEffects.some((effect) => effect.effectKey === "economy")).toBe(true);
-    expect(evaluated.structuralEffects.some((effect) => effect.effectKey === "connect_year")).toBe(true);
+    expect(evaluated.structuralEffects.some((effect) => effect.effectKey === "five_multiple_jit")).toBe(true);
   });
 
   it("provides round reward, Go-failure, and structural rule adjustments", () => {
@@ -168,7 +204,7 @@ describe("talisman engine", () => {
       owned("t_phoenix_seal"),
     ]);
     expect(rules).toMatchObject({
-      connectsDecemberToJanuary: true,
+      allowsFiveMultipleJit: true,
       monthsCountingAsBright: [8],
       scoreThenBurnCopies: 2,
     });
@@ -177,7 +213,7 @@ describe("talisman engine", () => {
     if (!cup) throw new Error("Standard cup card is missing");
     const cupEffects = buildOrderedTalismanScoreEffects({
       talismans: [owned("t_chrysanthemum_cup")],
-      candidate: { yakuId: "single", scoringCardIds: [cup.instanceId], label: "홑패" },
+      candidate: { yakuId: "mangtong", scoringCardIds: [cup.instanceId], jitCardIds: [], jitSum: 0, label: "망통" },
       submittedCards: [cup],
       scoringCards: [cup],
     });

@@ -31,7 +31,7 @@ describe("playable run reducer", () => {
       hand: januaryPair,
       drawPile: deck.filter((card) => !januaryPair.some((selected) => selected.instanceId === card.instanceId)),
       selectedCardIds: januaryPair.map((card) => card.instanceId),
-      yard: { cards: [], sweptCount: 0, shakeArmed: false },
+      yard: { cards: [], sweptCount: 0 },
       targetScore: 10_000,
       chain: createGoChainState(),
     };
@@ -39,7 +39,7 @@ describe("playable run reducer", () => {
     // Far below the target: the hand just banks score and play continues.
     const playing = gameReducer(base, { type: "SUBMIT_HAND" });
     expect(playing.screen).toBe("play");
-    expect(playing.lastScore?.yakuId).toBe("month_pair");
+    expect(playing.lastScore?.yakuId).toBe("ttaeng");
     expect(playing.chain.roundScore).toBeGreaterThan(0);
     expect(playing.chain.goCount).toBe(0);
     expect(playing.chain.collection.cardIds).toEqual(
@@ -62,7 +62,7 @@ describe("playable run reducer", () => {
       hand: pair,
       drawPile: deck.filter((card) => !pair.some((s) => s.instanceId === card.instanceId)),
       selectedCardIds: pair.map((card) => card.instanceId),
-      yard: { cards: [], sweptCount: 0, shakeArmed: false },
+      yard: { cards: [], sweptCount: 0 },
       targetScore: 1,
       chain: createGoChainState(),
     };
@@ -95,7 +95,7 @@ describe("playable run reducer", () => {
       hand: pair,
       drawPile: deck.filter((card) => !pair.some((s) => s.instanceId === card.instanceId)),
       selectedCardIds: pair.map((card) => card.instanceId),
-      yard: { cards: [], sweptCount: 0, shakeArmed: false },
+      yard: { cards: [], sweptCount: 0 },
       targetScore: 1_000_000,
       handsRemaining: 1,
       chain: { ...createGoChainState(), goCount: 1 as const },
@@ -197,38 +197,6 @@ describe("playable run reducer", () => {
     expect(onlyStubborn.hand).toHaveLength(2);
   });
 
-  it("asks 흔들기 or 폭탄 before scoring three cards of one month", () => {
-    const deck = createStandardHwatuDeck();
-    const three = deck.filter((card) => card.month === 1).slice(0, 3);
-    const base = {
-      ...createInitialGameState("SHAKE"),
-      runId: "shake",
-      screen: "play" as const,
-      deck,
-      hand: three,
-      drawPile: deck.filter((card) => !three.some((s) => s.instanceId === card.instanceId)),
-      selectedCardIds: three.map((card) => card.instanceId),
-      yard: { cards: [], sweptCount: 0, shakeArmed: false },
-      targetScore: 10_000,
-    };
-
-    // The first submit only opens the prompt — nothing is scored yet.
-    const asked = gameReducer(base, { type: "SUBMIT_HAND" });
-    expect(asked.pendingShakeChoice).toBe(true);
-    expect(asked.lastScore).toBeNull();
-    expect(asked.handsRemaining).toBe(base.handsRemaining);
-
-    const bombed = gameReducer(asked, { type: "RESOLVE_SHAKE", choice: "bomb" });
-    const shaken = gameReducer(asked, { type: "RESOLVE_SHAKE", choice: "shake" });
-    expect(bombed.pendingShakeChoice).toBe(false);
-    expect(bombed.shakeChoice).toBeNull();
-    expect(bombed.handsRemaining).toBe(base.handsRemaining - 1);
-
-    // 폭탄 pays as month sum now; 흔들기 pays as purse at settlement.
-    expect(bombed.lastScore!.finalKkeut).toBeGreaterThan(shaken.lastScore!.finalKkeut);
-    expect(shaken.roundSettlementBonus).toBeGreaterThan(bombed.roundSettlementBonus);
-  });
-
   it("toggles only the clicked cards and preserves the five-card cap", () => {
     const deck = createStandardHwatuDeck();
     const hand = deck.slice(0, 6);
@@ -268,7 +236,7 @@ describe("playable run reducer", () => {
       deck,
       hand: pair,
       selectedCardIds: [] as string[],
-      yard: { cards: [], sweptCount: 0, shakeArmed: false },
+      yard: { cards: [], sweptCount: 0 },
     };
 
     // Nothing selected means nothing to score.
@@ -276,7 +244,7 @@ describe("playable run reducer", () => {
 
     const selected = { ...base, selectedCardIds: pair.map((card) => card.instanceId) };
     const submitted = gameReducer(selected, { type: "SUBMIT_HAND" });
-    expect(submitted.lastScore?.yakuId).toBe("month_pair");
+    expect(submitted.lastScore?.yakuId).toBe("ttaeng");
     expect(submitted.handsRemaining).toBe(base.handsRemaining - 1);
     expect(submitted.chain.roundScore).toBe(submitted.lastScore?.score);
   });
@@ -295,7 +263,7 @@ describe("playable run reducer", () => {
       deck,
       hand,
       selectedCardIds: hand.map((card) => card.instanceId),
-      yard: { cards: [], sweptCount: 0, shakeArmed: false },
+      yard: { cards: [], sweptCount: 0 },
     };
 
     expect(base.pendingCupCardId).toBeNull();

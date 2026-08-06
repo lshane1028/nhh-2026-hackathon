@@ -80,20 +80,12 @@ function appendOperation(
 
 function scoreCardOnce(
   card: CardInstance,
-  cupRole: CupRole,
   operations: ScoreOperation[],
   state: { kkeut: number; heung: number },
   suffix = "",
 ): void {
-  const role = getEffectiveCardRole(card, cupRole);
-  const baseKkeut = card.enhancement === "stone" ? STONE_MONTH_VALUE : role.baseKkeut;
-  appendOperation(operations, state, {
-    sourceId: card.instanceId,
-    label: `${card.name}${suffix}`,
-    operation: "add_kkeut",
-    value: baseKkeut + card.permanentKkeutBonus,
-  });
-
+  // The card's own month is NOT added here any more. Under 짓고땡 the 월 합 is
+  // the 짓 total, so a card only contributes what its enhancements print.
   if (card.enhancement === "inked") {
     appendOperation(operations, state, { sourceId: card.instanceId, label: `먹칠${suffix}`, operation: "add_kkeut", value: INKED_MONTH_BONUS });
   } else if (card.enhancement === "scarlet") {
@@ -135,7 +127,7 @@ function scoreP0Talisman(
   if (talisman.definitionId === "t_bright_polish") {
     return { sourceId: talisman.instanceId, label: "광약", operation: "add_kkeut", value: roles.filter((entry) => entry.role.kind === "bright").length * 10 };
   }
-  if (talisman.definitionId === "t_pair_knot" && ["month_pair", "two_pairs"].includes(candidate.yakuId)) {
+  if (talisman.definitionId === "t_pair_knot" && ["ttaeng", "jangttaeng"].includes(candidate.yakuId)) {
     return { sourceId: talisman.instanceId, label: "짝패 매듭", operation: "add_heung", value: 2 };
   }
   return null;
@@ -145,12 +137,22 @@ export function calculateHandScore(input: ScoreInput): ScoreBreakdown {
   const cupRole = input.cupRole ?? "animal";
   const definition = getImmediateYakuDefinition(input.candidate.yakuId);
   const immediateLevel = levelOf(definition.id, input.yakuLevels);
-  // The legacy field name is retained in ScoreBreakdown, but this value is now
-  // the submitted scoring cards' month sum. Yakus only establish the multiplier.
-  const startingKkeut = 0;
+  // 월 합 is the 짓 total. A bare 끗패 has no 짓, so it scores off a base of 1 —
+  // enough to be worth playing, far short of a real hand.
+  const startingKkeut = input.candidate.jitSum > 0 ? input.candidate.jitSum : 1;
   const startingHeung = definition.baseHeung + (immediateLevel - 1) * definition.growthHeung;
   const operations: ScoreOperation[] = [];
   const state = { kkeut: startingKkeut, heung: startingHeung };
+
+  // 끗/땡 rank sits on top of the family base so the breakdown stays readable.
+  if (input.candidate.rankBonusHeung) {
+    appendOperation(operations, state, {
+      sourceId: `${input.candidate.yakuId}:rank`,
+      label: input.candidate.rankLabel ?? "끗패 등급",
+      operation: "add_heung",
+      value: input.candidate.rankBonusHeung,
+    });
+  }
   const newCollectionYakuIds = [...(
     input.newCollectionYakuIds ?? (input.collection ? detectNewCollectionCompletions(input.collection) : [])
   )];
@@ -175,8 +177,8 @@ export function calculateHandScore(input: ScoreInput): ScoreBreakdown {
     (card) => scoringIds.has(card.instanceId) || stoneCards.some((stone) => stone.instanceId === card.instanceId),
   );
   for (const card of scoringCards) {
-    scoreCardOnce(card, cupRole, operations, state);
-    if (card.seal === "red") scoreCardOnce(card, cupRole, operations, state, " 재발동");
+    scoreCardOnce(card, operations, state);
+    if (card.seal === "red") scoreCardOnce(card, operations, state, " 재발동");
   }
 
   for (const card of input.heldCards ?? []) {
@@ -202,6 +204,9 @@ export function calculateHandScore(input: ScoreInput): ScoreBreakdown {
     yakuId: input.candidate.yakuId,
     yakuName: definition.name,
     scoringCardIds: scoringCards.map((card) => card.instanceId),
+    jitCardIds: [...input.candidate.jitCardIds],
+    jitSum: input.candidate.jitSum,
+    rankLabel: input.candidate.rankLabel,
     newCollectionYakuIds,
     startingKkeut,
     startingHeung,
@@ -236,7 +241,7 @@ export function evaluateCandidateScore(candidate: YakuCandidate, input: Omit<Sco
 export function evaluateImmediateCandidates(input: BestScoreInput): ScoreBreakdown[] {
   const candidates = findImmediateYakuCandidates(input.submittedCards, {
     cupRole: input.cupRole,
-    connectYear: input.connectYear,
+    allowFiveMultipleJit: input.allowFiveMultipleJit,
     includeSecretYaku: input.includeSecretYaku,
   });
   return candidates.map((candidate) => calculateHandScore({ ...input, candidate }));

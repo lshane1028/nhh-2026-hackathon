@@ -22,7 +22,7 @@ export const CONTENT_EXPECTED_COUNTS = {
   talismans: 43,
   painters: 15,
   forbidden: 10,
-  books: 13,
+  books: 14,
   enhancements: 8,
   editions: 4,
   seals: 4,
@@ -49,19 +49,17 @@ export const CONTENT_ACTUAL_COUNTS = {
 } as const;
 
 export const BASIC_IMMEDIATE_YAKU_BOOK_IDS = [
-  "single",
-  "month_pair",
-  "two_pairs",
-  "three_run",
-  "chaff_field",
-  "triple_month",
-  "four_run",
-  "four_ribbons",
-  "four_animals",
-  "same_season",
-  "house_party",
-  "five_run",
-  "four_of_month",
+  "mangtong",
+  "kkeut",
+  "gabo",
+  "seryuk",
+  "jangsa",
+  "jangpping",
+  "gupping",
+  "doksa",
+  "ali",
+  "ttaeng",
+  "jangttaeng",
 ] as const;
 
 interface CatalogValidationEntry {

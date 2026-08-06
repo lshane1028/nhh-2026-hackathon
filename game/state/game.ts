@@ -35,9 +35,7 @@ import { rollCardEffectTag } from "../content/card-effects";
 import { calculateCollectionBonus } from "../engine/collection-bonus";
 import { createStandardHwatuDeck, isCupCard, type CupRole } from "../engine/deck";
 import {
-  canDeclareShake,
   evaluateBakContract,
-  getShakeResult,
   resolveYardCapture,
   weatherCardModifier,
 } from "../engine/experimental";
@@ -65,6 +63,7 @@ import {
   calculateTalismanRoundRuleModifiers,
 } from "../engine/talismans";
 import { calculateRoundReward } from "../engine/economy";
+import { MIN_SUBMISSION } from "../engine/yaku";
 import type { CollectionEvaluationInput } from "../engine/yaku";
 import type { GameAction } from "./actions";
 import type {
@@ -152,8 +151,6 @@ export function createInitialGameState(seed = DEFAULT_SEED): GameState {
     handSort: "month",
     cupAssignments: {},
     pendingCupCardId: null,
-    pendingShakeChoice: false,
-    shakeChoice: null,
     handsRemaining: 4,
     discardsRemaining: 4,
     handSize: 8,
@@ -183,12 +180,11 @@ export function createInitialGameState(seed = DEFAULT_SEED): GameState {
     contractChoices: [],
     experimentalRules: {
       yardMatching: false,
-      bombsAndShake: true,
       bakContracts: true,
       weather: true,
       nagariRetry: true,
     },
-    yard: { cards: [], sweptCount: 0, shakeArmed: false },
+    yard: { cards: [], sweptCount: 0 },
     nagariUsed: false,
     tutorialBossRetryUsed: false,
     tutorialMode: false,
@@ -356,7 +352,7 @@ function startStage(state: GameState): GameState {
     handsRemaining: hands,
     discardsRemaining: discards,
     chain: createGoChainState(),
-    yard: { cards: yardCards, sweptCount: 0, shakeArmed: false },
+    yard: { cards: yardCards, sweptCount: 0 },
     roundSubmissionIndex: 0,
     roundTalismanUses: {},
     scoredMonthsThisRound: [],
@@ -389,7 +385,6 @@ function scoreEffectsForState(
   base: ScoreBreakdown,
   yardBonusKkeut: number,
   yardBonusHeung: number,
-  shakeBonusKkeut: number,
 ): OrderedScoreEffect[] {
   const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
   const scoring = new Set(base.scoringCardIds);
@@ -421,7 +416,6 @@ function scoreEffectsForState(
   });
   if (yardBonusKkeut) effects.push({ sourceId: "yard", label: "마당 매칭", operation: "add_kkeut", value: yardBonusKkeut });
   if (yardBonusHeung) effects.push({ sourceId: "yard:sweep", label: "싹쓸이", operation: "add_heung", value: yardBonusHeung });
-  if (shakeBonusKkeut) effects.push({ sourceId: "bomb", label: "폭탄", operation: "add_kkeut", value: shakeBonusKkeut });
   return effects;
 }
 
@@ -431,7 +425,6 @@ interface ScoredSelection {
   captured: CardInstance[];
   remainingYard: CardInstance[];
   swept: boolean;
-  settlementBonus: number;
   captureLabel: string;
   usedUnifyMonth: number | null;
   /** The cup role that produced this score, before the player files the card. */
@@ -458,11 +451,10 @@ function cupRoleVariantsFor(
 
 export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
   const submitted = selectionInOrder(state);
-  if (submitted.length === 0 || submitted.length > MAX_SELECTED) return null;
+  if (submitted.length < MIN_SUBMISSION || submitted.length > MAX_SELECTED) return null;
   const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
   const rules = calculateTalismanRoundRuleModifiers(state.talismans);
   const capture = resolveYardCapture(submitted, state.yard, state.experimentalRules.yardMatching);
-  const shake = getShakeResult(state.shakeChoice);
   const confirmedCards = cardsFromIds(state, state.chain.collection.cardIds);
   const pendingCards: CardInstance[] = [];
   const heldCards = state.hand.filter((card) => !state.selectedCardIds.includes(card.instanceId));
@@ -512,7 +504,7 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
       collection,
       yakuLevels: state.yakuLevels,
       cupRole,
-      connectYear: rules.connectsDecemberToJanuary,
+      allowFiveMultipleJit: rules.allowsFiveMultipleJit,
       includeSecretYaku: true,
     } as const;
     const bases = evaluateImmediateCandidates(baseInput).filter((entry) =>
@@ -522,6 +514,8 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
       const candidate: YakuCandidate = {
         yakuId: base.yakuId,
         scoringCardIds: base.scoringCardIds,
+        jitCardIds: [],
+        jitSum: base.startingKkeut,
         label: base.yakuName,
       };
       const scoringIds = new Set(base.scoringCardIds);
@@ -553,7 +547,6 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
         base,
         capture.bonusKkeut,
         capture.bonusHeung,
-        shake.bonusKkeut,
       );
       const collectionEffects = calculateCollectionBonus(
         [...confirmedCards, ...pendingCards, ...evaluatedSubmission, ...evaluatedCaptured],
@@ -588,8 +581,7 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
     captured: capture.captured,
     remainingYard: capture.remainingYard,
     swept: capture.swept,
-    settlementBonus: shake.settlementBonus,
-    captureLabel: [capture.label, shake.label].filter(Boolean).join(" · "),
+    captureLabel: capture.label,
     usedUnifyMonth: chosen.unifyMonth,
     usedCupRole: chosen.cupRole,
   };
@@ -787,18 +779,9 @@ function loseRound(state: GameState, detail: string): GameState {
 
 function submitHand(state: GameState): GameState {
   if (state.screen !== "play" || state.handsRemaining <= 0 || state.pendingCupCardId) return state;
-  // Three of one month is worth either 흔들기 or 폭탄, and the player picks
-  // before the hand is scored because 폭탄 changes this hand's month sum.
-  if (
-    state.shakeChoice === null
-    && !state.pendingShakeChoice
-    && canDeclareShake(selectionInOrder(state), state.experimentalRules)
-  ) {
-    return { ...state, pendingShakeChoice: true };
-  }
   const scored = evaluateSelectedHand(state);
   if (!scored) {
-    return { ...state, logs: logEntry(state, "system", "제출 불가", "1~5장의 카드를 골라 주세요.") };
+    return { ...state, logs: logEntry(state, "system", "제출 불가", "2~5장으로 짓(월 합 10의 배수)과 끗패를 만들어 주세요.") };
   }
   const pendingCupCardId = [...scored.submitted, ...scored.captured]
     .filter(isCupCard)
@@ -820,17 +803,13 @@ function submitHand(state: GameState): GameState {
     handsRemaining,
     selectedCardIds: [],
     pendingCupCardId,
-    pendingShakeChoice: false,
-    shakeChoice: null,
     chain,
     lastScore: scored.breakdown,
     unlockedSecretYakuIds: unlockSecret(state, scored.breakdown.yakuId),
     yard: {
       cards: scored.remainingYard,
       sweptCount: state.yard.sweptCount + Number(scored.swept),
-      shakeArmed: false,
     },
-    roundSettlementBonus: state.roundSettlementBonus + scored.settlementBonus,
     roundSubmissionIndex: state.roundSubmissionIndex + 1,
     scoredMonthsThisRound: [...new Set([
       ...state.scoredMonthsThisRound,
@@ -1287,20 +1266,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           `${card?.name ?? "9월 술잔"} → ${action.role === "animal" ? "동물 1장" : "피 2점"}`,
         ),
       };
-    }
-    case "RESOLVE_SHAKE": {
-      if (!state.pendingShakeChoice) return state;
-      const armed: GameState = {
-        ...state,
-        pendingShakeChoice: false,
-        shakeChoice: action.choice,
-        talismans: action.choice === "shake"
-          ? state.talismans.map((item) => item.definitionId === "t_shake_iron"
-              ? { ...item, growth: item.growth + 1 }
-              : item)
-          : state.talismans,
-      };
-      return submitHand(armed);
     }
     case "SUBMIT_HAND":
       return submitHand(state);
