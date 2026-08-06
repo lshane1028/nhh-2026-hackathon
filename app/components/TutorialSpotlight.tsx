@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import "./screen-ui.css";
 
@@ -26,14 +26,47 @@ interface Rect {
   height: number;
 }
 
-const PADDING = 8;
+interface Layout {
+  hole: Rect | null;
+  callout: { top: number; left: number };
+}
+
+const HOLE_PADDING = 8;
+const EDGE_MARGIN = 12;
+const GAP = 14;
 
 /**
- * Dims the screen and cuts a hole around one element, so only that element is
- * visible and clickable. The hole is a huge outward box-shadow rather than an
- * overlay with a gap, which keeps it to a single element and stays crisp while
- * the target moves.
+ * Places the callout beside the hole, then clamps it into the viewport on both
+ * axes using its real size. Without the clamp a highlight near an edge — the
+ * collection rail especially — pushes the Next button off screen.
  */
+function placeCallout(hole: Rect | null, size: { width: number; height: number }): { top: number; left: number } {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const { width, height } = size;
+
+  const clamp = (top: number, left: number) => ({
+    top: Math.round(Math.min(Math.max(top, EDGE_MARGIN), Math.max(EDGE_MARGIN, vh - height - EDGE_MARGIN))),
+    left: Math.round(Math.min(Math.max(left, EDGE_MARGIN), Math.max(EDGE_MARGIN, vw - width - EDGE_MARGIN))),
+  });
+
+  if (!hole) return clamp((vh - height) / 2, (vw - width) / 2);
+
+  const roomBelow = vh - (hole.top + hole.height);
+  const roomAbove = hole.top;
+  const roomLeft = hole.left;
+  const roomRight = vw - (hole.left + hole.width);
+  const needed = height + GAP + EDGE_MARGIN;
+  const neededSide = width + GAP + EDGE_MARGIN;
+
+  if (roomBelow >= needed) return clamp(hole.top + hole.height + GAP, hole.left);
+  if (roomAbove >= needed) return clamp(hole.top - height - GAP, hole.left);
+  // Tall targets such as the collection rail: sit beside them instead.
+  if (roomLeft >= neededSide) return clamp(hole.top, hole.left - width - GAP);
+  if (roomRight >= neededSide) return clamp(hole.top, hole.left + hole.width + GAP);
+  return clamp((vh - height) / 2, (vw - width) / 2);
+}
+
 export function TutorialSpotlight({
   target,
   step,
@@ -45,28 +78,44 @@ export function TutorialSpotlight({
   onNext,
   onSkip,
 }: TutorialSpotlightProps) {
-  const [rect, setRect] = useState<Rect | null>(null);
+  const calloutRef = useRef<HTMLDivElement>(null);
+  const [layout, setLayout] = useState<Layout>({ hole: null, callout: { top: 0, left: 0 } });
 
+  // One loop measures the target and positions the callout, so the two never
+  // disagree and a moving target keeps its highlight.
   useLayoutEffect(() => {
     let frame = 0;
+    let previous = "";
 
-    const measure = () => {
+    const tick = () => {
       const node = document.querySelector<HTMLElement>(`[data-tutorial="${target}"]`);
-      if (!node) {
-        setRect(null);
-      } else {
+      let hole: Rect | null = null;
+      if (node) {
         const box = node.getBoundingClientRect();
-        setRect({
-          top: box.top - PADDING,
-          left: box.left - PADDING,
-          width: box.width + PADDING * 2,
-          height: box.height + PADDING * 2,
-        });
+        if (box.width > 0 && box.height > 0) {
+          hole = {
+            top: box.top - HOLE_PADDING,
+            left: box.left - HOLE_PADDING,
+            width: box.width + HOLE_PADDING * 2,
+            height: box.height + HOLE_PADDING * 2,
+          };
+        }
       }
-      frame = window.requestAnimationFrame(measure);
+      const calloutBox = calloutRef.current?.getBoundingClientRect();
+      const callout = placeCallout(hole, {
+        width: calloutBox?.width || 352,
+        height: calloutBox?.height || 200,
+      });
+
+      const key = JSON.stringify({ hole, callout });
+      if (key !== previous) {
+        previous = key;
+        setLayout({ hole, callout });
+      }
+      frame = window.requestAnimationFrame(tick);
     };
 
-    measure();
+    tick();
     return () => window.cancelAnimationFrame(frame);
   }, [target]);
 
@@ -76,29 +125,26 @@ export function TutorialSpotlight({
     return () => node?.classList.remove("tutorial-target");
   }, [target]);
 
-  // Put the callout on whichever side of the hole has more room.
-  const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
-  const below = rect ? rect.top + rect.height : viewportHeight / 2;
-  const placeBelow = !rect || below < viewportHeight * 0.55;
-
   return (
     <div className="tutorial-spotlight" role="dialog" aria-modal="true" aria-label={title}>
-      {rect ? (
+      {layout.hole ? (
         <div
           className="tutorial-spotlight__hole"
-          style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
+          style={{
+            top: layout.hole.top,
+            left: layout.hole.left,
+            width: layout.hole.width,
+            height: layout.hole.height,
+          }}
         />
       ) : (
         <div className="tutorial-spotlight__scrim" />
       )}
 
       <div
-        className={`tutorial-spotlight__callout tutorial-spotlight__callout--${placeBelow ? "below" : "above"}`}
-        style={rect
-          ? placeBelow
-            ? { top: rect.top + rect.height + 14, left: Math.max(12, Math.min(rect.left, (typeof window === "undefined" ? 1200 : window.innerWidth) - 360)) }
-            : { bottom: viewportHeight - rect.top + 14, left: Math.max(12, Math.min(rect.left, (typeof window === "undefined" ? 1200 : window.innerWidth) - 360)) }
-          : undefined}
+        ref={calloutRef}
+        className="tutorial-spotlight__callout"
+        style={{ top: layout.callout.top, left: layout.callout.left }}
       >
         <div className="tutorial-spotlight__meta">
           <strong>길잡이</strong>

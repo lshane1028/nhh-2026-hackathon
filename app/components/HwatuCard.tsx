@@ -1,5 +1,6 @@
 "use client";
 
+import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
 import type { CardInstance, CardKind } from "@/game/types";
 
 export type HwatuCupRole = "animal" | "double_chaff";
@@ -102,6 +103,7 @@ export function HwatuCard({
     ariaLabel ??
     `${card.month}월 ${card.name}, ${kindLabel}, 월값 ${monthValue}${selected ? ", 선택됨" : ""}${isDisabled ? ", 사용 불가" : ""}`;
 
+  const effectTag = card.effectTagId ? CARD_EFFECT_TAG_BY_ID[card.effectTagId] : undefined;
   const modifierLabels = [
     card.enhancement ? ENHANCEMENT_LABELS[card.enhancement] : null,
     card.edition ? EDITION_LABELS[card.edition] : null,
@@ -119,11 +121,13 @@ export function HwatuCard({
       </span>
 
       <span className="hwatu-card__corner" aria-hidden="true">{card.month}</span>
+      {effectTag ? <span className="hwatu-card__effect" aria-hidden="true">효</span> : null}
 
       <span className="hwatu-card__hint" role="tooltip">
         <b>{card.month}월 {monthValue > card.month ? `+${monthValue - card.month}` : ""}</b>
         <em>{kindLabel}{ribbonLabel ? ` · ${ribbonLabel}` : ""}</em>
         <i>월값 {monthValue}</i>
+        {effectTag ? <u>{effectTag.name} · {effectTag.description}</u> : null}
         {modifierLabels.length > 0 ? <u>{modifierLabels.join(" · ")}</u> : null}
         {isDisabled ? <s>이번 판 사용 불가</s> : null}
       </span>
@@ -147,6 +151,7 @@ export function HwatuCard({
     `월값 ${monthValue}`,
     ribbonLabel,
     ...modifierLabels,
+    effectTag ? `${effectTag.name}: ${effectTag.description}` : "",
     card.tags.map((tag) => `#${tag}`).join(" "),
   ]
     .filter(Boolean)

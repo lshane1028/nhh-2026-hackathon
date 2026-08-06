@@ -106,6 +106,129 @@ describe("playable run reducer", () => {
     expect(bust.stats.goFailures).toBe(1);
   });
 
+  it("opens a card pack into picks that land in the deck with an effect tag", () => {
+    const base = createInitialGameState("PACK-SMOKE");
+    const shop = {
+      ...base,
+      runId: "pack-smoke",
+      screen: "shop" as const,
+      money: 99,
+      shopOffers: [{
+        offerId: "offer-pack",
+        category: "pack" as const,
+        definitionId: "pack_hwatu_large",
+        price: 7,
+        sold: false,
+      }],
+    };
+    const deckBefore = shop.deck.length;
+
+    const opened = gameReducer(shop, { type: "BUY_OFFER", offerId: "offer-pack" });
+    expect(opened.pendingPack?.picksLeft).toBe(2);
+    expect(opened.pendingPack?.candidates).toHaveLength(5);
+    // Every candidate carries a label-only effect tag.
+    expect(opened.pendingPack?.candidates.every((card) => Boolean(card.effectTagId))).toBe(true);
+    expect(opened.deck).toHaveLength(deckBefore);
+    expect(opened.money).toBe(92);
+
+    const first = opened.pendingPack!.candidates[0];
+    const afterFirst = gameReducer(opened, { type: "PICK_PACK_CARD", instanceId: first.instanceId });
+    expect(afterFirst.deck).toHaveLength(deckBefore + 1);
+    expect(afterFirst.pendingPack?.picksLeft).toBe(1);
+    expect(afterFirst.pendingPack?.candidates).toHaveLength(4);
+
+    const second = afterFirst.pendingPack!.candidates[0];
+    const afterSecond = gameReducer(afterFirst, { type: "PICK_PACK_CARD", instanceId: second.instanceId });
+    expect(afterSecond.deck).toHaveLength(deckBefore + 2);
+    // Picks exhausted, so the prompt closes on its own.
+    expect(afterSecond.pendingPack).toBeNull();
+  });
+
+  it("keeps the hand sorted and switches between month and kind order", () => {
+    const deck = createStandardHwatuDeck();
+    const messy = [
+      deck.find((card) => card.month === 9 && card.kind === "chaff")!,
+      deck.find((card) => card.month === 1 && card.kind === "bright")!,
+      deck.find((card) => card.month === 5 && card.kind === "animal")!,
+      deck.find((card) => card.month === 3 && card.kind === "ribbon")!,
+      deck.find((card) => card.month === 1 && card.kind === "chaff")!,
+    ];
+    const base = { ...createInitialGameState("SORT"), screen: "play" as const, deck, hand: messy };
+
+    const byMonth = gameReducer(base, { type: "SET_HAND_SORT", mode: "month" });
+    expect(byMonth.hand.map((card) => card.month)).toEqual([1, 1, 3, 5, 9]);
+    // Ties inside a month fall back to 광 → 동물 → 띠 → 피.
+    expect(byMonth.hand.slice(0, 2).map((card) => card.kind)).toEqual(["bright", "chaff"]);
+
+    const byKind = gameReducer(byMonth, { type: "SET_HAND_SORT", mode: "kind" });
+    expect(byKind.hand.map((card) => card.kind)).toEqual([
+      "bright", "animal", "ribbon", "chaff", "chaff",
+    ]);
+    expect(byKind.hand.slice(3).map((card) => card.month)).toEqual([1, 9]);
+    expect(byKind.handSort).toBe("kind");
+  });
+
+  it("refuses to discard a stubborn card even when bundled with others", () => {
+    const deck = createStandardHwatuDeck();
+    const stubborn = { ...deck[0], effectTagId: "stubborn" };
+    const plain = deck[1];
+    const hand = [stubborn, plain];
+    const base = {
+      ...createInitialGameState("STUBBORN"),
+      runId: "stubborn",
+      screen: "play" as const,
+      deck: [stubborn, ...deck.slice(1)],
+      hand,
+      drawPile: deck.slice(2),
+      selectedCardIds: hand.map((card) => card.instanceId),
+    };
+
+    const discarded = gameReducer(base, { type: "DISCARD_SELECTED" });
+    // The plain card goes, the stubborn one stays in hand.
+    expect(discarded.hand.some((card) => card.instanceId === stubborn.instanceId)).toBe(true);
+    expect(discarded.usedPile.map((card) => card.instanceId)).toEqual([plain.instanceId]);
+
+    // Selecting only the stubborn card spends nothing at all.
+    const onlyStubborn = gameReducer(
+      { ...base, selectedCardIds: [stubborn.instanceId] },
+      { type: "DISCARD_SELECTED" },
+    );
+    expect(onlyStubborn.discardsRemaining).toBe(base.discardsRemaining);
+    expect(onlyStubborn.hand).toHaveLength(2);
+  });
+
+  it("asks 흔들기 or 폭탄 before scoring three cards of one month", () => {
+    const deck = createStandardHwatuDeck();
+    const three = deck.filter((card) => card.month === 1).slice(0, 3);
+    const base = {
+      ...createInitialGameState("SHAKE"),
+      runId: "shake",
+      screen: "play" as const,
+      deck,
+      hand: three,
+      drawPile: deck.filter((card) => !three.some((s) => s.instanceId === card.instanceId)),
+      selectedCardIds: three.map((card) => card.instanceId),
+      yard: { cards: [], sweptCount: 0, shakeArmed: false },
+      targetScore: 10_000,
+    };
+
+    // The first submit only opens the prompt — nothing is scored yet.
+    const asked = gameReducer(base, { type: "SUBMIT_HAND" });
+    expect(asked.pendingShakeChoice).toBe(true);
+    expect(asked.lastScore).toBeNull();
+    expect(asked.handsRemaining).toBe(base.handsRemaining);
+
+    const bombed = gameReducer(asked, { type: "RESOLVE_SHAKE", choice: "bomb" });
+    const shaken = gameReducer(asked, { type: "RESOLVE_SHAKE", choice: "shake" });
+    expect(bombed.pendingShakeChoice).toBe(false);
+    expect(bombed.shakeChoice).toBeNull();
+    expect(bombed.handsRemaining).toBe(base.handsRemaining - 1);
+
+    // 폭탄 pays as month sum now; 흔들기 pays as purse at settlement.
+    expect(bombed.lastScore!.finalKkeut).toBeGreaterThan(shaken.lastScore!.finalKkeut);
+    expect(shaken.roundSettlementBonus).toBeGreaterThan(bombed.roundSettlementBonus);
+  });
+
   it("toggles only the clicked cards and preserves the five-card cap", () => {
     const deck = createStandardHwatuDeck();
     const hand = deck.slice(0, 6);
@@ -238,11 +361,16 @@ describe("playable run reducer", () => {
     };
     const shop = gameReducer(reward, { type: "CONTINUE_AFTER_REWARD" });
     expect(shop.screen).toBe("shop");
-    // One card from each of the four shops, plus a pack.
-    expect(shop.shopOffers).toHaveLength(5);
-    expect(new Set(shop.shopOffers.map((offer) => offer.category))).toEqual(
-      new Set(["talisman", "painter", "book", "forbidden", "pack"]),
-    );
+    // Four departments: 부적전 2, 비결서점 2, 덱 손질방 (묶음 2 + 소각 1), 금단장 1.
+    const byCategory = shop.shopOffers.reduce<Record<string, number>>((counts, offer) => {
+      counts[offer.category] = (counts[offer.category] ?? 0) + 1;
+      return counts;
+    }, {});
+    expect(byCategory).toEqual({ talisman: 2, book: 2, forbidden: 1, pack: 2, painter: 1 });
+    // The workshop only ever stocks the burn painter, never the month edits.
+    expect(
+      shop.shopOffers.filter((offer) => offer.category === "painter").map((offer) => offer.definitionId),
+    ).toEqual(["p_burn"]);
     const contract = gameReducer(shop, { type: "NEXT_STAGE" });
     expect(contract.screen).toBe("contract");
     expect(contract.contractChoices).toHaveLength(2);

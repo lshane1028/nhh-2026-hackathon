@@ -7,8 +7,9 @@ import { CONTRACTS, WEATHER_BY_ID } from "@/game/content/meta";
 import { getStageDefinition } from "@/game/content/stages";
 import { TALISMAN_BY_ID } from "@/game/content/talismans";
 import { ALL_IMMEDIATE_YAKU_DEFINITIONS } from "@/game/content/yaku";
+import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
 import { calculateCollectionBonus, GODORI_MONTHS } from "@/game/engine/collection-bonus";
-import { canDeclareGo, getGoRequirement, getGoRewardFactor } from "@/game/engine/go";
+import { canDeclareGo, getGoRewardFactor } from "@/game/engine/go";
 import { canDeclareShake } from "@/game/engine/experimental";
 import { findImmediateYakuCandidates } from "@/game/engine/yaku";
 import {
@@ -16,6 +17,7 @@ import {
   evaluateSelectedHand,
   gameReducer,
   getRoundRequirement,
+  getNextGoRequirement,
   mustDeclareGo,
   getDefinitionForOffer,
   getEffectiveTalismanSlots,
@@ -396,6 +398,11 @@ export default function GameApp() {
         <p className="market-shell__caption">{caption}</p>
       </header>
       <main className="market-shell__body">{children}</main>
+      <PackPickModal
+        pack={state.pendingPack}
+        onPick={(instanceId) => dispatch({ type: "PICK_PACK_CARD", instanceId })}
+        onClose={() => dispatch({ type: "CLOSE_PACK" })}
+      />
       {tutorialStep ? (
         <TutorialSpotlight
           target={tutorialStep.step.target}
@@ -588,9 +595,7 @@ export default function GameApp() {
   const requirement = getRoundRequirement(state);
   const remainingToClear = Math.max(0, requirement - state.chain.roundScore);
   const goAvailable = canDeclareGo(state.chain, state.handsRemaining);
-  const nextGoRequirement = goAvailable
-    ? getGoRequirement(state.targetScore, state.chain.goCount + 1)
-    : null;
+  const nextGoRequirement = getNextGoRequirement(state);
   const goRequired = mustDeclareGo(state);
   const baseReward = Math.floor(
     (3 + Math.ceil(state.stage / 2) + state.handsRemaining) * getGoRewardFactor(state.chain.goCount),
@@ -604,37 +609,9 @@ export default function GameApp() {
 
   return (
     <div className="play-shell">
-      <PlayRail
-        assetTag={`ui:rail:month-${stage.month}`}
-        stageAssetTag={stage.assetTag}
-        stageLabel={`${stage.month}월 · ${stage.name}`}
-        stageSubtitle={stage.subtitle}
-        weatherLabel={`날씨 ${WEATHER_BY_ID[state.weatherId].name}`}
-        bossLabel={boss?.name ?? null}
-        targetScore={state.targetScore}
-        rewardLabel={`${3 + Math.ceil(state.stage / 2)}냥 +`}
-        roundScore={state.chain.roundScore}
-        goCount={state.chain.goCount}
-        breakdown={shownBreakdown}
-        formulaCaption={
-          shownBreakdown
-            ? isDecision
-              ? "방금 낸 점수"
-              : `월 합 × 배수 · 득점 ${shownBreakdown.scoringCardIds.length}장`
-            : state.selectedCardIds.length
-              ? "이 조합으로 만들 수 있는 족보가 없습니다"
-              : "카드를 고르면 최고점 족보가 자동으로 붙습니다"
-        }
-        handsRemaining={state.handsRemaining}
-        discardsRemaining={state.discardsRemaining}
-        money={state.money}
-        stageIndex={state.stage}
-        stageTotal={12}
-        seed={state.seed}
-        onOpenDeck={() => dispatch({ type: "OPEN_SCREEN", screen: "deck_editor" })}
-        onOpenRules={() => setRulesOpen(true)}
-        onRestart={() => setRestartOpen(true)}
-      />
+      <aside className="play-side" data-tutorial="collection">
+        <CollectionBoard assetTag="ui:collection-board" items={collections} />
+      </aside>
 
       <main className="play-board">
         <div className="play-board__top" data-tutorial="talisman">
@@ -642,7 +619,7 @@ export default function GameApp() {
         </div>
 
         {state.chain.goCount > 0 && !isDecision ? (
-          <aside className="go-danger-banner" role="status">
+          <aside className="go-danger-banner" role="status" data-tutorial="go-banner">
             <strong>{state.chain.goCount}고 진행 중</strong>
             <span>
               {format(requirement)}점 문턱까지 {format(remainingToClear)}점 남음 · 못 넘기면 런이 끝납니다
@@ -656,6 +633,26 @@ export default function GameApp() {
               ? `${format(state.chain.roundScore)}점 · 문턱 ${format(requirement)}점을 넘겼습니다`
               : "손패를 눌러 최대 5장까지 고르세요"}
           </p>
+
+          <div className="hand-sort" role="group" aria-label="손패 정렬" data-tutorial="sort">
+            <span>정렬</span>
+            <button
+              type="button"
+              className={state.handSort === "month" ? "active" : ""}
+              aria-pressed={state.handSort === "month"}
+              onClick={() => dispatch({ type: "SET_HAND_SORT", mode: "month" })}
+            >
+              월 순
+            </button>
+            <button
+              type="button"
+              className={state.handSort === "kind" ? "active" : ""}
+              aria-pressed={state.handSort === "kind"}
+              onClick={() => dispatch({ type: "SET_HAND_SORT", mode: "kind" })}
+            >
+              광·동물·띠·피
+            </button>
+          </div>
 
           <div className="play-board__stage">
             <ul className="hand-fan" aria-label="내 손패" data-tutorial="hand" style={{ "--n": state.hand.length } as React.CSSProperties}>
@@ -700,8 +697,7 @@ export default function GameApp() {
         {state.screen === "play" ? (
           <footer className="hand-actions">
             <button type="button" disabled={!state.selectedCardIds.length} onClick={() => dispatch({ type: "CLEAR_SELECTION" })}>선택 해제</button>
-            {state.experimentalRules.bombsAndShake ? <button type="button" disabled={!shakeReady} className={state.yard.shakeArmed ? "active" : ""} data-tutorial="shake" onClick={() => dispatch({ type: "DECLARE_SHAKE" })}>흔들기</button> : null}
-            <button type="button" className="primary-action" disabled={!preview || state.handsRemaining <= 0} data-tutorial="submit" onClick={() => dispatch({ type: "SUBMIT_HAND" })}><strong>족보 제출</strong><span>{state.handsRemaining}회 남음</span></button>
+            <button type="button" className="primary-action" disabled={!preview || state.handsRemaining <= 0} data-tutorial="submit" onClick={() => dispatch({ type: "SUBMIT_HAND" })}><strong>족보 제출</strong><span>{shakeReady ? "흔들기 · 폭탄 선택" : `${state.handsRemaining}회 남음`}</span></button>
             <button type="button" className="discard-action" disabled={!state.selectedCardIds.length || state.discardsRemaining <= 0} data-tutorial="discard" onClick={() => dispatch({ type: "DISCARD_SELECTED" })}><strong>버리기</strong><span>{state.discardsRemaining}회 남음</span></button>
           </footer>
         ) : (
@@ -740,10 +736,43 @@ export default function GameApp() {
         )}
       </main>
 
-      <aside className="play-side" data-tutorial="collection">
-        <CollectionBoard assetTag="ui:collection-board" items={collections} />
-      </aside>
+      <PlayRail
+        assetTag={`ui:rail:month-${stage.month}`}
+        stageAssetTag={stage.assetTag}
+        stageLabel={`${stage.month}월 · ${stage.name}`}
+        stageSubtitle={stage.subtitle}
+        weatherLabel={`날씨 ${WEATHER_BY_ID[state.weatherId].name}`}
+        bossLabel={boss?.name ?? null}
+        targetScore={requirement}
+        rewardLabel={`${baseReward}냥`}
+        roundScore={state.chain.roundScore}
+        goCount={state.chain.goCount}
+        breakdown={shownBreakdown}
+        formulaCaption={
+          shownBreakdown
+            ? isDecision
+              ? "방금 낸 점수"
+              : `월 합 × 배수 · 득점 ${shownBreakdown.scoringCardIds.length}장`
+            : state.selectedCardIds.length
+              ? "이 조합으로 만들 수 있는 족보가 없습니다"
+              : "카드를 고르면 최고점 족보가 자동으로 붙습니다"
+        }
+        handsRemaining={state.handsRemaining}
+        discardsRemaining={state.discardsRemaining}
+        money={state.money}
+        stageIndex={state.stage}
+        stageTotal={12}
+        seed={state.seed}
+        onOpenDeck={() => dispatch({ type: "OPEN_SCREEN", screen: "deck_editor" })}
+        onOpenRules={() => setRulesOpen(true)}
+        onRestart={() => setRestartOpen(true)}
+      />
 
+      <ShakeChoiceModal
+        open={state.pendingShakeChoice}
+        month={selectedCards[0]?.month ?? 0}
+        onChoose={(choice) => dispatch({ type: "RESOLVE_SHAKE", choice })}
+      />
       <CupChoiceModal
         card={pendingCupCard}
         onChoose={(role) => {
@@ -768,6 +797,86 @@ export default function GameApp() {
       <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />
       <GameModal id="restart-run" open={restartOpen} assetTag="ui:warning:restart" title="현재 런을 끝낼까요?" description="저장된 달력과 덱이 초기화됩니다." onClose={() => setRestartOpen(false)} actions={[{ id: "cancel", label: "계속 플레이", onClick: () => setRestartOpen(false) }, { id: "reset", label: "제목으로", variant: "danger", onClick: resetToTitle }]} />
     </div>
+  );
+}
+
+/** Card pack payout: pick N of the candidates, each carrying an effect tag. */
+function PackPickModal({ pack, onPick, onClose }: {
+  pack: GameState["pendingPack"];
+  onPick: (instanceId: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <GameModal
+      id="pack-pick"
+      open={Boolean(pack)}
+      assetTag={`pack:${pack?.packId ?? "hwatu"}`}
+      title={pack ? `${pack.name} · ${pack.picksLeft}장 더 고르세요` : "묶음"}
+      description="고른 카드는 덱에 영구히 들어갑니다. 각 카드에 붙은 효과는 그 카드가 손에 들어올 때마다 따라옵니다."
+      closeOnBackdrop={false}
+      closeLabel="그만 고르기"
+      onClose={onClose}
+      actions={[{ id: "close", label: "그만 고르기", onClick: onClose }]}
+    >
+      <ul className="pack-picks" data-tutorial="pack-picks">
+        {pack?.candidates.map((card) => {
+          const tag = card.effectTagId ? CARD_EFFECT_TAG_BY_ID[card.effectTagId] : undefined;
+          return (
+            <li key={card.instanceId}>
+              <button type="button" className="pack-pick" onClick={() => onPick(card.instanceId)}>
+                <span className="pack-pick__art" data-asset-tag={card.assetTag}>
+                  <span aria-hidden="true">IMG</span>
+                  <b>{card.month}</b>
+                </span>
+                <strong>{card.month}월 {card.monthName}</strong>
+                <span className="pack-pick__kind">{card.name}</span>
+                {tag ? (
+                  <span className="pack-pick__tag">
+                    <b>{tag.name}</b>
+                    <em>{tag.description}</em>
+                  </span>
+                ) : null}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </GameModal>
+  );
+}
+
+/** Three of one month pays out either as purse growth or as raw month sum. */
+function ShakeChoiceModal({ open, month, onChoose }: {
+  open: boolean;
+  month: number;
+  onChoose: (choice: "shake" | "bomb") => void;
+}) {
+  return (
+    <GameModal
+      id="shake-choice"
+      open={open}
+      assetTag="ui:shake:three-of-a-month"
+      title={`${month}월 세 장 · 어떻게 쓸까요?`}
+      description="같은 월 세 장을 냈습니다. 한 번만 고를 수 있고, 고른 뒤 바로 제출됩니다."
+      closeOnBackdrop={false}
+      closeLabel="흔들기"
+      onClose={() => onChoose("shake")}
+      actions={[
+        { id: "shake", label: "흔들기 · 판돈 +20%", variant: "primary", onClick: () => onChoose("shake") },
+        { id: "bomb", label: "폭탄 · 월 합 +24", variant: "primary", onClick: () => onChoose("bomb") },
+      ]}
+    >
+      <div className="rules-copy" data-tutorial="shake">
+        <section>
+          <h3>흔들기</h3>
+          <p>이번 판을 이겼을 때 받는 <strong>판돈이 20% 늘어납니다</strong>. 점수는 그대로라 목표를 넉넉히 넘길 자신이 있을 때 유리합니다.</p>
+        </section>
+        <section>
+          <h3>폭탄</h3>
+          <p>이번 손의 <strong>월 합에 +24</strong>가 붙습니다. 배수가 큰 상태라면 그대로 점수로 곱해집니다. 목표가 빠듯할 때 유리합니다.</p>
+        </section>
+      </div>
+    </GameModal>
   );
 }
 
@@ -812,7 +921,8 @@ function RulesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
         <section><h3>2. 족보는 자동 적용</h3><p>선택한 카드로 만들 수 있는 족보 중 점수가 가장 높은 것이 자동으로 적용됩니다. 어떤 족보가 붙었는지는 손패 아래에 표시됩니다.</p></section>
         <section><h3>3. 월 합 × 배수</h3><p>족보에 들어간 카드의 월 숫자 합이 앞 숫자, 족보와 광·동물·고도리·띠·피 수집 및 부적이 만든 값이 배수입니다. 9월 술잔은 점수를 낸 뒤 동물과 피 중 어디에 기록할지 직접 고릅니다.</p></section>
         <section><h3>4. 고 · 스톱</h3><p>제출한 점수는 이번 판에 계속 쌓입니다. 목표를 넘긴 순간에만 고와 스톱을 고릅니다. 스톱은 지금 판돈을 받고 끝내고, 고는 문턱을 1.5배 → 2.2배 → 3.2배로 올리는 대신 판돈을 1.5배 → 2.25배 → 3.4배로 불립니다. 남은 제출로 그 문턱을 못 넘기면 런이 끝납니다.</p></section>
-        <section><h3>5. 덱빌딩</h3><p>모든 런은 기본 48장으로 시작합니다. 매달 장터에서 부적·족보 성장·영구 카드 강화·금단 계약을 골라 나만의 덱으로 바꿉니다.</p></section>
+        <section><h3>5. 같은 월 세 장</h3><p>같은 월 카드 세 장을 제출하면 흔들기(판돈 +20%)와 폭탄(월 합 +24) 중 하나를 고릅니다.</p></section>
+        <section><h3>6. 덱빌딩</h3><p>모든 런은 기본 48장으로 시작합니다. 매달 장터에서 부적·족보 성장·덱 손질·금단 계약을 골라 나만의 덱으로 바꿉니다.</p></section>
       </div>
     </GameModal>
   );

@@ -325,17 +325,36 @@ describe("Go as an end-of-round bet", () => {
 
   it("raises the bar on each Go and caps at three", () => {
     expect(getGoRequirement(1_000, 0)).toBe(1_000);
-    expect(getGoRequirement(1_000, 1)).toBe(1_500);
-    expect(getGoRequirement(1_000, 2)).toBe(2_200);
-    expect(getGoRequirement(1_000, 3)).toBe(3_200);
-    expect(getGoRequirement(1_000, 1, 1.1)).toBe(1_650);
+    expect(getGoRequirement(1_000, 1)).toBe(1_800);
+    expect(getGoRequirement(1_000, 2)).toBe(2_800);
+    expect(getGoRequirement(1_000, 3)).toBe(4_200);
+    expect(getGoRequirement(1_000, 1, 1.1)).toBe(1_980);
 
     let round = createGoChainState();
     expect(canDeclareGo(round, 2)).toBe(true);
-    round = declareGo(declareGo(declareGo(round)));
+    round = declareGo(declareGo(declareGo(round, 1_000), 1_000), 1_000);
     expect(round.goCount).toBe(3);
     expect(canDeclareGo(round, 2)).toBe(false);
-    expect(() => declareGo(round)).toThrow();
+    expect(() => declareGo(round, 1_000)).toThrow();
+  });
+
+  it("never lets an overshoot make the next Go free", () => {
+    // Clearing 1000 with a single 2500-point hand used to sit above the 1고 bar
+    // already, so calling Go cost nothing. The bar now grows off the score too.
+    expect(getGoRequirement(1_000, 1, 1, 2_500)).toBe(3_750);
+    expect(getGoRequirement(1_000, 1, 1, 500)).toBe(1_800);
+
+    const huge = addHandToRound(createGoChainState(), 2_500);
+    const went = declareGo(huge, 1_000);
+    expect(went.goRequirement).toBe(3_750);
+    expect(isRequirementCleared(went, went.goRequirement!)).toBe(false);
+  });
+
+  it("locks the bar in at declaration so later scoring cannot move it", () => {
+    const round = declareGo(addHandToRound(createGoChainState(), 1_000), 1_000);
+    const bar = round.goRequirement;
+    const scoredMore = addHandToRound(round, 900);
+    expect(scoredMore.goRequirement).toBe(bar);
   });
 
   it("never lets a Go be called without a hand left to play it", () => {
@@ -343,7 +362,7 @@ describe("Go as an end-of-round bet", () => {
   });
 
   it("reports whether the current bar is cleared", () => {
-    const round = addHandToRound(createGoChainState(), 1_500);
+    const round = addHandToRound(createGoChainState(), 1_900);
     expect(isRequirementCleared(round, getGoRequirement(1_000, 0))).toBe(true);
     expect(isRequirementCleared(round, getGoRequirement(1_000, 1))).toBe(true);
     expect(isRequirementCleared(round, getGoRequirement(1_000, 2))).toBe(false);
@@ -351,17 +370,18 @@ describe("Go as an end-of-round bet", () => {
 
   it("multiplies the purse by the Go level and doubles collection mastery", () => {
     expect(getGoRewardFactor(0)).toBe(1);
-    expect(getGoRewardFactor(1)).toBe(1.5);
-    expect(getGoRewardFactor(3)).toBe(3.4);
+    expect(getGoRewardFactor(1)).toBe(1.7);
+    expect(getGoRewardFactor(3)).toBe(4.2);
 
     const round = declareGo(
       addHandToRound(createGoChainState(), 2_000, {
         completedCollectionYakuIds: ["godori"],
         masteryEvents: [played, collection],
       }),
+      1_000,
     );
     const settled = settleRound(round, {});
-    expect(settled.rewardFactor).toBe(1.5);
+    expect(settled.rewardFactor).toBe(1.7);
     expect(
       settled.masteryEvents
         .filter((event) => event.yakuId === "godori")

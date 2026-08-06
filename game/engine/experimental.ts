@@ -59,10 +59,22 @@ export interface ShakeResult {
   label: string;
 }
 
-export function getShakeResult(isBomb: boolean): ShakeResult {
-  return isBomb
-    ? { settlementBonus: 0.2, bonusKkeut: 24, label: "폭탄 성공 · 월 합 +24 · 이번 승부 보너스 +20%" }
-    : { settlementBonus: 0.15, bonusKkeut: 0, label: "흔들기 선언 · 이번 승부 보너스 +15%" };
+/** What the player picks after submitting three cards of one month. */
+export type ShakeChoice = "shake" | "bomb" | null;
+
+/**
+ * Two ways to cash in the same three cards: 흔들기 grows the purse at the end
+ * of the round, 폭탄 pays out as raw month sum right now. Neither needs the
+ * yard, so the choice is always live.
+ */
+export function getShakeResult(choice: ShakeChoice): ShakeResult {
+  if (choice === "bomb") {
+    return { settlementBonus: 0, bonusKkeut: 24, label: "폭탄 · 월 합 +24" };
+  }
+  if (choice === "shake") {
+    return { settlementBonus: 0.2, bonusKkeut: 0, label: "흔들기 · 이번 판 판돈 +20%" };
+  }
+  return { settlementBonus: 0, bonusKkeut: 0, label: "" };
 }
 
 export function weatherCardModifier(card: CardInstance, weather: WeatherId): number {

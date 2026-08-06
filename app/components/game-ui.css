@@ -219,6 +219,26 @@ button.hwatu-card:hover:not(:disabled) { transform: translateY(-0.22rem); }
 }
 
 /* Hover card — holds everything the face no longer prints. */
+/* Effect-tag marker. Label only until the tags are wired to real behaviour. */
+.hwatu-card__effect {
+  position: absolute;
+  z-index: 2;
+  top: 0.28rem;
+  right: 0.28rem;
+  display: grid;
+  width: 1.05rem;
+  height: 1.05rem;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 60%);
+  border-radius: 50%;
+  background: #6b4a9c;
+  color: #f3ecff;
+  font-size: 0.56rem;
+  font-weight: 900;
+  pointer-events: none;
+}
+.hwatu-card--dense .hwatu-card__effect { width: 0.86rem; height: 0.86rem; font-size: 0.46rem; }
+
 .hwatu-card__hint {
   position: absolute;
   z-index: 60;
@@ -251,6 +271,27 @@ button.hwatu-card:hover:not(:disabled) { transform: translateY(-0.22rem); }
   background: #241f19;
   content: "";
 }
+/* Effect-tag marker. Label only until the tags are wired to real behaviour. */
+.hwatu-card__effect {
+  position: absolute;
+  z-index: 2;
+  top: 0.28rem;
+  right: 0.28rem;
+  display: grid;
+  width: 1.05rem;
+  height: 1.05rem;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 60%);
+  border-radius: 50%;
+  background: #6b4a9c;
+  color: #f3ecff;
+  font-size: 0.56rem;
+  font-weight: 900;
+  pointer-events: none;
+}
+.hwatu-card--dense .hwatu-card__effect { width: 0.86rem; height: 0.86rem; font-size: 0.46rem; }
+
+/* The hover card only appears on hover or keyboard focus. */
 .hwatu-card:hover .hwatu-card__hint,
 .hwatu-card:focus-visible .hwatu-card__hint {
   opacity: 1;
@@ -461,6 +502,30 @@ button.hwatu-card:hover:not(:disabled) { transform: translateY(-0.22rem); }
   align-items: center;
   justify-content: space-between;
   gap: 0.4rem;
+}
+
+/*
+  IMAGE SLOT for the track's own picture.
+    .collection-board__icon[data-asset-tag="collection:bright-five-slots"] {
+      background-image: url("/assets/collection/bright.webp");
+    }
+*/
+.collection-board__icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px dashed color-mix(in srgb, var(--track-color) 50%, var(--game-line));
+  border-radius: 0.4rem;
+  background-color: color-mix(in srgb, var(--game-paper) 70%, white);
+  background-position: center;
+  background-size: cover;
+}
+.collection-board__icon > span {
+  color: var(--game-muted);
+  font: 700 0.4rem/1 var(--font-geist-mono, monospace);
 }
 
 .collection-board__track-heading > div {

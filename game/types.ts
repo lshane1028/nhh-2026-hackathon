@@ -42,6 +42,11 @@ export interface CardInstance extends Omit<CardTemplate, "month" | "kind" | "rib
   edition?: EditionId;
   seal?: SealId;
   disabledForRound?: boolean;
+  /**
+   * Label only — see game/content/card-effects.ts. The scoring engine does not
+   * read this yet, so a tagged card behaves exactly like a plain one.
+   */
+  effectTagId?: string;
 }
 
 export type ImmediateYakuId =
@@ -327,6 +332,11 @@ export interface GoChainState {
   roundScore: number;
   /** How many times Go has been called this round, 0 to 3. */
   goCount: 0 | 1 | 2 | 3;
+  /**
+   * The bar locked in when Go was called. null before any Go, when the bar is
+   * simply the stage target.
+   */
+  goRequirement: number | null;
   collection: CollectionState;
   mastery: MasteryEvent[];
 }
@@ -356,6 +366,13 @@ export type ScreenId =
   | "codex"
   | "run_win"
   | "run_lose";
+
+export interface PendingPack {
+  packId: string;
+  name: string;
+  picksLeft: number;
+  candidates: CardInstance[];
+}
 
 export interface ShopOffer {
   offerId: string;
@@ -421,6 +438,8 @@ export interface GameState {
   hand: CardInstance[];
   usedPile: CardInstance[];
   selectedCardIds: string[];
+  /** How the hand is laid out: by month, or grouped 광/동물/띠/피. */
+  handSort: "month" | "kind";
   /**
    * Per-instance September cup roles. The player files each cup card onto the
    * collection board after scoring, so there is no round-wide cup role.
@@ -428,6 +447,10 @@ export interface GameState {
   cupAssignments: Record<string, "animal" | "double_chaff">;
   /** Set while a submitted cup card is waiting for its collection choice. */
   pendingCupCardId: string | null;
+  /** True while a three-of-a-month submission waits for 흔들기 or 폭탄. */
+  pendingShakeChoice: boolean;
+  /** The pick made for the hand being submitted right now. */
+  shakeChoice: "shake" | "bomb" | null;
   handsRemaining: number;
   discardsRemaining: number;
   handSize: number;
@@ -447,6 +470,8 @@ export interface GameState {
   unlockedSecretYakuIds: ImmediateYakuId[];
   shopOffers: ShopOffer[];
   shopType: "talisman" | "painter" | "book" | "forbidden" | null;
+  /** A bought card pack waiting for the player to take their picks. */
+  pendingPack: PendingPack | null;
   rerollCost: number;
   pendingConsumableId: string | null;
   pendingTargetIds: string[];

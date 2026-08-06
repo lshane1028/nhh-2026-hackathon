@@ -95,6 +95,10 @@ export function CollectionBoard({
                 key={item.id}
               >
                 <div className="collection-board__track-heading">
+                  {/* Image slot for the track's own picture. */}
+                  <span className="collection-board__icon" data-asset-tag={item.assetTag}>
+                    <span aria-hidden="true">IMG</span>
+                  </span>
                   <div>
                     <strong>{item.name}</strong>
                     {item.description ? <span>{item.description}</span> : null}
