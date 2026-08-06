@@ -117,8 +117,8 @@
 }
 .play-shell > * { min-width: 0; min-height: 0; }
 
-.play-shell button,
-.market-shell button {
+.play-shell button:not(.hwatu-card),
+.market-shell button:not(.hwatu-card) {
   min-height: 2.3rem;
   padding: 0.4rem 0.7rem;
   border: 1px solid var(--line);
@@ -128,8 +128,8 @@
   font-weight: 800;
   cursor: pointer;
 }
-.play-shell button:disabled,
-.market-shell button:disabled { cursor: not-allowed; opacity: 0.42; }
+.play-shell button:not(.hwatu-card):disabled,
+.market-shell button:not(.hwatu-card):disabled { cursor: not-allowed; opacity: 0.42; }
 .play-shell button:focus-visible,
 .market-shell button:focus-visible { outline: 3px solid #46a3ff; outline-offset: 2px; }
 .play-shell .primary-action { border-color: #6d1f19 !important; background: var(--red) !important; color: #fff6ee !important; }
@@ -297,7 +297,7 @@
 .deck-stack__back {
   display: grid;
   width: clamp(3.2rem, 4.6vw, 4.6rem);
-  aspect-ratio: 5 / 7;
+  aspect-ratio: 2 / 3;
   place-content: center;
   gap: 0.15rem;
   padding: 0.25rem;

@@ -40,6 +40,31 @@ function joinClassNames(...values: Array<string | false | undefined>): string {
   return values.filter(Boolean).join(" ");
 }
 
+function getAtlasPosition(card: CardInstance): string {
+  const row = Math.floor((card.month - 1) / 2);
+  const monthStartColumn = ((card.month - 1) % 2) * 4;
+  let cardOffset = 0;
+
+  if (card.assetTag.endsWith("chaff-a")) {
+    cardOffset = 2;
+  } else if (card.assetTag.endsWith("chaff-b")) {
+    cardOffset = 3;
+  } else if (card.month === 12) {
+    if (card.kind === "animal") cardOffset = 1;
+    else if (card.kind === "ribbon") cardOffset = 2;
+    else if (card.chaffValue === 2) cardOffset = 3;
+  } else if (
+    (card.month === 8 && card.kind === "animal") ||
+    (card.month === 11 && card.chaffValue === 2) ||
+    card.kind === "ribbon"
+  ) {
+    cardOffset = 1;
+  }
+
+  const column = monthStartColumn + cardOffset;
+  return `${(column / 7) * 100}% ${(row / 5) * 100}%`;
+}
+
 const ENHANCEMENT_LABELS: Record<
   NonNullable<CardInstance["enhancement"]>,
   string
@@ -99,6 +124,7 @@ export function HwatuCard({
   const isDisabled = disabled || Boolean(card.disabledForRound);
   const kindLabel = getCardKindLabel(card, cupRole);
   const monthValue = card.month + card.permanentKkeutBonus;
+  const atlasPosition = getAtlasPosition(card);
   const ribbonLabel = card.ribbonGroup
     ? RIBBON_LABELS[card.ribbonGroup]
     : null;
@@ -117,11 +143,12 @@ export function HwatuCard({
      hover card below, so a hand of eight reads as eight pictures. */
   const content = (
     <>
-      <span className="hwatu-card__art" data-asset-tag={card.assetTag}>
-        <span className="hwatu-card__art-mark" aria-hidden="true">IMG</span>
-        <span className="hwatu-card__art-motif" aria-hidden="true">{card.monthName}</span>
-        <code className="hwatu-card__art-tag">{card.assetTag}</code>
-      </span>
+      <span
+        className="hwatu-card__art"
+        data-asset-tag={card.assetTag}
+        style={{ backgroundPosition: atlasPosition }}
+        aria-hidden="true"
+      />
 
       <span className="hwatu-card__corner" aria-hidden="true">{card.month}</span>
       {splitRole ? (
