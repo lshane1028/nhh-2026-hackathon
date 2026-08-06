@@ -51,7 +51,7 @@ export interface EvaluatedTalismanEffects {
 }
 
 export const STRUCTURAL_TALISMAN_EFFECT_KEYS = [
-  "connect_year",
+  "five_multiple_jit",
   "cup_dual_role",
   "month_counts_as_bright",
   "borrow_yaku_level",
@@ -211,12 +211,18 @@ function effectsForDefinition(
     }
     case "yaku_add_heung": {
       const yakuIds = csvValues(params.yakuIds);
-      if (params.trigger === "shake_declared") {
-        addEffect(effects, makeEffect(talisman, definition, "add_heung", Math.max(0, finiteOr(talisman.growth))));
-      } else if (yakuIds.length === 0 || yakuIds.includes(context.candidate.yakuId)) {
+      if (yakuIds.length === 0 || yakuIds.includes(context.candidate.yakuId)) {
         // No yakuIds listed means the bonus is unconditional.
         addEffect(effects, makeEffect(talisman, definition, "add_heung", amount));
       }
+      break;
+    }
+    case "jit_add_heung": {
+      // Pays off the 짓 half of the split, so it rewards long submissions —
+      // the only lever in the game that scales with how many cards you commit.
+      const jitCards = context.candidate.jitCardIds.length;
+      const value = params.perJitCard ? amount * jitCards : jitCards > 0 ? amount : 0;
+      if (value !== 0) addEffect(effects, makeEffect(talisman, definition, "add_heung", value));
       break;
     }
     case "collection_add_heung": {
@@ -313,7 +319,7 @@ function effectsForDefinition(
     }
     case "copy_left_score":
     case "copy_neighbors":
-    case "connect_year":
+    case "five_multiple_jit":
     case "month_counts_as_bright":
     case "borrow_yaku_level":
     case "unify_month_once":
@@ -500,7 +506,7 @@ export function calculateTalismanGoFailureAdjustment(
 export interface TalismanRoundRuleModifiers {
   thresholdFactor: number;
   settlementFactor: number;
-  connectsDecemberToJanuary: boolean;
+  allowsFiveMultipleJit: boolean;
   cupHasDualRole: boolean;
   monthsCountingAsBright: Month[];
   allKindsWild: boolean;
@@ -516,7 +522,7 @@ export function calculateTalismanRoundRuleModifiers(
   const result: TalismanRoundRuleModifiers = {
     thresholdFactor: 1,
     settlementFactor: 1,
-    connectsDecemberToJanuary: false,
+    allowsFiveMultipleJit: false,
     cupHasDualRole: false,
     monthsCountingAsBright: [],
     allKindsWild: false,
@@ -529,7 +535,7 @@ export function calculateTalismanRoundRuleModifiers(
     const definition = definitions[talisman.definitionId];
     if (!definition) continue;
     const params = definition.params ?? {};
-    if (definition.effectKey === "connect_year") result.connectsDecemberToJanuary = true;
+    if (definition.effectKey === "five_multiple_jit") result.allowsFiveMultipleJit = true;
     else if (definition.effectKey === "cup_dual_role") result.cupHasDualRole = true;
     else if (definition.effectKey === "month_counts_as_bright") {
       const month = positiveInteger(params.month);

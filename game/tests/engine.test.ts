@@ -36,7 +36,16 @@ import {
   createMasteryEvents,
 } from "../engine/scoring";
 import { buildOrderedTalismanScoreEffects } from "../engine/talismans";
-import { detectNewCollectionCompletions, findImmediateYakuCandidates, validateYakuDefinitions } from "../engine/yaku";
+import {
+  MAX_SUBMISSION,
+  MIN_SUBMISSION,
+  detectNewCollectionCompletions,
+  findImmediateYakuCandidates,
+  getEffectiveMonth,
+  isValidJit,
+  judgeKkeutPair,
+  validateYakuDefinitions,
+} from "../engine/yaku";
 
 const standardDeck = createStandardHwatuDeck();
 
@@ -50,6 +59,14 @@ function takeKind(month: number, kind: CardInstance["kind"]): CardInstance {
   return take(month, (card) => card.kind === kind);
 }
 
+/** The two chaff of a month, handy whenever a test just needs "a card of month N". */
+function chaff(month: number, index = 0): CardInstance {
+  const cards = standardDeck.filter((entry) => entry.month === month && entry.kind === "chaff");
+  const card = cards[index] ?? standardDeck.find((entry) => entry.month === month);
+  if (!card) throw new Error(`Missing chaff for month ${month}`);
+  return card;
+}
+
 let cloneSerial = 0;
 function cloneCard(card: CardInstance, patch: Partial<CardInstance> = {}): CardInstance {
   cloneSerial += 1;
@@ -60,8 +77,9 @@ function ids(candidates: readonly YakuCandidate[]): Set<ImmediateYakuId> {
   return new Set(candidates.map((entry) => entry.yakuId));
 }
 
-function expectYaku(cards: readonly CardInstance[], id: ImmediateYakuId): void {
-  expect(ids(findImmediateYakuCandidates(cards))).toContain(id);
+/** Judges a bare two-card 끗패 the way the table would read it. */
+function pairId(left: CardInstance, right: CardInstance): ImmediateYakuId {
+  return judgeKkeutPair(left, right).yakuId;
 }
 
 describe("standard content registries", () => {
@@ -71,23 +89,29 @@ describe("standard content registries", () => {
     expect(new Set(standardDeck.map((card) => card.assetTag)).size).toBe(48);
   });
 
-  it("contains 13 immediate, 4 secret, and 8 collection yaku with asset tags", () => {
-    expect(IMMEDIATE_YAKU_DEFINITIONS).toHaveLength(13);
-    expect(SECRET_YAKU_DEFINITIONS).toHaveLength(4);
-    expect(ALL_IMMEDIATE_YAKU_DEFINITIONS).toHaveLength(17);
+  it("contains 11 open, 3 secret, and 8 collection yaku with asset tags", () => {
+    expect(IMMEDIATE_YAKU_DEFINITIONS).toHaveLength(11);
+    expect(SECRET_YAKU_DEFINITIONS).toHaveLength(3);
+    expect(ALL_IMMEDIATE_YAKU_DEFINITIONS).toHaveLength(14);
     expect(COLLECTION_YAKU_DEFINITIONS).toHaveLength(8);
     expect(validateYakuDefinitions()).toEqual([]);
     expect([...ALL_IMMEDIATE_YAKU_DEFINITIONS, ...COLLECTION_YAKU_DEFINITIONS].every((entry) => entry.assetTag.length > 0)).toBe(true);
   });
 
-  it("keeps yaku text and stage targets aligned with month-sum scoring", () => {
-    const allYaku = [...ALL_IMMEDIATE_YAKU_DEFINITIONS, ...COLLECTION_YAKU_DEFINITIONS];
-    expect(allYaku.every((entry) => !`${entry.name} ${entry.description}`.includes("끗"))).toBe(true);
+  it("keeps every yaku on the 배수 side, since 월 합 now comes from the 짓", () => {
     expect(ALL_IMMEDIATE_YAKU_DEFINITIONS.every((entry) => entry.baseKkeut === 0 && entry.growthKkeut === 0)).toBe(true);
     expect(COLLECTION_YAKU_DEFINITIONS.every((entry) => entry.completionKkeut === 0 && entry.growthKkeut === 0)).toBe(true);
     expect(STAGES.map((stage) => stage.target)).toEqual([
-      120, 190, 320, 520, 840, 1_400, 2_300, 3_800, 6_400, 10_800, 18_000, 30_000,
+      150, 280, 500, 850, 1_400, 2_300, 3_800, 6_300, 10_500, 17_000, 28_000, 46_000,
     ]);
+  });
+
+  it("keeps the 끗패 ladder strictly increasing", () => {
+    const ladder = IMMEDIATE_YAKU_DEFINITIONS.map((entry) => entry.baseHeung);
+    expect(ladder).toEqual([...ladder].sort((left, right) => left - right));
+    for (const secret of SECRET_YAKU_DEFINITIONS) {
+      expect(secret.baseHeung).toBeGreaterThan(Math.max(...ladder));
+    }
   });
 
   it("shuffles reproducibly without mutating the source deck", () => {
@@ -101,55 +125,94 @@ describe("standard content registries", () => {
   });
 });
 
-describe("all immediate and secret yaku", () => {
-  it("recognizes all 13 immediate patterns", () => {
-    const m1 = standardDeck.filter((card) => card.month === 1);
-    const m2 = standardDeck.filter((card) => card.month === 2);
-    expectYaku([m1[0]], "single");
-    expectYaku(m1.slice(0, 2), "month_pair");
-    expectYaku([...m1.slice(0, 2), ...m2.slice(0, 2)], "two_pairs");
-    expectYaku([takeKind(1, "bright"), takeKind(2, "animal"), takeKind(3, "bright")], "three_run");
-    expectYaku([take(11, (card) => card.chaffValue === 2), take(12, (card) => card.chaffValue === 2), takeKind(1, "chaff")], "chaff_field");
-    expectYaku(m1.slice(0, 3), "triple_month");
-    expectYaku([takeKind(1, "bright"), takeKind(2, "animal"), takeKind(3, "bright"), takeKind(4, "animal")], "four_run");
-    expectYaku([1, 2, 3, 4].map((month) => takeKind(month, "ribbon")), "four_ribbons");
-    expectYaku([2, 4, 5, 6].map((month) => takeKind(month, "animal")), "four_animals");
-    expectYaku([...m1, takeKind(2, "animal")], "same_season");
-    expectYaku([...m1.slice(0, 3), ...m2.slice(0, 2)], "house_party");
-    expectYaku([1, 2, 3, 4, 5].map((month) => takeKind(month, month === 1 || month === 3 ? "bright" : "animal")), "five_run");
-    expectYaku(m1, "four_of_month");
+describe("끗패 판정", () => {
+  it("reads every named pair ahead of the plain ladder", () => {
+    // Each of these also has a numeric reading — 1·9 sums to 10, 4·6 sums to
+    // 10 — and the named pair has to win, exactly as at a real table.
+    expect(pairId(chaff(1), chaff(2))).toBe("ali");
+    expect(pairId(chaff(1), chaff(4))).toBe("doksa");
+    expect(pairId(chaff(1), chaff(9))).toBe("gupping");
+    expect(pairId(chaff(1), chaff(10))).toBe("jangpping");
+    expect(pairId(chaff(4), chaff(10))).toBe("jangsa");
+    expect(pairId(chaff(4), chaff(6))).toBe("seryuk");
   });
 
-  it("recognizes all four deck-modification-only secret patterns", () => {
-    const january = standardDeck.filter((card) => card.month === 1);
-    expectYaku([...january, cloneCard(january[0], { kind: "animal" })], "five_of_month");
-
-    const birds = [2, 4, 8].map((month) => take(month, (card) => card.tags.includes("bird")));
-    expectYaku([...birds, cloneCard(birds[0]), cloneCard(birds[1])], "double_godori");
-
-    const januaryBright = takeKind(1, "bright");
-    expectYaku([
-      januaryBright,
-      cloneCard(januaryBright),
-      cloneCard(takeKind(1, "ribbon")),
-      cloneCard(takeKind(1, "chaff")),
-      cloneCard(takeKind(1, "chaff")),
-    ], "ten_thousand_pines");
-
-    const rainBright = takeKind(12, "bright");
-    expectYaku([
-      rainBright,
-      cloneCard(rainBright),
-      cloneCard(rainBright),
-      cloneCard(takeKind(12, "animal")),
-      cloneCard(takeKind(12, "ribbon")),
-    ], "rain_bright_world");
+  it("reads 땡, 장땡 and the numeric ladder", () => {
+    expect(pairId(chaff(6), chaff(6, 1))).toBe("ttaeng");
+    expect(pairId(chaff(10), takeKind(10, "ribbon"))).toBe("jangttaeng");
+    expect(pairId(chaff(4), chaff(5))).toBe("gabo"); // 9
+    expect(pairId(chaff(2), chaff(8))).toBe("mangtong"); // 10
+    expect(pairId(chaff(3), chaff(5))).toBe("kkeut"); // 8끗
   });
 
-  it("allows 12-to-1 runs only with the leap rule", () => {
-    const cards = [takeKind(11, "bright"), takeKind(12, "bright"), takeKind(1, "bright")];
-    expect(ids(findImmediateYakuCandidates(cards))).not.toContain("three_run");
-    expect(ids(findImmediateYakuCandidates(cards, { connectYear: true }))).toContain("three_run");
+  it("ranks inside 땡 and 끗 instead of flattening them", () => {
+    const low = judgeKkeutPair(chaff(2), chaff(2, 1));
+    const high = judgeKkeutPair(chaff(9), chaff(9, 1));
+    expect(low.yakuId).toBe("ttaeng");
+    expect(high.yakuId).toBe("ttaeng");
+    expect(high.rankBonusHeung).toBeGreaterThan(low.rankBonusHeung);
+    expect(high.rankLabel).toBe("9땡");
+
+    const twoKkeut = judgeKkeutPair(chaff(5), chaff(7)); // 12 → 2끗
+    const eightKkeut = judgeKkeutPair(chaff(3), chaff(5)); // 8끗
+    expect(eightKkeut.rankBonusHeung).toBeGreaterThan(twoKkeut.rankBonusHeung);
+    expect(eightKkeut.rankLabel).toBe("8끗");
+  });
+
+  it("finds all three 광땡, and only between two brights", () => {
+    expect(pairId(takeKind(1, "bright"), takeKind(3, "bright"))).toBe("gwangttaeng_13");
+    expect(pairId(takeKind(1, "bright"), takeKind(8, "bright"))).toBe("gwangttaeng_18");
+    expect(pairId(takeKind(3, "bright"), takeKind(8, "bright"))).toBe("gwangttaeng_38");
+    // Same months, but the 3월 card is a ribbon, so it drops back to 8끗.
+    expect(pairId(takeKind(1, "bright"), takeKind(3, "ribbon"))).toBe("kkeut");
+  });
+});
+
+describe("짓 splitting", () => {
+  it("lets a bare pair through with no 짓 at all", () => {
+    const candidates = findImmediateYakuCandidates([chaff(1), chaff(2)]);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({ yakuId: "ali", jitSum: 0, jitCardIds: [] });
+  });
+
+  it("refuses a submission shorter than the minimum", () => {
+    expect(MIN_SUBMISSION).toBe(2);
+    expect(MAX_SUBMISSION).toBe(5);
+    expect(findImmediateYakuCandidates([chaff(1)])).toEqual([]);
+  });
+
+  it("requires the 짓 to land on a multiple of ten", () => {
+    expect(isValidJit(10)).toBe(true);
+    expect(isValidJit(20)).toBe(true);
+    expect(isValidJit(0)).toBe(false);
+    expect(isValidJit(15)).toBe(false);
+    expect(isValidJit(15, true)).toBe(true);
+
+    // 3장: the single leftover card has to be 10월 by itself.
+    expect(findImmediateYakuCandidates([chaff(10), chaff(1), chaff(2)])).toHaveLength(1);
+    expect(findImmediateYakuCandidates([chaff(7), chaff(1), chaff(2)])).toEqual([]);
+  });
+
+  it("builds 짓 of two and three cards for longer submissions", () => {
+    const four = findImmediateYakuCandidates([chaff(4), chaff(6), takeKind(1, "bright"), takeKind(3, "bright")]);
+    expect(four).toHaveLength(1);
+    expect(four[0]).toMatchObject({ yakuId: "gwangttaeng_13", jitSum: 10 });
+
+    const five = findImmediateYakuCandidates([chaff(4), chaff(6), chaff(10), chaff(1), chaff(2)]);
+    expect(five.map((entry) => entry.jitSum)).toContain(20);
+    expect(ids(five)).toContain("ali");
+  });
+
+  it("opens up five-multiple 짓 only with the leap-calendar talisman", () => {
+    const cards = [chaff(5), chaff(1), chaff(2)];
+    expect(findImmediateYakuCandidates(cards)).toEqual([]);
+    expect(ids(findImmediateYakuCandidates(cards, { allowFiveMultipleJit: true }))).toContain("ali");
+  });
+
+  it("treats a 돌패 as 12월 and a zero-base card as nothing", () => {
+    expect(getEffectiveMonth(cloneCard(takeKind(3, "bright"), { enhancement: "stone" }))).toBe(STONE_MONTH_VALUE);
+    expect(getEffectiveMonth(cloneCard(chaff(7), { tags: ["zero_base"] }))).toBe(0);
+    expect(getEffectiveMonth(cloneCard(chaff(7), { permanentKkeutBonus: 2 }))).toBe(9);
   });
 });
 
@@ -159,21 +222,23 @@ describe("collection board and score evaluation", () => {
   const bird8 = take(8, (card) => card.tags.includes("bird"));
 
   it("rolls an unconfirmed completion back but never repeats a confirmed completion", () => {
-    const base = { confirmedCards: [bird2, bird4], submittedCards: [bird8] };
+    const submitted = [bird8, chaff(2)];
+    const base = { confirmedCards: [bird2, bird4], submittedCards: submitted };
     expect(detectNewCollectionCompletions(base)).toContain("godori");
     expect(detectNewCollectionCompletions({ ...base, confirmedCompletedYakuIds: ["godori"] })).not.toContain("godori");
 
-    const first = calculateBestHandScore({ submittedCards: [bird8], collection: base });
-    expect(first.finalKkeut).toBe(8);
+    // 8월 + 2월 = 10 → 망통, 배수 1, plus the 고도리 완성 배수 5.
+    const first = calculateBestHandScore({ submittedCards: submitted, collection: base });
+    expect(first.yakuId).toBe("mangtong");
+    expect(first.finalKkeut).toBe(1);
     expect(first.finalHeung).toBe(6);
-    expect(first.score).toBe(48);
-    const afterFailure = calculateBestHandScore({ submittedCards: [cloneCard(bird8)], collection: { ...base, submittedCards: [cloneCard(bird8)] } });
-    expect(afterFailure.score).toBe(48);
+    expect(first.score).toBe(6);
+
     const afterConfirmation = calculateBestHandScore({
-      submittedCards: [cloneCard(bird8)],
-      collection: { ...base, submittedCards: [cloneCard(bird8)], confirmedCompletedYakuIds: ["godori"] },
+      submittedCards: submitted,
+      collection: { ...base, confirmedCompletedYakuIds: ["godori"] },
     });
-    expect(afterConfirmation.score).toBe(8);
+    expect(afterConfirmation.score).toBe(1);
   });
 
   it("awards only the highest newly reached bright tier", () => {
@@ -181,12 +246,34 @@ describe("collection board and score evaluation", () => {
     expect(detectNewCollectionCompletions({ submittedCards: brights })).toEqual(["five_brights"]);
   });
 
-  it("applies ordered effects after card month sum and collection multiplier", () => {
-    const pair = [bird8, takeKind(8, "chaff")];
-    const pairCandidate = findImmediateYakuCandidates(pair).find((entry) => entry.yakuId === "month_pair");
-    if (!pairCandidate) throw new Error("month pair candidate missing");
+  it("scores 월 합 from the 짓 and 배수 from the 끗패", () => {
+    // 짓 4월+6월 = 10, 끗패 1월광+3월광 = 13광땡 (배수 16).
+    const cards = [chaff(4), chaff(6), takeKind(1, "bright"), takeKind(3, "bright")];
+    const best = calculateBestHandScore({ submittedCards: cards });
+    expect(best.yakuId).toBe("gwangttaeng_13");
+    expect(best.startingKkeut).toBe(10);
+    expect(best.finalHeung).toBe(16);
+    expect(best.score).toBe(160);
+  });
+
+  it("picks the better of two legal splits of the same five cards", () => {
+    // 10월 두 장을 끗패로 쓰면 장땡(배수 14) × 짓 10, 4·6을 끗패로 쓰면
+    // 세륙(배수 4.5) × 짓 20. 앞쪽이 더 크다.
+    const cards = [takeKind(10, "animal"), takeKind(10, "ribbon"), chaff(4), chaff(6)];
+    const candidates = findImmediateYakuCandidates(cards);
+    expect(ids(candidates)).toEqual(new Set(["jangttaeng", "seryuk"]));
+
+    const best = calculateBestHandScore({ submittedCards: cards });
+    expect(best.yakuId).toBe("jangttaeng");
+    expect(best.score).toBe(140);
+  });
+
+  it("applies ordered effects after the 짓 total and the collection multiplier", () => {
+    const pair = [bird8, chaff(2)];
+    const candidate = findImmediateYakuCandidates(pair).find((entry) => entry.yakuId === "mangtong");
+    if (!candidate) throw new Error("mangtong candidate missing");
     const score = calculateHandScore({
-      candidate: pairCandidate,
+      candidate,
       submittedCards: pair,
       newCollectionYakuIds: ["godori"],
       orderedTalismanEffects: [
@@ -195,41 +282,27 @@ describe("collection board and score evaluation", () => {
         { sourceId: "times-h", label: "×1.25흥", operation: "multiply_heung", value: 1.25 },
       ],
     });
-    expect(score.startingKkeut).toBe(0);
-    expect(score.finalKkeut).toBe(19);
-    expect(score.finalHeung).toBe(11.25);
-    expect(score.score).toBe(213);
-  });
-
-  it("selects the highest actual candidate rather than a fixed pattern rank", () => {
-    const january = standardDeck.filter((card) => card.month === 1);
-    const best = calculateBestHandScore({ submittedCards: january });
-    expect(best.yakuId).toBe("four_of_month");
-    expect(best.finalKkeut).toBe(4);
-    expect(best.score).toBe(4 * 6);
+    expect(score.startingKkeut).toBe(1);
+    expect(score.finalKkeut).toBe(4);
+    expect(score.finalHeung).toBe(10);
+    expect(score.score).toBe(40);
   });
 
   it("uses printed months for every normal kind and scaled modifier values", () => {
-    const cards = [
-      takeKind(9, "ribbon"),
-      takeKind(9, "chaff"),
-    ];
+    const cards = [takeKind(9, "ribbon"), takeKind(9, "chaff")];
     expect(cards.map((card) => getEffectiveCardRole(card).baseKkeut)).toEqual([9, 9]);
     const submitted = [
       cloneCard(cards[0], { enhancement: "inked" }),
       cloneCard(cards[1], { edition: "gold_leaf" }),
-      cloneCard(takeKind(3, "bright"), { enhancement: "stone" }),
     ];
-    const pair = findImmediateYakuCandidates(submitted).find((entry) => entry.yakuId === "month_pair");
-    if (!pair) throw new Error("month pair candidate missing");
-    const modified = calculateHandScore({
-      candidate: pair,
-      submittedCards: submitted,
-    });
+    const candidate = findImmediateYakuCandidates(submitted)[0];
+    const modified = calculateHandScore({ candidate, submittedCards: submitted });
     expect(INKED_MONTH_BONUS).toBe(3);
     expect(GOLD_LEAF_MONTH_BONUS).toBe(5);
-    expect(STONE_MONTH_VALUE).toBe(12);
-    expect(modified.finalKkeut).toBe(9 + 3 + 9 + 5 + 12);
+    expect(candidate.yakuId).toBe("ttaeng");
+    // 짓이 없으니 월 합은 1에서 시작하고, 카드는 각인 값만 얹는다.
+    expect(modified.finalKkeut).toBe(1 + 3 + 5);
+    expect(modified.finalHeung).toBeCloseTo(8 + (9 - 1) * 0.6, 5);
   });
 
   it("uses the same scaled values for bosses and talisman retriggers", () => {
@@ -247,9 +320,16 @@ describe("collection board and score evaluation", () => {
       enhancement: "inked",
       edition: "gold_leaf",
     });
+    const soloCandidate: YakuCandidate = {
+      yakuId: "mangtong",
+      scoringCardIds: [inkedGold.instanceId],
+      jitCardIds: [],
+      jitSum: 0,
+      label: "망통",
+    };
     const retriggers = buildOrderedTalismanScoreEffects({
       talismans: [{ instanceId: "cardsharp", definitionId: "t_cardsharp_touch", growth: 0 }],
-      candidate: { yakuId: "single", scoringCardIds: [inkedGold.instanceId], label: "홑패" },
+      candidate: soloCandidate,
       submittedCards: [inkedGold],
       scoringCards: [inkedGold],
     });
@@ -258,33 +338,34 @@ describe("collection board and score evaluation", () => {
     const stone = cloneCard(takeKind(2, "animal"), { enhancement: "stone" });
     const stoneRetriggers = buildOrderedTalismanScoreEffects({
       talismans: [{ instanceId: "cardsharp-stone", definitionId: "t_cardsharp_touch", growth: 0 }],
-      candidate: { yakuId: "single", scoringCardIds: [stone.instanceId], label: "홑패" },
+      candidate: { ...soloCandidate, scoringCardIds: [stone.instanceId] },
       submittedCards: [stone],
       scoringCards: [stone],
     });
     expect(stoneRetriggers.map((effect) => effect.value)).toEqual([12, 12]);
   });
 
-  it("raises yaku level multiplier without adding a hidden front value", () => {
+  it("raises the yaku level multiplier without adding a hidden front value", () => {
     const cards = [takeKind(6, "animal"), takeKind(6, "chaff")];
-    const pair = findImmediateYakuCandidates(cards).find((entry) => entry.yakuId === "month_pair");
-    if (!pair) throw new Error("month pair candidate missing");
+    const candidate = findImmediateYakuCandidates(cards).find((entry) => entry.yakuId === "ttaeng");
+    if (!candidate) throw new Error("ttaeng candidate missing");
     const leveled = calculateHandScore({
-      candidate: pair,
+      candidate,
       submittedCards: cards,
-      yakuLevels: { month_pair: 3 },
+      yakuLevels: { ttaeng: 3 },
     });
-    expect(leveled.startingKkeut).toBe(0);
-    expect(leveled.finalKkeut).toBe(12);
-    expect(leveled.finalHeung).toBe(2.5);
-    expect(leveled.score).toBe(30);
+    expect(leveled.startingKkeut).toBe(1);
+    // 기본 8 + 레벨 2단계 ×0.5 = 9, 여기에 6땡 등급 +3.0.
+    expect(leveled.startingHeung).toBeCloseTo(9, 5);
+    expect(leveled.finalHeung).toBeCloseTo(12, 5);
+    expect(leveled.score).toBe(12);
   });
 
   it("preserves left-to-right +흥 and ×흥 order", () => {
     const cards = [takeKind(1, "bright"), takeKind(1, "chaff")];
-    const pair = findImmediateYakuCandidates(cards).find((entry) => entry.yakuId === "month_pair") as YakuCandidate;
+    const candidate = findImmediateYakuCandidates(cards)[0];
     const plusThenTimes = calculateHandScore({
-      candidate: pair,
+      candidate,
       submittedCards: cards,
       orderedTalismanEffects: [
         { sourceId: "plus", label: "+2", operation: "add_heung", value: 2 },
@@ -292,20 +373,20 @@ describe("collection board and score evaluation", () => {
       ],
     });
     const timesThenPlus = calculateHandScore({
-      candidate: pair,
+      candidate,
       submittedCards: cards,
       orderedTalismanEffects: [
         { sourceId: "times", label: "×2", operation: "multiply_heung", value: 2 },
         { sourceId: "plus", label: "+2", operation: "add_heung", value: 2 },
       ],
     });
-    expect(plusThenTimes.finalHeung).toBe(8);
-    expect(timesThenPlus.finalHeung).toBe(6);
+    expect(plusThenTimes.finalHeung).toBe(20);
+    expect(timesThenPlus.finalHeung).toBe(18);
   });
 });
 
 describe("Go as an end-of-round bet", () => {
-  const played: MasteryEvent = { yakuId: "month_pair", amount: 1, reason: "played" };
+  const played: MasteryEvent = { yakuId: "ttaeng", amount: 1, reason: "played" };
   const collection: MasteryEvent = { yakuId: "godori", amount: 1, reason: "collection" };
 
   it("accumulates every hand into one round score that never rolls back", () => {
@@ -339,8 +420,6 @@ describe("Go as an end-of-round bet", () => {
   });
 
   it("never lets an overshoot make the next Go free", () => {
-    // Clearing 1000 with a single 2500-point hand used to sit above the 1고 bar
-    // already, so calling Go cost nothing. The bar now grows off the score too.
     expect(getGoRequirement(1_000, 1, 1, 2_500)).toBe(3_750);
     expect(getGoRequirement(1_000, 1, 1, 500)).toBe(1_800);
 
@@ -388,7 +467,7 @@ describe("Go as an end-of-round bet", () => {
         .reduce((sum, event) => sum + event.amount, 0),
     ).toBe(2);
     expect(settled.masteryLevels).toMatchObject({
-      month_pair: { level: 1, mastery: 1 },
+      ttaeng: { level: 1, mastery: 1 },
       godori: { level: 1, mastery: 2 },
     });
   });
@@ -404,9 +483,9 @@ describe("Go as an end-of-round bet", () => {
   });
 
   it("commits 3→5→7 mastery thresholds deterministically", () => {
-    const events = Array.from({ length: 8 }, () => ({ yakuId: "month_pair" as const, amount: 1, reason: "played" as const }));
-    expect(commitMasteryEvents({}, events).month_pair).toEqual({ level: 3, mastery: 0 });
+    const events = Array.from({ length: 8 }, () => ({ yakuId: "ttaeng" as const, amount: 1, reason: "played" as const }));
+    expect(commitMasteryEvents({}, events).ttaeng).toEqual({ level: 3, mastery: 0 });
     const breakdown = calculateBestHandScore({ submittedCards: [takeKind(1, "bright"), takeKind(1, "chaff")] });
-    expect(createMasteryEvents(breakdown)[0]).toMatchObject({ yakuId: "month_pair", amount: 1 });
+    expect(createMasteryEvents(breakdown)[0]).toMatchObject({ yakuId: "ttaeng", amount: 1 });
   });
 });

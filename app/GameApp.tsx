@@ -10,7 +10,6 @@ import { ALL_IMMEDIATE_YAKU_DEFINITIONS } from "@/game/content/yaku";
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
 import { calculateCollectionBonus, GODORI_MONTHS } from "@/game/engine/collection-bonus";
 import { canDeclareGo, getGoRewardFactor } from "@/game/engine/go";
-import { canDeclareShake } from "@/game/engine/experimental";
 import { findImmediateYakuCandidates } from "@/game/engine/yaku";
 import {
   createInitialGameState,
@@ -44,7 +43,6 @@ import { TUTORIAL_STEPS } from "./components/tutorial-steps";
 import "./game.css";
 
 const EXPERIMENT_OPTIONS: ExperimentalRuleOption[] = [
-  { id: "bombsAndShake", label: "흔들기", description: "같은 월 3장을 함께 내면 이번 판의 정산 보너스를 올립니다.", assetTag: "rule:shake" },
   { id: "bakContracts", label: "광박·피박·멍박", description: "판 종료 시 완성한 수집 경로에 따라 추가 냥을 받는 계약.", assetTag: "rule:bak-contracts" },
   { id: "weather", label: "월별 날씨", description: "비·바람·눈이 특정 카드의 월 합이나 재발동을 바꿉니다.", assetTag: "rule:weather" },
   { id: "nagariRetry", label: "나가리 재승부", description: "12월 최종 두목에게 한 번 패하면 제출 1회를 내고 재도전.", assetTag: "rule:nagari-retry" },
@@ -283,11 +281,11 @@ function DeckEditor({ state, dispatch }: {
       </div>
       <section className="codex-summary">
         <div>
-          <h2>족보 배수 레벨</h2>
+          <h2>끗패 배수 레벨</h2>
           <ul>{ALL_IMMEDIATE_YAKU_DEFINITIONS.map((yaku) => <li key={yaku.id}><span>{yaku.name}</span><strong>Lv.{state.yakuLevels[yaku.id]?.level ?? 1}</strong><code>{yaku.assetTag}</code></li>)}</ul>
         </div>
         <div>
-          <h2>발견한 비밀 족보</h2>
+          <h2>발견한 광땡</h2>
           <ul>{state.unlockedSecretYakuIds.length ? state.unlockedSecretYakuIds.map((id) => <li key={id}>{ALL_IMMEDIATE_YAKU_DEFINITIONS.find((entry) => entry.id === id)?.name ?? id}</li>) : <li>아직 발견하지 못했습니다.</li>}</ul>
         </div>
       </section>
@@ -343,7 +341,7 @@ export default function GameApp() {
   const yakuChoices = useMemo(() => {
     const candidates = findImmediateYakuCandidates(selectedCards, {
       cupRole: preview?.usedCupRole ?? "animal",
-      connectYear: state.talismans.some((item) => item.definitionId === "t_leap_calendar"),
+      allowFiveMultipleJit: state.talismans.some((item) => item.definitionId === "t_leap_calendar"),
       includeSecretYaku: true,
     });
     return [...new Set(candidates.map((entry) => entry.yakuId))];
@@ -351,6 +349,17 @@ export default function GameApp() {
   const appliedYaku = preview
     ? ALL_IMMEDIATE_YAKU_DEFINITIONS.find((entry) => entry.id === preview.breakdown.yakuId) ?? null
     : null;
+  // 짓고땡: the previewed candidate splits the selection into 짓 (월 합) and
+  // 끗패 (배수). Showing which card is which is the whole readability of the
+  // system, so it is surfaced on the card faces and in the hand meta.
+  const jitCardIds = useMemo(
+    () => new Set(preview?.breakdown.jitCardIds ?? []),
+    [preview?.breakdown.jitCardIds],
+  );
+  const splitRoleOf = (cardId: string): "jit" | "kkeut" | undefined => {
+    if (!preview?.breakdown.scoringCardIds.includes(cardId)) return undefined;
+    return jitCardIds.has(cardId) ? "jit" : "kkeut";
+  };
   const pendingCupCard = state.pendingCupCardId
     ? state.deck.find((card) => card.instanceId === state.pendingCupCardId) ?? null
     : null;
@@ -443,7 +452,7 @@ export default function GameApp() {
           assetTag="ui:title:flower-board-go"
           title="꽃판: GO!"
           subtitle="열두 달을 고쳐 만드는 화투 로그라이크"
-          description="48장 화투패의 월 숫자를 더하고 족보 배수를 키우세요. 안전하게 저장할지, 고를 외쳐 더 크게 걸지 선택하는 덱빌딩 게임입니다. 모든 그림 자리는 교체 가능한 assetTag 텍스트로 남겨 둔 프로토타입입니다."
+          description="짓고땡으로 점수를 냅니다. 낸 패를 짓(월 합)과 끗패(배수)로 갈라 곱하고, 안전하게 저장할지 고를 외쳐 더 크게 걸지 고르는 덱빌딩 게임입니다. 모든 그림 자리는 교체 가능한 assetTag 텍스트로 남겨 둔 프로토타입입니다."
           versionLabel="NAN 2026 PROTOTYPE · v0.3"
           experimentalRules={state.experimentalRules}
           experimentalRuleOptions={EXPERIMENT_OPTIONS}
@@ -500,7 +509,7 @@ export default function GameApp() {
         : offer.category === "talisman"
           ? "빈 부적 칸에 바로 장착"
           : offer.category === "book"
-            ? "족보 배수 레벨 +1"
+            ? "끗패 배수 레벨 +1"
             : offer.category === "painter"
               ? "구매 후 바꿀 카드를 고름"
               : "대가를 확인하고 사용";
@@ -601,7 +610,6 @@ export default function GameApp() {
     (3 + Math.ceil(state.stage / 2) + state.handsRemaining) * getGoRewardFactor(state.chain.goCount),
   );
   const goRewardFactor = getGoRewardFactor(state.chain.goCount + 1);
-  const shakeReady = canDeclareShake(selectedCards, state.experimentalRules);
   const isDecision = state.screen === "decision";
   const shownBreakdown = isDecision ? state.lastScore : preview?.breakdown ?? null;
   const drawnCount = state.drawPile.length;
@@ -663,6 +671,7 @@ export default function GameApp() {
                     card={card}
                     selected={state.selectedCardIds.includes(card.instanceId)}
                     scoring={Boolean(preview?.breakdown.scoringCardIds.includes(card.instanceId))}
+                    splitRole={splitRoleOf(card.instanceId)}
                     disabled={isDecision}
                     cupRole={card.tags.includes("cup") ? state.cupAssignments[card.instanceId] : undefined}
                     onSelect={(selected) => dispatch({ type: "SELECT_CARD", cardId: selected.instanceId })}
@@ -683,10 +692,18 @@ export default function GameApp() {
           <div className="hand-meta">
             <span>{state.selectedCardIds.length} / 5 선택</span>
             <span className="hand-meta__yaku">
-              {appliedYaku ? appliedYaku.name : "족보 없음"}
+              {preview ? (
+                <>
+                  짓 {preview.breakdown.jitSum > 0 ? preview.breakdown.jitSum : "없음"}
+                  {" · "}
+                  {preview.breakdown.rankLabel || appliedYaku?.name || "끗패"}
+                </>
+              ) : (
+                "짓이 맞지 않습니다"
+              )}
               {yakuChoices.length > 1 ? (
                 <em>
-                  +{yakuChoices.length - 1} 함께 성립
+                  다른 갈래 {yakuChoices.length - 1}가지
                 </em>
               ) : null}
             </span>
@@ -697,7 +714,7 @@ export default function GameApp() {
         {state.screen === "play" ? (
           <footer className="hand-actions">
             <button type="button" disabled={!state.selectedCardIds.length} onClick={() => dispatch({ type: "CLEAR_SELECTION" })}>선택 해제</button>
-            <button type="button" className="primary-action" disabled={!preview || state.handsRemaining <= 0} data-tutorial="submit" onClick={() => dispatch({ type: "SUBMIT_HAND" })}><strong>족보 제출</strong><span>{shakeReady ? "흔들기 · 폭탄 선택" : `${state.handsRemaining}회 남음`}</span></button>
+            <button type="button" className="primary-action" disabled={!preview || state.handsRemaining <= 0} data-tutorial="submit" onClick={() => dispatch({ type: "SUBMIT_HAND" })}><strong>제출</strong><span>{`${state.handsRemaining}회 남음`}</span></button>
             <button type="button" className="discard-action" disabled={!state.selectedCardIds.length || state.discardsRemaining <= 0} data-tutorial="discard" onClick={() => dispatch({ type: "DISCARD_SELECTED" })}><strong>버리기</strong><span>{state.discardsRemaining}회 남음</span></button>
           </footer>
         ) : (
@@ -752,10 +769,10 @@ export default function GameApp() {
           shownBreakdown
             ? isDecision
               ? "방금 낸 점수"
-              : `월 합 × 배수 · 득점 ${shownBreakdown.scoringCardIds.length}장`
+              : `짓 ${shownBreakdown.startingKkeut} × 끗패 배수`
             : state.selectedCardIds.length
-              ? "이 조합으로 만들 수 있는 족보가 없습니다"
-              : "카드를 고르면 최고점 족보가 자동으로 붙습니다"
+              ? "짓의 월 합이 10의 배수가 되어야 합니다"
+              : "2~5장을 고르면 가장 높은 짓·끗패 갈래가 자동으로 붙습니다"
         }
         handsRemaining={state.handsRemaining}
         discardsRemaining={state.discardsRemaining}
@@ -768,11 +785,6 @@ export default function GameApp() {
         onRestart={() => setRestartOpen(true)}
       />
 
-      <ShakeChoiceModal
-        open={state.pendingShakeChoice}
-        month={selectedCards[0]?.month ?? 0}
-        onChoose={(choice) => dispatch({ type: "RESOLVE_SHAKE", choice })}
-      />
       <CupChoiceModal
         card={pendingCupCard}
         onChoose={(role) => {
@@ -845,41 +857,6 @@ function PackPickModal({ pack, onPick, onClose }: {
   );
 }
 
-/** Three of one month pays out either as purse growth or as raw month sum. */
-function ShakeChoiceModal({ open, month, onChoose }: {
-  open: boolean;
-  month: number;
-  onChoose: (choice: "shake" | "bomb") => void;
-}) {
-  return (
-    <GameModal
-      id="shake-choice"
-      open={open}
-      assetTag="ui:shake:three-of-a-month"
-      title={`${month}월 세 장 · 어떻게 쓸까요?`}
-      description="같은 월 세 장을 냈습니다. 한 번만 고를 수 있고, 고른 뒤 바로 제출됩니다."
-      closeOnBackdrop={false}
-      closeLabel="흔들기"
-      onClose={() => onChoose("shake")}
-      actions={[
-        { id: "shake", label: "흔들기 · 판돈 +20%", variant: "primary", onClick: () => onChoose("shake") },
-        { id: "bomb", label: "폭탄 · 월 합 +24", variant: "primary", onClick: () => onChoose("bomb") },
-      ]}
-    >
-      <div className="rules-copy" data-tutorial="shake">
-        <section>
-          <h3>흔들기</h3>
-          <p>이번 판을 이겼을 때 받는 <strong>판돈이 20% 늘어납니다</strong>. 점수는 그대로라 목표를 넉넉히 넘길 자신이 있을 때 유리합니다.</p>
-        </section>
-        <section>
-          <h3>폭탄</h3>
-          <p>이번 손의 <strong>월 합에 +24</strong>가 붙습니다. 배수가 큰 상태라면 그대로 점수로 곱해집니다. 목표가 빠듯할 때 유리합니다.</p>
-        </section>
-      </div>
-    </GameModal>
-  );
-}
-
 function CupChoiceModal({ card, onChoose }: {
   card: CardInstance | null;
   onChoose: (role: "animal" | "double_chaff") => void;
@@ -915,15 +892,15 @@ function CupChoiceModal({ card, onChoose }: {
 
 function RulesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <GameModal id="rules" open={open} assetTag="ui:rules:scroll" title="꽃판 규칙 요약" description="월 합 × 배수와 고·스톱의 선택을 간단히 정리했습니다." onClose={onClose}>
+    <GameModal id="rules" open={open} assetTag="ui:rules:scroll" title="꽃판 규칙 요약" description="짓고땡 제출과 고·스톱의 선택을 간단히 정리했습니다." onClose={onClose}>
       <div className="rules-copy">
-        <section><h3>1. 카드를 클릭</h3><p>손패에서 1~5장을 클릭합니다. 드래그는 없습니다. 선택한 카드들의 월 숫자를 더한 값이 점수식의 앞 숫자입니다.</p></section>
-        <section><h3>2. 족보는 자동 적용</h3><p>선택한 카드로 만들 수 있는 족보 중 점수가 가장 높은 것이 자동으로 적용됩니다. 어떤 족보가 붙었는지는 손패 아래에 표시됩니다.</p></section>
-        <section><h3>3. 월 합 × 배수</h3><p>족보에 들어간 카드의 월 숫자 합이 앞 숫자, 족보와 광·동물·고도리·띠·피 수집 및 부적이 만든 값이 배수입니다. 9월 술잔은 점수를 낸 뒤 동물과 피 중 어디에 기록할지 직접 고릅니다.</p></section>
-        <section><h3>4. 고 · 스톱</h3><p>제출한 점수는 이번 판에 계속 쌓입니다. 목표를 넘긴 순간에만 고와 스톱을 고릅니다. 스톱은 지금 판돈을 받고 끝내고, 고는 문턱을 1.5배 → 2.2배 → 3.2배로 올리는 대신 판돈을 1.5배 → 2.25배 → 3.4배로 불립니다. 남은 제출로 그 문턱을 못 넘기면 런이 끝납니다.</p></section>
-        <section><h3>5. 같은 월 세 장</h3><p>같은 월 카드 세 장을 제출하면 흔들기(판돈 +20%)와 폭탄(월 합 +24) 중 하나를 고릅니다.</p></section>
-        <section><h3>6. 덱빌딩</h3><p>모든 런은 기본 48장으로 시작합니다. 매달 장터에서 부적·족보 성장·덱 손질·금단 계약을 골라 나만의 덱으로 바꿉니다.</p></section>
+        <section><h3>1. 2~5장을 클릭</h3><p>손패에서 두 장부터 다섯 장까지 클릭합니다. 드래그는 없습니다. 낸 패는 짓과 끗패로 갈립니다.</p></section>
+        <section><h3>2. 끗패 — 배수</h3><p>두 장이 끗패가 됩니다. 두 장의 월을 더한 끝자리가 끗수이고, 9면 갑오, 0이면 망통입니다. 1·2 알리, 1·4 독사, 1·9 구삥, 1·10 장삥, 4·10 장사, 4·6 세륙은 이름이 따로 붙은 특수패라 숫자보다 셉니다. 같은 월 두 장은 땡, 10월 두 장은 장땡, 광 두 장이 만나면 광땡입니다.</p></section>
+        <section><h3>3. 짓 — 월 합</h3><p>끗패를 뺀 나머지가 짓입니다. 짓에 들어간 카드들의 월 합이 10의 배수여야 제출이 되고, 그 합이 그대로 월 합이 됩니다. 두 장만 낼 때는 짓이 없어 월 합 1에서 시작합니다.</p></section>
+        <section><h3>4. 점수</h3><p>월 합 × 배수입니다. 배수는 끗패에 광·동물·고도리·띠·피 수집과 부적이 얹은 값입니다. 갈래가 여럿이면 점수가 가장 높은 쪽이 자동으로 붙습니다. 9월 술잔은 점수를 낸 뒤 동물과 피 중 어디에 기록할지 직접 고릅니다.</p></section>
+        <section><h3>5. 고 · 스톱</h3><p>제출한 점수는 이번 판에 계속 쌓입니다. 목표를 넘긴 순간에만 고와 스톱을 고릅니다. 스톱은 지금 판돈을 받고 끝내고, 고는 문턱을 1.8배 → 2.8배 → 4.2배로 올리는 대신 판돈을 1.7배 → 2.7배 → 4.2배로 불립니다. 남은 제출로 그 문턱을 못 넘기면 런이 끝납니다.</p></section>
+        <section><h3>6. 덱빌딩</h3><p>모든 런은 기본 48장으로 시작합니다. 매달 장터에서 부적·끗패 성장·덱 손질·금단 계약을 골라 나만의 덱으로 바꿉니다.</p></section>
       </div>
-    </GameModal>
+      </GameModal>
   );
 }

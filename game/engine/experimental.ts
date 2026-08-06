@@ -1,6 +1,5 @@
 import type {
   CardInstance,
-  ExperimentalRules,
   Month,
   WeatherId,
   YardState,
@@ -37,44 +36,6 @@ export function resolveYardCapture(
       ? `같은 달 카드 ${captured.length}장 수집${swept ? " · 전부 수집!" : ""}`
       : "같은 달 카드 없음",
   };
-}
-
-export function canDeclareShake(selected: CardInstance[], rules: ExperimentalRules): boolean {
-  if (!rules.bombsAndShake || selected.length !== 3) return false;
-  return selected.every((card) => card.month === selected[0].month);
-}
-
-export function canDeclareBomb(
-  selected: CardInstance[],
-  yard: YardState,
-  rules: ExperimentalRules,
-): boolean {
-  if (!canDeclareShake(selected, rules)) return false;
-  return yard.cards.some((card) => card.month === selected[0].month);
-}
-
-export interface ShakeResult {
-  settlementBonus: number;
-  bonusKkeut: number;
-  label: string;
-}
-
-/** What the player picks after submitting three cards of one month. */
-export type ShakeChoice = "shake" | "bomb" | null;
-
-/**
- * Two ways to cash in the same three cards: 흔들기 grows the purse at the end
- * of the round, 폭탄 pays out as raw month sum right now. Neither needs the
- * yard, so the choice is always live.
- */
-export function getShakeResult(choice: ShakeChoice): ShakeResult {
-  if (choice === "bomb") {
-    return { settlementBonus: 0, bonusKkeut: 24, label: "폭탄 · 월 합 +24" };
-  }
-  if (choice === "shake") {
-    return { settlementBonus: 0.2, bonusKkeut: 0, label: "흔들기 · 이번 판 판돈 +20%" };
-  }
-  return { settlementBonus: 0, bonusKkeut: 0, label: "" };
 }
 
 export function weatherCardModifier(card: CardInstance, weather: WeatherId): number {

@@ -5,27 +5,37 @@ import type {
   ImmediateYakuId,
 } from "../types";
 
+/**
+ * 짓고땡 족보.
+ *
+ * A submission is split into 짓 (the cards whose month sum is a multiple of
+ * ten, worth the 월 합) and 끗패 (the last two cards, judged as a 섯다 hand and
+ * worth the 배수). These definitions cover the 끗패 only.
+ *
+ * 땡 and 끗 both cover a range of ranks, so their `baseHeung` is the floor for
+ * the family and the engine adds a rank bonus on top — see `rankBonusHeung` in
+ * engine/yaku.ts. That keeps the score breakdown readable ("9끗 +2.7") instead
+ * of hiding the rank inside a base number.
+ */
 export const IMMEDIATE_YAKU_DEFINITIONS: readonly ImmediateYakuDefinition[] = [
-  { id: "single", name: "홑패", description: "다른 즉시 족보가 없을 때 월 합 기여도가 가장 높은 카드 한 장", baseKkeut: 0, baseHeung: 1, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-single" },
-  { id: "month_pair", name: "월쌍", description: "같은 월 두 장", baseKkeut: 0, baseHeung: 2, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-month-pair" },
-  { id: "two_pairs", name: "두쌍", description: "서로 다른 두 월의 쌍", baseKkeut: 0, baseHeung: 2, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-two-pairs" },
-  { id: "three_run", name: "삼연월", description: "서로 다른 연속 월 세 장", baseKkeut: 0, baseHeung: 2, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-three-run" },
-  { id: "chaff_field", name: "피밭", description: "피값 합계 5 이상", baseKkeut: 0, baseHeung: 2, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-chaff-field" },
-  { id: "triple_month", name: "삼동월", description: "같은 월 세 장", baseKkeut: 0, baseHeung: 3, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-triple-month" },
-  { id: "four_run", name: "사연월", description: "서로 다른 연속 월 네 장", baseKkeut: 0, baseHeung: 3, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-four-run" },
-  { id: "four_ribbons", name: "띠다발", description: "띠 네 장", baseKkeut: 0, baseHeung: 3, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-four-ribbons" },
-  { id: "four_animals", name: "동물잔치", description: "동물 네 장", baseKkeut: 0, baseHeung: 3, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-four-animals" },
-  { id: "same_season", name: "한계절", description: "같은 계절 다섯 장", baseKkeut: 0, baseHeung: 4, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-same-season" },
-  { id: "house_party", name: "집들이", description: "한 월 세 장과 다른 한 월 두 장", baseKkeut: 0, baseHeung: 4, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-house-party" },
-  { id: "five_run", name: "오연월", description: "서로 다른 연속 월 다섯 장", baseKkeut: 0, baseHeung: 4, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-five-run" },
-  { id: "four_of_month", name: "총통", description: "같은 월 네 장", baseKkeut: 0, baseHeung: 6, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-four-of-month" },
+  { id: "mangtong", name: "망통", description: "끗패 두 장의 월 합이 10으로 나누어떨어짐. 가장 낮은 끗패", baseKkeut: 0, baseHeung: 1, growthKkeut: 0, growthHeung: 0.2, assetTag: "yaku-mangtong" },
+  { id: "kkeut", name: "끗", description: "끗패 두 장의 월 합 끝자리가 1~8. 끝자리가 클수록 배수가 큼", baseKkeut: 0, baseHeung: 1, growthKkeut: 0, growthHeung: 0.2, assetTag: "yaku-kkeut" },
+  { id: "gabo", name: "갑오", description: "끗패 두 장의 월 합 끝자리가 9. 끗 중 최고", baseKkeut: 0, baseHeung: 4, growthKkeut: 0, growthHeung: 0.3, assetTag: "yaku-gabo" },
+  { id: "seryuk", name: "세륙", description: "4월과 6월", baseKkeut: 0, baseHeung: 4.5, growthKkeut: 0, growthHeung: 0.35, assetTag: "yaku-seryuk" },
+  { id: "jangsa", name: "장사", description: "4월과 10월", baseKkeut: 0, baseHeung: 5, growthKkeut: 0, growthHeung: 0.35, assetTag: "yaku-jangsa" },
+  { id: "jangpping", name: "장삥", description: "1월과 10월", baseKkeut: 0, baseHeung: 5.5, growthKkeut: 0, growthHeung: 0.35, assetTag: "yaku-jangpping" },
+  { id: "gupping", name: "구삥", description: "1월과 9월", baseKkeut: 0, baseHeung: 6, growthKkeut: 0, growthHeung: 0.35, assetTag: "yaku-gupping" },
+  { id: "doksa", name: "독사", description: "1월과 4월", baseKkeut: 0, baseHeung: 6.5, growthKkeut: 0, growthHeung: 0.35, assetTag: "yaku-doksa" },
+  { id: "ali", name: "알리", description: "1월과 2월", baseKkeut: 0, baseHeung: 7, growthKkeut: 0, growthHeung: 0.4, assetTag: "yaku-ali" },
+  { id: "ttaeng", name: "땡", description: "같은 월 두 장. 월이 높을수록 배수가 큼", baseKkeut: 0, baseHeung: 8, growthKkeut: 0, growthHeung: 0.5, assetTag: "yaku-ttaeng" },
+  { id: "jangttaeng", name: "장땡", description: "10월 두 장. 광땡을 빼면 최고 끗패", baseKkeut: 0, baseHeung: 14, growthKkeut: 0, growthHeung: 0.6, assetTag: "yaku-jangttaeng" },
 ];
 
+/** Bright pairs. Rare enough to stay hidden until the player finds one. */
 export const SECRET_YAKU_DEFINITIONS: readonly ImmediateYakuDefinition[] = [
-  { id: "five_of_month", name: "오통", description: "한 제출에서 같은 월 다섯 장", baseKkeut: 0, baseHeung: 9, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-secret-five-of-month", secret: true },
-  { id: "double_godori", name: "쌍고도리", description: "새 태그 다섯 장이며 2·4·8월을 모두 포함", baseKkeut: 0, baseHeung: 9, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-secret-double-godori", secret: true },
-  { id: "ten_thousand_pines", name: "만송학", description: "1월 다섯 장이며 광 두 장 이상", baseKkeut: 0, baseHeung: 10, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-secret-ten-thousand-pines", secret: true },
-  { id: "rain_bright_world", name: "비광천하", description: "비 태그 다섯 장이며 광 세 장 이상", baseKkeut: 0, baseHeung: 10, growthKkeut: 0, growthHeung: 0.25, assetTag: "yaku-secret-rain-bright-world", secret: true },
+  { id: "gwangttaeng_13", name: "13광땡", description: "1월 광과 3월 광", baseKkeut: 0, baseHeung: 16, growthKkeut: 0, growthHeung: 0.6, assetTag: "yaku-secret-gwangttaeng-13", secret: true },
+  { id: "gwangttaeng_18", name: "18광땡", description: "1월 광과 8월 광", baseKkeut: 0, baseHeung: 18, growthKkeut: 0, growthHeung: 0.6, assetTag: "yaku-secret-gwangttaeng-18", secret: true },
+  { id: "gwangttaeng_38", name: "38광땡", description: "3월 광과 8월 광. 가장 높은 끗패", baseKkeut: 0, baseHeung: 20, growthKkeut: 0, growthHeung: 0.7, assetTag: "yaku-secret-gwangttaeng-38", secret: true },
 ];
 
 export const ALL_IMMEDIATE_YAKU_DEFINITIONS: readonly ImmediateYakuDefinition[] = [
@@ -33,6 +43,7 @@ export const ALL_IMMEDIATE_YAKU_DEFINITIONS: readonly ImmediateYakuDefinition[] 
   ...SECRET_YAKU_DEFINITIONS,
 ];
 
+/** The collection board. Unchanged by the 짓고땡 switch. */
 export const COLLECTION_YAKU_DEFINITIONS: readonly CollectionYakuDefinition[] = [
   { id: "hongdan", name: "홍단", description: "1·2·3월 홍단", completionKkeut: 0, completionHeung: 4, growthKkeut: 0, growthHeung: 0.25, required: 3, assetTag: "yaku-collection-hongdan" },
   { id: "chodan", name: "초단", description: "4·5·7월 초단", completionKkeut: 0, completionHeung: 4, growthKkeut: 0, growthHeung: 0.25, required: 3, assetTag: "yaku-collection-chodan" },

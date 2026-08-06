@@ -135,7 +135,7 @@ export function RunEndScreen({
         <div className="screen-section-heading">
           <div>
             <p>YAKU RECORD</p>
-            <h2 id="run-yaku-title">자주 낸 족보</h2>
+            <h2 id="run-yaku-title">자주 낸 끗패</h2>
           </div>
           <span>{displayedYakus.length}종</span>
         </div>
@@ -155,7 +155,7 @@ export function RunEndScreen({
             ))}
           </div>
         ) : (
-          <p className="run-end-screen__empty">기록된 족보가 없습니다.</p>
+          <p className="run-end-screen__empty">기록된 끗패가 없습니다.</p>
         )}
       </section>
 

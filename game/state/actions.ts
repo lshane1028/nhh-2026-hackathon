@@ -12,7 +12,6 @@ export type GameAction =
   | { type: "CLEAR_SELECTION" }
   | { type: "SET_HAND_SORT"; mode: "month" | "kind" }
   | { type: "ASSIGN_CUP_ROLE"; cardId: string; role: "animal" | "double_chaff" }
-  | { type: "RESOLVE_SHAKE"; choice: "shake" | "bomb" }
   | { type: "SUBMIT_HAND" }
   | { type: "DISCARD_SELECTED" }
   | { type: "DECLARE_GO" }

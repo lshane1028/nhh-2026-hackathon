@@ -74,7 +74,7 @@ function formatNumber(value: number): string {
 
 const CATEGORY_GUIDES: Record<ShopOffer["category"], string> = {
   talisman: "사두면 매 손 자동으로 발동",
-  book: "이 족보의 배수가 영구히 성장",
+  book: "이 끗패의 배수가 영구히 성장",
   painter: "덱에서 카드를 영구히 뺍니다",
   forbidden: "강한 효과와 영구적인 대가",
   pack: "열어서 덱에 넣을 카드를 고릅니다",
@@ -108,7 +108,7 @@ const DEPARTMENTS: readonly Department[] = [
   {
     categories: ["book"],
     label: "비결서점",
-    blurb: "적힌 족보의 기본 배수가 영구히 성장",
+    blurb: "적힌 끗패의 기본 배수가 영구히 성장",
     assetTag: "shop:book",
     tutorialId: "dept-book",
   },

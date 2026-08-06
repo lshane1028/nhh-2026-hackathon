@@ -18,6 +18,8 @@ export interface HwatuCardProps {
   testId?: string;
   /** Compact face for the fanned hand. Detail moves into the tooltip. */
   dense?: boolean;
+  /** Which half of the 짓고땡 split this card is currently filling. */
+  splitRole?: "jit" | "kkeut";
 }
 
 const KIND_LABELS: Record<CardKind, string> = {
@@ -92,6 +94,7 @@ export function HwatuCard({
   ariaLabel,
   testId,
   dense = false,
+  splitRole,
 }: HwatuCardProps) {
   const isDisabled = disabled || Boolean(card.disabledForRound);
   const kindLabel = getCardKindLabel(card, cupRole);
@@ -101,7 +104,7 @@ export function HwatuCard({
     : null;
   const accessibleLabel =
     ariaLabel ??
-    `${card.month}월 ${card.name}, ${kindLabel}, 월값 ${monthValue}${selected ? ", 선택됨" : ""}${isDisabled ? ", 사용 불가" : ""}`;
+    `${card.month}월 ${card.name}, ${kindLabel}, 월값 ${monthValue}${splitRole === "jit" ? ", 짓" : splitRole === "kkeut" ? ", 끗패" : ""}${selected ? ", 선택됨" : ""}${isDisabled ? ", 사용 불가" : ""}`;
 
   const effectTag = card.effectTagId ? CARD_EFFECT_TAG_BY_ID[card.effectTagId] : undefined;
   const modifierLabels = [
@@ -121,6 +124,9 @@ export function HwatuCard({
       </span>
 
       <span className="hwatu-card__corner" aria-hidden="true">{card.month}</span>
+      {splitRole ? (
+        <span className="hwatu-card__split" aria-hidden="true">{splitRole === "jit" ? "짓" : "끗"}</span>
+      ) : null}
       {effectTag ? <span className="hwatu-card__effect" aria-hidden="true">효</span> : null}
 
       <span className="hwatu-card__hint" role="tooltip">
@@ -139,6 +145,7 @@ export function HwatuCard({
     dense && "hwatu-card--dense",
     selected && "hwatu-card--selected",
     scoring && "hwatu-card--scoring",
+    splitRole && `hwatu-card--split-${splitRole}`,
     isDisabled && "hwatu-card--disabled",
     card.enhancement && `hwatu-card--enhancement-${card.enhancement}`,
     card.edition && `hwatu-card--edition-${card.edition}`,
