@@ -1,29 +1,30 @@
 @import "tailwindcss";
 
 :root {
-  --ink: #1d1b18;
-  --paper: #f7f0df;
-  --paper-deep: #e5d8ba;
-  --red: #9f3029;
-  --blue: #315b76;
-  --green: #315c43;
-  --gold: #b08129;
-  --line: #b7a783;
-  --muted: #6d6559;
-  color-scheme: light;
+  --ink: #211913;
+  --paper: #efe2c4;
+  --paper-deep: #d4bd8f;
+  --red: #b52f24;
+  --blue: #1f5967;
+  --green: #254d3d;
+  --gold: #d6a643;
+  --line: #8e744e;
+  --muted: #776855;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
 
-html { min-width: 320px; background: #24221f; }
+html { min-width: 320px; background: #130f0c; }
 
 body {
   min-height: 100dvh;
   margin: 0;
   background:
-    linear-gradient(90deg, rgb(255 255 255 / 2%) 1px, transparent 1px) 0 0 / 32px 32px,
-    linear-gradient(rgb(255 255 255 / 2%) 1px, transparent 1px) 0 0 / 32px 32px,
-    #24221f;
+    radial-gradient(circle at 20% 0%, rgb(114 38 27 / 24%), transparent 34rem),
+    radial-gradient(circle at 90% 100%, rgb(21 74 65 / 20%), transparent 38rem),
+    repeating-linear-gradient(90deg, rgb(255 236 191 / 1.5%) 0 1px, transparent 1px 5px),
+    #130f0c;
   color: var(--ink);
   font-family: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
 }

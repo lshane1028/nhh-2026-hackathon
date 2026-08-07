@@ -3,14 +3,14 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "꽃판: GO! — 화투 로그라이크",
-  description: "48장 화투패와 고·스톱을 결합한 텍스트 플레이스홀더 웹게임 프로토타입",
+  description: "짓고땡과 고·스톱, 열두 달 부적 빌드를 결합한 화투 로그라이크",
   applicationName: "꽃판: GO!",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#24221f",
+  themeColor: "#130f0c",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

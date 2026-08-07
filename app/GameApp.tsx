@@ -8,6 +8,7 @@ import { getStageDefinition } from "@/game/content/stages";
 import { TALISMAN_BY_ID } from "@/game/content/talismans";
 import { ALL_IMMEDIATE_YAKU_DEFINITIONS } from "@/game/content/yaku";
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
+import { playCardPickSound, playCardRevealSound, playPackOpenSound } from "./audio/game-sfx";
 import { calculateCollectionBonus, GODORI_MONTHS } from "@/game/engine/collection-bonus";
 import { buildCollectionSlots } from "@/game/engine/collection-board";
 import { createStandardHwatuDeck } from "@/game/engine/deck";
@@ -36,6 +37,7 @@ import type {
 import { AssetPlaceholder } from "./components/AssetPlaceholder";
 import { CollectionBoard, type CollectionBoardItem } from "./components/CollectionBoard";
 import { GameModal } from "./components/GameModal";
+import { getGeneratedAssetUrl } from "./components/generated-asset";
 import { HwatuCard } from "./components/HwatuCard";
 import { getAtlasPosition } from "./components/hwatu-atlas";
 import { MarketScreen } from "./components/MarketScreen";
@@ -46,6 +48,8 @@ import { TitleScreen, type ExperimentalRuleOption } from "./components/TitleScre
 import { TutorialSpotlight } from "./components/TutorialSpotlight";
 import { TUTORIAL_STEPS } from "./components/tutorial-steps";
 import "./game.css";
+import "./components/art-direction.css";
+import "./components/pixel-direction.css";
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 
@@ -233,24 +237,42 @@ function IntroScreen({ state, onStart, onDeck, onRules }: {
   const stage = getStageDefinition(state.stage, state.infiniteLap);
   const introTarget = Math.ceil(stage.target * state.targetMultiplier);
   const boss = stage.bossId ? BOSS_BY_ID[stage.bossId] : null;
+  const bossArtUrl = boss ? getGeneratedAssetUrl(boss.assetTag) : null;
   const weather = WEATHER_BY_ID[state.experimentalRules.weather ? stage.weatherId : "clear"];
   return (
     <main className="intro-screen">
-      <p className="eyebrow">CALENDAR {String(stage.month).padStart(2, "0")} / 12</p>
-      <AssetPlaceholder assetTag={stage.assetTag} label={stage.name} description={stage.subtitle} tone={boss ? "boss" : "neutral"} />
-      <div className="intro-screen__copy">
-        <span>{stage.month}월 스테이지</span>
-        <h1>{stage.name}</h1>
-        <p>{stage.subtitle}</p>
-        <strong>목표 {format(introTarget)}점</strong>
-      </div>
+      <header className="intro-screen__heading" data-asset-tag={stage.assetTag}>
+        <div className="intro-screen__month" aria-hidden="true">
+          <strong>{String(stage.month).padStart(2, "0")}</strong>
+          <span>月</span>
+        </div>
+        <div className="intro-screen__copy">
+          <p className="eyebrow">CALENDAR {String(stage.month).padStart(2, "0")} / 12</p>
+          <span>{boss ? "두목이 기다리는 달" : "열두 달의 다음 판"}</span>
+          <h1>{stage.name}</h1>
+          <p>{stage.subtitle}</p>
+        </div>
+        <div className="intro-screen__target">
+          <span>이번 판 목표</span>
+          <strong>{format(introTarget)}</strong>
+          <small>점</small>
+        </div>
+      </header>
       <div className="intro-screen__rules">
-        <article>
-          <AssetPlaceholder assetTag={weather.assetTag} label={`날씨 · ${weather.name}`} description={weather.description} compact />
+        <article data-asset-tag={weather.assetTag}>
+          <span className="intro-screen__rule-mark" aria-hidden="true">天</span>
+          <div><strong>날씨 · {weather.name}</strong><small>{weather.description}</small></div>
         </article>
-        <article>
-          <AssetPlaceholder assetTag={boss?.assetTag ?? "boss:none"} label={boss ? `두목 · ${boss.name}` : "일반 판"} description={boss?.description ?? "이번 달에는 두목 규칙이 없습니다."} tone={boss ? "boss" : "neutral"} compact />
-          {boss ? <small>대응법: {boss.counterplay}</small> : null}
+        <article
+          data-asset-tag={boss?.assetTag ?? "boss:none"}
+          style={bossArtUrl ? { "--boss-art": `url("${bossArtUrl}")` } as React.CSSProperties : undefined}
+        >
+          <span className="intro-screen__rule-mark" aria-hidden="true">將</span>
+          <div>
+            <strong>{boss ? `두목 · ${boss.name}` : "일반 판"}</strong>
+            <small>{boss?.description ?? "이번 달에는 두목 규칙이 없습니다."}</small>
+            {boss ? <em>대응법 · {boss.counterplay}</em> : null}
+          </div>
         </article>
       </div>
       {state.calendarStamps.length ? (
@@ -259,9 +281,9 @@ function IntroScreen({ state, onStart, onDeck, onRules }: {
         </div>
       ) : null}
       <div className="intro-screen__actions">
-        <button className="primary-action" type="button" onClick={onStart}>패 섞고 시작</button>
-        <button type="button" onClick={onDeck}>내 덱 보기</button>
-        <button type="button" onClick={onRules}>규칙 읽기</button>
+        <button className="primary-action" type="button" onClick={onStart}>패 돌리기</button>
+        <button type="button" onClick={onDeck}>덱 확인</button>
+        <button type="button" onClick={onRules}>족보와 규칙</button>
       </div>
     </main>
   );
@@ -292,7 +314,7 @@ function DeckEditor({ state, dispatch }: {
           <h1>{definition ? definition.name : "내 화투 덱"}</h1>
           <p>{definition?.description ?? "지금 덱에 남아 있는 카드입니다. 카드에 손을 올리면 종류와 강화가 보입니다."}</p>
         </div>
-        <AssetPlaceholder assetTag={definition?.assetTag ?? "ui:deck-editor"} label={definition?.name ?? "덱 편집기"} description={definition ? `${minTargets}~${maxTargets}장 선택` : "텍스트 플레이스홀더 목록"} tone={definition && !isPainter ? "boss" : "card"} />
+        <AssetPlaceholder assetTag={definition?.assetTag ?? "ui:deck-editor"} label={definition?.name ?? "열두 달 패목록"} description={definition ? `${minTargets}~${maxTargets}장 선택` : "월별로 덱의 구성과 강화 상태를 확인합니다"} tone={definition && !isPainter ? "boss" : "card"} />
       </header>
       {optionConfig ? (
         <label className="editor-option">
@@ -321,7 +343,6 @@ function DeckEditor({ state, dispatch }: {
                       key={card.instanceId}
                       card={card}
                       selected={selected}
-                      disabled={!definition}
                       className="deck-card"
                       onSelect={definition
                         ? () => dispatch({ type: "SELECT_CONSUMABLE_TARGET", cardId: card.instanceId })
@@ -334,7 +355,7 @@ function DeckEditor({ state, dispatch }: {
           );
         })}
       </div>
-      <footer className="sticky-editor-actions">
+      <footer className={`sticky-editor-actions sticky-editor-actions--${definition ? "editing" : "return"}`}>
         {definition ? (
           <>
             <span>{state.pendingTargetIds.length}/{maxTargets}장 선택</span>
@@ -468,6 +489,7 @@ export default function GameApp() {
       </header>
       <main className="market-shell__body">{children}</main>
       <PackPickModal
+        key={state.pendingPack?.packId ?? "no-pack"}
         pack={state.pendingPack}
         onPick={(instanceId) => dispatch({ type: "PICK_PACK_CARD", instanceId })}
         onClose={() => dispatch({ type: "CLOSE_PACK" })}
@@ -511,8 +533,8 @@ export default function GameApp() {
         <TitleScreen
           assetTag="ui:title:flower-board-go"
           title="꽃판: GO!"
-          subtitle="열두 달을 고쳐 만드는 화투 로그라이크"
-          description="짓고땡으로 점수를 냅니다. 낸 패를 짓(월 합)과 끗패(배수)로 갈라 곱하고, 안전하게 저장할지 고를 외쳐 더 크게 걸지 고르는 덱빌딩 게임입니다. 모든 그림 자리는 교체 가능한 assetTag 텍스트로 남겨 둔 프로토타입입니다."
+          subtitle="열두 달, 끝까지 판을 키워라"
+          description="손패에서 짓을 맞추고 남은 패로 끗을 세웁니다. 족보와 부적으로 점수를 불린 뒤, 목표를 넘기면 스톱할지 고할지 선택하세요."
           versionLabel="NAN 2026 PROTOTYPE · v0.3"
           experimentalRules={state.experimentalRules}
           experimentalRuleOptions={EXPERIMENT_OPTIONS}
@@ -870,41 +892,81 @@ function PackPickModal({ pack, onPick, onClose }: {
   onPick: (instanceId: string) => void;
   onClose: () => void;
 }) {
+  const [opened, setOpened] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const [revealedCount, setRevealedCount] = useState(0);
+  const [initialRevealCount] = useState(() => pack?.candidates.length ?? 0);
+  const packSlug = pack?.packId === "pack_hwatu_large" ? "hwatu-large" : "hwatu-small";
+  const packAssetTag = `pack:${packSlug}`;
+  const packArtUrl = getGeneratedAssetUrl(packAssetTag);
+
+  useEffect(() => {
+    if (!opened) return;
+    const timers = Array.from({ length: initialRevealCount }, (_, index) => window.setTimeout(() => {
+      setRevealedCount(index + 1);
+      playCardRevealSound(index);
+    }, 180 + index * 145));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [initialRevealCount, opened]);
+
+  const handleOpen = () => {
+    if (opening) return;
+    playPackOpenSound();
+    setOpening(true);
+    setRevealedCount(0);
+    window.setTimeout(() => setOpened(true), 520);
+  };
+
+  const handlePick = (instanceId: string) => {
+    playCardPickSound();
+    onPick(instanceId);
+  };
+
   return (
     <GameModal
       id="pack-pick"
       open={Boolean(pack)}
-      assetTag={`pack:${pack?.packId ?? "hwatu"}`}
-      title={pack ? `${pack.name} · ${pack.picksLeft}장 더 고르세요` : "묶음"}
-      description="고른 카드는 덱에 영구히 들어갑니다. 각 카드에 붙은 효과는 그 카드가 손에 들어올 때마다 따라옵니다."
+      assetTag={packAssetTag}
+      title={pack ? (opened ? `${pack.name} · ${pack.picksLeft}장 고르기` : `${pack.name} 개봉`) : "화투 묶음"}
+      description={opened ? "가져갈 패를 고르세요. 패에 붙은 효과도 덱에 그대로 들어갑니다." : "매듭을 풀고 봉인을 뜯어 안에 든 패를 확인하세요."}
       closeOnBackdrop={false}
       closeLabel="그만 고르기"
       onClose={onClose}
-      actions={[{ id: "close", label: "그만 고르기", onClick: onClose }]}
+      className="game-modal--pack"
+      actions={opened ? [{ id: "close", label: "그만 고르기", onClick: onClose }] : []}
     >
-      <ul className="pack-picks" data-tutorial="pack-picks">
-        {pack?.candidates.map((card) => {
-          const tag = card.effectTagId ? CARD_EFFECT_TAG_BY_ID[card.effectTagId] : undefined;
-          return (
-            <li key={card.instanceId}>
-              <button type="button" className="pack-pick" onClick={() => onPick(card.instanceId)}>
-                <span className="pack-pick__art" data-asset-tag={card.assetTag}>
-                  <span aria-hidden="true">IMG</span>
-                  <b>{card.month}</b>
-                </span>
-                <strong>{card.month}월 {card.monthName}</strong>
-                <span className="pack-pick__kind">{card.name}</span>
-                {tag ? (
-                  <span className="pack-pick__tag">
-                    <b>{tag.name}</b>
-                    <em>{tag.description}</em>
-                  </span>
-                ) : null}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      {!opened ? (
+        <div className="pack-opening" data-tutorial="pack-picks">
+          <button type="button" className={opening ? "pack-opening__bundle pack-opening__bundle--opening" : "pack-opening__bundle"} onClick={handleOpen} disabled={opening}>
+            <span className="pack-opening__art" aria-hidden="true" style={packArtUrl ? { backgroundImage: `url("${packArtUrl}")` } : undefined} />
+            <span className="pack-opening__cord" aria-hidden="true" />
+            <span className="pack-opening__seal" aria-hidden="true">花</span>
+            <strong>{opening ? "봉인을 뜯는 중…" : "봉인 뜯기"}</strong>
+          </button>
+          <p>눌러서 묶음을 개봉하세요</p>
+        </div>
+      ) : (
+        <ul className="pack-picks pack-picks--revealing" data-tutorial="pack-picks">
+          {pack?.candidates.map((card, index) => {
+            const tag = card.effectTagId ? CARD_EFFECT_TAG_BY_ID[card.effectTagId] : undefined;
+            return (
+              <li className={index < revealedCount ? "pack-picks__item pack-picks__item--revealed" : "pack-picks__item"} key={card.instanceId}>
+                <HwatuCard
+                  card={card}
+                  className="pack-pick__card"
+                  onSelect={() => handlePick(card.instanceId)}
+                  ariaLabel={`${card.month}월 ${card.name}${tag ? `, ${tag.name}` : ""}`}
+                />
+                <div className="pack-pick__copy">
+                  <strong>{card.month}월 {card.monthName}</strong>
+                  <span>{card.name}</span>
+                  {tag ? <em><b>{tag.name}</b>{tag.description}</em> : null}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </GameModal>
   );
 }

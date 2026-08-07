@@ -2,6 +2,7 @@
 
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
 import type { CardInstance, CardKind } from "@/game/types";
+import { getGeneratedAssetUrl } from "./generated-asset";
 import { getAtlasPosition } from "./hwatu-atlas";
 
 export type HwatuCupRole = "animal" | "double_chaff";
@@ -39,31 +40,6 @@ const RIBBON_LABELS = {
 
 function joinClassNames(...values: Array<string | false | undefined>): string {
   return values.filter(Boolean).join(" ");
-}
-
-function getAtlasPosition(card: CardInstance): string {
-  const row = Math.floor((card.month - 1) / 2);
-  const monthStartColumn = ((card.month - 1) % 2) * 4;
-  let cardOffset = 0;
-
-  if (card.assetTag.endsWith("chaff-a")) {
-    cardOffset = 2;
-  } else if (card.assetTag.endsWith("chaff-b")) {
-    cardOffset = 3;
-  } else if (card.month === 12) {
-    if (card.kind === "animal") cardOffset = 1;
-    else if (card.kind === "ribbon") cardOffset = 2;
-    else if (card.chaffValue === 2) cardOffset = 3;
-  } else if (
-    (card.month === 8 && card.kind === "animal") ||
-    (card.month === 11 && card.chaffValue === 2) ||
-    card.kind === "ribbon"
-  ) {
-    cardOffset = 1;
-  }
-
-  const column = monthStartColumn + cardOffset;
-  return `${(column / 7) * 100}% ${(row / 5) * 100}%`;
 }
 
 const ENHANCEMENT_LABELS: Record<
@@ -134,6 +110,14 @@ export function HwatuCard({
     `${card.month}월 ${card.name}, ${kindLabel}, 월값 ${monthValue}${splitRole === "jit" ? ", 짓" : splitRole === "kkeut" ? ", 끗패" : ""}${selected ? ", 선택됨" : ""}${isDisabled ? ", 사용 불가" : ""}`;
 
   const effectTag = card.effectTagId ? CARD_EFFECT_TAG_BY_ID[card.effectTagId] : undefined;
+  const effectArtUrl = effectTag ? getGeneratedAssetUrl(effectTag.assetTag) : null;
+  const modifierArtUrl = card.seal
+    ? getGeneratedAssetUrl(`seal:${card.seal}`)
+    : card.edition
+      ? getGeneratedAssetUrl(`edition:${card.edition.replaceAll("_", "-")}`)
+      : card.enhancement
+        ? getGeneratedAssetUrl(`enhancement:${card.enhancement}`)
+        : null;
   const modifierLabels = [
     card.enhancement ? ENHANCEMENT_LABELS[card.enhancement] : null,
     card.edition ? EDITION_LABELS[card.edition] : null,
@@ -157,6 +141,16 @@ export function HwatuCard({
       ) : null}
       {effectTag ? <span className="hwatu-card__effect" aria-hidden="true">효</span> : null}
 
+      {effectTag ? <span className="hwatu-card__effect-field" aria-hidden="true" /> : null}
+
+      {modifierArtUrl ? (
+        <span
+          className="hwatu-card__modifier-art"
+          aria-hidden="true"
+          style={{ backgroundImage: `url("${modifierArtUrl}")` }}
+        />
+      ) : null}
+
       <span className="hwatu-card__hint" role="tooltip">
         <b>{card.month}월 {monthValue > card.month ? `+${monthValue - card.month}` : ""}</b>
         <em>{kindLabel}{ribbonLabel ? ` · ${ribbonLabel}` : ""}</em>
@@ -178,6 +172,7 @@ export function HwatuCard({
     card.enhancement && `hwatu-card--enhancement-${card.enhancement}`,
     card.edition && `hwatu-card--edition-${card.edition}`,
     card.seal && `hwatu-card--seal-${card.seal}`,
+    effectTag && `hwatu-card--effect-${effectTag.id.replaceAll("_", "-")}`,
     className,
   );
 
@@ -200,6 +195,9 @@ export function HwatuCard({
     "data-enhancement": card.enhancement,
     "data-edition": card.edition,
     "data-seal": card.seal,
+    style: effectArtUrl
+      ? ({ "--card-effect-art": `url("${effectArtUrl}")` } as React.CSSProperties)
+      : undefined,
   };
 
   if (!onSelect) {

@@ -5,6 +5,7 @@ import type {
   ShopOffer,
 } from "@/game/types";
 
+import { getGeneratedAssetUrl } from "./generated-asset";
 import "./screen-ui.css";
 
 export interface MarketRewardView {
@@ -171,6 +172,8 @@ function MarketCard({
   tutorialId,
   onClick,
 }: MarketCardProps) {
+  const artUrl = getGeneratedAssetUrl(assetTag);
+
   /* The picture is the whole tile; everything else lives in the hover panel,
      so a department reads as two or three pictures rather than a wall of text. */
   return (
@@ -189,7 +192,14 @@ function MarketCard({
         disabled={disabled}
         onClick={onClick}
       >
-        <span className="market-card__art" data-asset-tag={assetTag}>
+        <span
+          className={joinClassNames(
+            "market-card__art",
+            Boolean(artUrl) && "market-card__art--generated",
+          )}
+          data-asset-tag={assetTag}
+          style={artUrl ? { "--market-card-art": `url("${artUrl}")` } as React.CSSProperties : undefined}
+        >
           <span className="market-card__art-mark" aria-hidden="true">IMG</span>
           <code>{assetTag}</code>
         </span>

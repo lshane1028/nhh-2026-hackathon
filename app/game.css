@@ -634,7 +634,7 @@
   display: block;
   width: 100%;
   min-height: 0;
-  aspect-ratio: 5 / 7;
+  aspect-ratio: 2 / 3;
   padding: 0.26rem;
   overflow: visible;
   border: 1px solid var(--line);
