@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import { TALISMANS } from "../content/talismans";
+import type { TalismanDefinition } from "../types";
 import { createStandardHwatuDeck } from "../engine/deck";
 import { createGoChainState } from "../engine/go";
-import { createInitialGameState, gameReducer } from "../state/game";
+import { createInitialGameState, gameReducer, sortHand } from "../state/game";
 
 describe("playable run reducer", () => {
   it("starts a seeded run with the full deck, hand and four actions", () => {
@@ -14,8 +16,10 @@ describe("playable run reducer", () => {
     expect(play.deck).toHaveLength(48);
     expect(play.hand).toHaveLength(8);
     expect(play.yard.cards).toHaveLength(0);
+    // 제출 4 : 버리기 3. 버리기 한 번의 실측 가치가 제출의 약 1/7이라 같은
+    // 개수로 두면 두 자원이 대등해 보이는 착시가 생긴다.
     expect(play.handsRemaining).toBe(4);
-    expect(play.discardsRemaining).toBe(4);
+    expect(play.discardsRemaining).toBe(3);
     expect(new Set([...play.hand, ...play.drawPile].map((card) => card.instanceId)).size).toBe(48);
   });
 
@@ -144,7 +148,9 @@ describe("playable run reducer", () => {
     expect(afterSecond.pendingPack).toBeNull();
   });
 
-  it("keeps the hand sorted and switches between month and kind order", () => {
+  it("always keeps the hand in calendar order", () => {
+    // The 광·동물·띠·피 toggle is gone. 짓 is built from month sums, so month
+    // order is the only arrangement that helps with the actual task.
     const deck = createStandardHwatuDeck();
     const messy = [
       deck.find((card) => card.month === 9 && card.kind === "chaff")!,
@@ -153,19 +159,16 @@ describe("playable run reducer", () => {
       deck.find((card) => card.month === 3 && card.kind === "ribbon")!,
       deck.find((card) => card.month === 1 && card.kind === "chaff")!,
     ];
-    const base = { ...createInitialGameState("SORT"), screen: "play" as const, deck, hand: messy };
-
-    const byMonth = gameReducer(base, { type: "SET_HAND_SORT", mode: "month" });
-    expect(byMonth.hand.map((card) => card.month)).toEqual([1, 1, 3, 5, 9]);
-    // Ties inside a month fall back to 광 → 동물 → 띠 → 피.
-    expect(byMonth.hand.slice(0, 2).map((card) => card.kind)).toEqual(["bright", "chaff"]);
-
-    const byKind = gameReducer(byMonth, { type: "SET_HAND_SORT", mode: "kind" });
-    expect(byKind.hand.map((card) => card.kind)).toEqual([
-      "bright", "animal", "ribbon", "chaff", "chaff",
-    ]);
-    expect(byKind.hand.slice(3).map((card) => card.month)).toEqual([1, 9]);
-    expect(byKind.handSort).toBe("kind");
+    const base = {
+      ...createInitialGameState("SORT"),
+      screen: "round_intro" as const,
+      deck: [...messy, ...deck.filter((card) => !messy.includes(card))],
+    };
+    const play = gameReducer(base, { type: "START_STAGE" });
+    const months = play.hand.map((card) => card.month);
+    expect(months).toEqual([...months].sort((left, right) => left - right));
+    // Ties inside a month still fall back to 광 → 동물 → 띠 → 피.
+    expect(sortHand(messy).map((card) => card.kind).slice(0, 2)).toEqual(["bright", "chaff"]);
   });
 
   it("refuses to discard a stubborn card even when bundled with others", () => {
@@ -317,6 +320,122 @@ describe("playable run reducer", () => {
     expect(applied.screen).toBe("shop");
     expect(applied.deck.find((card) => card.instanceId === target.instanceId)?.month).toBe(2);
     expect(applied.lastConsumableId).toBe("p_month_plus");
+  });
+
+  it("never restocks a talisman the player already owns", () => {
+    // Own everything but two, and the shelf can only hold those two.
+    const survivors = ["t_first_charm", "t_empty_shrine"];
+    const reward = {
+      ...createInitialGameState("OWNED-SMOKE"),
+      runId: "owned-smoke",
+      stage: 3,
+      screen: "reward" as const,
+      talismans: TALISMANS
+        .filter((entry) => !survivors.includes(entry.id))
+        .map((entry) => ({ instanceId: `owned:${entry.id}`, definitionId: entry.id, growth: 0 })),
+    };
+    const shop = gameReducer(reward, { type: "CONTINUE_AFTER_REWARD" });
+    const offered = shop.shopOffers
+      .filter((offer) => offer.category === "talisman")
+      .map((offer) => offer.definitionId);
+    expect(offered).toHaveLength(2);
+    expect([...offered].sort()).toEqual([...survivors].sort());
+  });
+
+  it("lets 제물 단도 eat its right-hand neighbour when a stage opens", () => {
+    const byId = (id: string): TalismanDefinition =>
+      TALISMANS.find((entry) => entry.id === id) as TalismanDefinition;
+    const dagger = byId("t_devouring_dagger");
+    const victim = byId("t_first_charm");
+    const intro = {
+      ...createInitialGameState("DAGGER-SMOKE"),
+      runId: "dagger-smoke",
+      screen: "round_intro" as const,
+      talismans: [
+        { instanceId: "owned:dagger", definitionId: dagger.id, growth: 0 },
+        { instanceId: "owned:victim", definitionId: victim.id, growth: 0 },
+      ],
+    };
+    const play = gameReducer(intro, { type: "START_STAGE" });
+    expect(play.talismans.map((item) => item.definitionId)).toEqual([dagger.id]);
+    expect(play.talismans[0].growth).toBeCloseTo(victim.price * (dagger.amount ?? 0), 5);
+
+    // With nothing to its right the dagger just sits there.
+    const alone = gameReducer(
+      { ...intro, talismans: [intro.talismans[0]] },
+      { type: "START_STAGE" },
+    );
+    expect(alone.talismans).toHaveLength(1);
+    expect(alone.talismans[0].growth).toBe(0);
+  });
+
+  it("grows 무광 연습 on a bright-free hand and resets it on a 광", () => {
+    const deck = createStandardHwatuDeck();
+    const chaffPair = deck.filter((card) => card.month === 1 && card.kind === "chaff").slice(0, 2);
+    const brightPair = [
+      deck.find((card) => card.month === 1 && card.kind === "bright")!,
+      deck.find((card) => card.month === 1 && card.kind === "ribbon")!,
+    ];
+    const base = (hand: typeof chaffPair) => ({
+      ...createInitialGameState("DROUGHT-SMOKE"),
+      runId: "drought",
+      screen: "play" as const,
+      deck,
+      hand,
+      drawPile: deck.filter((card) => !hand.some((entry) => entry.instanceId === card.instanceId)),
+      selectedCardIds: hand.map((card) => card.instanceId),
+      targetScore: 10_000,
+      talismans: [{ instanceId: "owned:drought", definitionId: "t_dark_practice", growth: 0.7 }],
+    });
+
+    const grown = gameReducer(base(chaffPair), { type: "SUBMIT_HAND" });
+    expect(grown.talismans[0].growth).toBeCloseTo(0.7 + 0.35, 5);
+
+    const reset = gameReducer(base(brightPair), { type: "SUBMIT_HAND" });
+    expect(reset.talismans[0].growth).toBe(0);
+  });
+
+  it("hands out the collection perks the moment a row completes", () => {
+    const deck = createStandardHwatuDeck();
+    // 홍단 1·2월을 이미 모아 둔 상태에서 3월 홍단을 내면 그 순간 단이 완성된다.
+    const hong = (month: number) =>
+      deck.find((card) => card.month === month && card.ribbonGroup === "hong")!;
+    const closer = hong(3);
+    // 짓 없이 낼 수 있도록 2장 제출로 맞춘다.
+    const partner = deck.find((card) => card.month === 5 && card.kind === "chaff")!;
+    const hand = [closer, partner];
+
+    const base = {
+      ...createInitialGameState("PERK"),
+      runId: "perk",
+      screen: "play" as const,
+      deck,
+      hand,
+      drawPile: deck.filter((card) => !hand.some((entry) => entry.instanceId === card.instanceId)),
+      selectedCardIds: hand.map((card) => card.instanceId),
+      targetScore: 10_000,
+      chain: {
+        ...createGoChainState(),
+        collection: {
+          cardIds: [hong(1).instanceId, hong(2).instanceId],
+          completedYakuIds: [],
+        },
+      },
+    };
+
+    const before = { hands: base.handsRemaining, discards: base.discardsRemaining };
+    const after = gameReducer(base, { type: "SUBMIT_HAND" });
+
+    // 단 완성으로 버리기가 하나 늘고, 제출은 이번 손을 쓴 만큼만 줄어야 한다.
+    expect(after.discardsRemaining).toBe(before.discards + 1);
+    expect(after.handsRemaining).toBe(before.hands - 1);
+
+    // 같은 판에서 또 내도 이미 받은 단이 다시 주지는 않는다.
+    const again = gameReducer(
+      { ...after, selectedCardIds: after.hand.slice(0, 2).map((card) => card.instanceId) },
+      { type: "SUBMIT_HAND" },
+    );
+    expect(again.discardsRemaining).toBe(after.discardsRemaining);
   });
 
   it("routes a cleared third month through reward, shop and a two-choice contract", () => {

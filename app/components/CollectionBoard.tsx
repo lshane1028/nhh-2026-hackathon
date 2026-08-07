@@ -1,5 +1,8 @@
 "use client";
 
+import type { CollectionSlot } from "@/game/engine/collection-board";
+import { getAtlasPosition } from "./hwatu-atlas";
+
 export type CollectionTrackKind =
   | "bright"
   | "animal"
@@ -34,6 +37,15 @@ export interface CollectionBoardItem {
    * must pass this, otherwise slots fill left to right from the counts.
    */
   slotStates?: readonly ("empty" | "confirmed" | "pending")[];
+  /**
+   * Real cards from the deck. When present the row draws pictures instead of
+   * blank pips, and `slotCount` is ignored — the deck decides the length.
+   *
+   * 피 passes only what has been COLLECTED rather than every candidate, since
+   * the deck holds two dozen of them and their identity does not matter. Its
+   * 쌍피 are marked with a value badge so the running total still adds up.
+   */
+  cards?: readonly CollectionSlot[];
   description?: string;
   milestones?: readonly CollectionMilestone[];
 }
@@ -55,6 +67,61 @@ function normalizedSlotCount(item: CollectionBoardItem): number {
   return Math.max(1, Math.floor(item.slotCount ?? 10));
 }
 
+/**
+ * One card in a picture row.
+ *
+ * Uncollected cards are dimmed and desaturated rather than hidden, so the row
+ * doubles as a checklist of what is still out there. A card the deck holds more
+ * than once gets a stacked edge behind it plus a count, because a bare "×2" on
+ * a single picture reads as a score multiplier — the stack is what makes the
+ * "two of these" reading the obvious one.
+ */
+function CollectionCard({ slot }: { slot: CollectionSlot }) {
+  const held = slot.collectedCount + slot.pendingCount;
+  const state = slot.collectedCount >= slot.deckCount
+    ? "confirmed"
+    : held > 0
+      ? "pending"
+      : "empty";
+  const duplicated = slot.deckCount > 1;
+  const badge = duplicated
+    ? held > 0 && held < slot.deckCount
+      ? `${held}/${slot.deckCount}`
+      : `×${slot.deckCount}`
+    : null;
+
+  const title = [
+    `${slot.month}월 ${slot.name}`,
+    slot.chaffValue === 2 ? "쌍피 · 두 칸" : null,
+    duplicated ? `덱에 ${slot.deckCount}장` : null,
+    state === "confirmed" ? "수집 완료" : state === "pending" ? "이번 손에 포함" : "아직 없음",
+  ].filter(Boolean).join(" · ");
+
+  return (
+    <span
+      className={joinClassNames(
+        "collection-card",
+        `collection-card--${state}`,
+        duplicated && "collection-card--stacked",
+      )}
+      title={title}
+      aria-label={title}
+      data-asset-tag={slot.assetTag}
+    >
+      <span
+        className="collection-card__art"
+        style={{ backgroundPosition: getAtlasPosition(slot) }}
+        aria-hidden="true"
+      />
+      <span className="collection-card__month" aria-hidden="true">{slot.month}</span>
+      {slot.chaffValue === 2 ? (
+        <b className="collection-card__value" aria-hidden="true">2점</b>
+      ) : null}
+      {badge ? <b className="collection-card__count" aria-hidden="true">{badge}</b> : null}
+    </span>
+  );
+}
+
 export function CollectionBoard({
   assetTag,
   items,
@@ -71,7 +138,7 @@ export function CollectionBoard({
           <span>COLLECTION</span>
           <strong>수집판</strong>
         </div>
-        <p>모은 패가 밝아지고, 표시된 구간마다 효과가 강해집니다.</p>
+        <p>줄마다 주는 것이 다릅니다. 광은 고 문턱을 깎고, 동물은 손패를 키우고, 고도리는 짓 규칙을 풀고, 띠는 버리기를, 피는 판돈을 줍니다.</p>
       </header>
 
       {items.length === 0 ? (
@@ -107,6 +174,16 @@ export function CollectionBoard({
                 </div>
 
                 <div className="collection-board__track-body">
+                  {/* An empty picture list is not a picture row. 피 only lists what
+                      has been taken, so before the first hand it has nothing to
+                      draw and has to fall back to the notches. */}
+                  {item.cards && item.cards.length > 0 ? (
+                    <div className="collection-board__cards" aria-label={`${item.name} 수집 카드`}>
+                      {item.cards.map((slot) => (
+                        <CollectionCard key={slot.originId} slot={slot} />
+                      ))}
+                    </div>
+                  ) : (
                   <div
                     className="collection-board__slots"
                     role="progressbar"
@@ -141,6 +218,7 @@ export function CollectionBoard({
                       <strong className="collection-board__overflow">+{overflow}</strong>
                     ) : null}
                   </div>
+                  )}
 
                   {item.milestones?.length ? (
                     <div className="collection-board__milestones" aria-label={`${item.name} 효과 구간`}>

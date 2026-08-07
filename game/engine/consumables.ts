@@ -236,7 +236,9 @@ export function applyStartDeck(
   const result: StartDeckResult = {
     deck: next,
     hands: 4,
-    discards: 4,
+    // Keep in step with createInitialGameState. This is the value a real run
+    // actually uses — the reducer's own default only covers the title screen.
+    discards: 3,
     handSize: 8,
     talismanSlots: 5,
     money: 4,

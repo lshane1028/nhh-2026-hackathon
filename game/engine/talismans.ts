@@ -32,6 +32,9 @@ export interface TalismanScoreContext {
   emptyTalismanSlots?: number;
   successfulGoCount?: number;
   scoredMonthsThisRound?: readonly Month[];
+  /** Buying-decision fuel for the jokers that read the rest of your run. */
+  discardsRemaining?: number;
+  yakusPlayed?: Readonly<Record<string, number>>;
 }
 
 export interface TalismanStructuralEffect {
@@ -62,6 +65,7 @@ export const STRUCTURAL_TALISMAN_EFFECT_KEYS = [
   "settlement_multiplier",
   "fail_rescue",
   "economy",
+  "devour_neighbor",
 ] as const satisfies readonly ScoreEffectKey[];
 
 const structuralEffectKeys = new Set<ScoreEffectKey>(STRUCTURAL_TALISMAN_EFFECT_KEYS);
@@ -282,6 +286,110 @@ function effectsForDefinition(
       }
       break;
     }
+    case "all_distinct_months_add": {
+      const months = new Set(context.submittedCards.map((card) => card.month));
+      const enough = context.submittedCards.length >= Math.max(1, positiveInteger(params.minCards, 1));
+      if (enough && months.size === context.submittedCards.length) {
+        addEffect(effects, makeEffect(talisman, definition, "add_kkeut", amount));
+        addEffect(effects, makeEffect(talisman, definition, "add_heung", finiteOr(params.addHeung), "배수"));
+      }
+      break;
+    }
+    case "jit_size_add": {
+      // maxJitCards 0 means "a bare 끗패", which is the two-card escape hatch.
+      const jitCards = context.candidate.jitCardIds.length;
+      const max = positiveInteger(params.maxJitCards, 0);
+      const min = positiveInteger(params.minJitCards, 0);
+      if (jitCards >= min && jitCards <= max) {
+        addEffect(effects, makeEffect(talisman, definition, "add_kkeut", amount));
+        addEffect(effects, makeEffect(talisman, definition, "add_heung", finiteOr(params.addHeung), "배수"));
+      }
+      break;
+    }
+
+    /* ---- Jokers that only pay off next to other cards ---- */
+
+    case "held_cards_add_heung": {
+      // Everything you did NOT submit. Pulls the opposite way from 다섯 손가락.
+      const held = context.heldCards?.length ?? 0;
+      addEffect(effects, makeEffect(talisman, definition, "add_heung", held * amount, `손패 ${held}장`));
+      break;
+    }
+    case "held_kind_multiply_heung": {
+      const kind = typeof params.kind === "string" ? params.kind as CardKind : "bright";
+      const matching = (context.heldCards ?? []).filter((card) => getEffectiveCardRole(card, cupRole).kind === kind);
+      const perCard = finiteOr(definition.factor, 1);
+      const factor = perCard ** matching.length;
+      if (matching.length > 0 && factor !== 1) {
+        addEffect(effects, makeEffect(talisman, definition, "multiply_heung", factor, `손에 ${matching.length}장`));
+      }
+      break;
+    }
+    case "discards_left_add_kkeut": {
+      const left = positiveInteger(context.discardsRemaining);
+      addEffect(effects, makeEffect(talisman, definition, "add_kkeut", left * amount, `버리기 ${left}회`));
+      break;
+    }
+    case "talisman_value_add_heung": {
+      // Reads the price tag of every OTHER talisman you own, so it grows as the
+      // rest of the board gets expensive.
+      const catalog = context.definitions ?? TALISMAN_BY_ID;
+      const others = context.talismans.filter((item) => item.instanceId !== talisman.instanceId);
+      const total = others.reduce((sum, item) => sum + finiteOr(catalog[item.definitionId]?.price), 0);
+      const step = Math.max(1, positiveInteger(params.priceStep, 1));
+      const value = Math.floor(total / step) * amount;
+      addEffect(effects, makeEffect(talisman, definition, "add_heung", value, `${total}냥어치`));
+      break;
+    }
+    case "full_slots_multiply_heung": {
+      // The exact opposite of 빈 사당 / 빈 부적집. Owning both is a mistake.
+      if (positiveInteger(context.emptyTalismanSlots) === 0) {
+        addEffect(effects, makeEffect(talisman, definition, "multiply_heung", finiteOr(definition.factor, 1)));
+      }
+      break;
+    }
+    case "fresh_yaku_multiply_heung": {
+      // Rewards variety, which is the opposite of what 비결서 pushes you toward.
+      const played = context.yakusPlayed?.[context.candidate.yakuId] ?? 0;
+      if (played < Math.max(1, positiveInteger(params.maxTimesPlayed, 1))) {
+        addEffect(effects, makeEffect(talisman, definition, "multiply_heung", finiteOr(definition.factor, 1)));
+      }
+      break;
+    }
+    case "yaku_multiply_heung": {
+      // Named-hand jokers. Hitting one exact 끗패 is a narrow ask, so the payoff
+      // is a multiplier rather than a flat bonus — and the rarer the hand, the
+      // bigger the factor. 비결서 raises the same hand's base, so the two stack
+      // into a real build instead of two separate small bonuses.
+      const yakuIds = csvValues(params.yakuIds);
+      if (yakuIds.includes(context.candidate.yakuId)) {
+        addEffect(effects, makeEffect(talisman, definition, "multiply_heung", finiteOr(definition.factor, 1)));
+        addEffect(effects, makeEffect(talisman, definition, "add_kkeut", amount));
+      }
+      break;
+    }
+    case "yaku_multiply_kkeut": {
+      const yakuIds = csvValues(params.yakuIds);
+      if (yakuIds.includes(context.candidate.yakuId)) {
+        const factor = Math.max(0, finiteOr(definition.factor, 1));
+        // 월 합 has no multiply operation, so the gain is expressed as an add.
+        const bonus = Math.round(Math.max(0, context.candidate.jitSum || 1) * (factor - 1));
+        addEffect(effects, makeEffect(talisman, definition, "add_kkeut", bonus));
+      }
+      break;
+    }
+    case "jit_sum_multiply_heung": {
+      if (context.candidate.jitSum >= Math.max(1, positiveInteger(params.minJitSum, 1))) {
+        addEffect(effects, makeEffect(talisman, definition, "multiply_heung", finiteOr(definition.factor, 1)));
+      }
+      break;
+    }
+    case "bright_drought_growth": {
+      // Grown in the reducer every time a hand scores without a 광.
+      const factor = 1 + Math.max(0, finiteOr(talisman.growth));
+      if (factor !== 1) addEffect(effects, makeEffect(talisman, definition, "multiply_heung", factor, "무광 연습"));
+      break;
+    }
     case "first_card_retrigger": {
       const first = context.scoringCards[0];
       const requiresEnhancement = params.requiresEnhancement === true;
@@ -328,6 +436,7 @@ function effectsForDefinition(
     case "threshold_relief":
     case "settlement_multiplier":
     case "fail_rescue":
+    case "devour_neighbor":
     case "economy":
       break;
     default: {

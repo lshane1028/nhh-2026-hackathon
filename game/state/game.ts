@@ -77,6 +77,7 @@ import type {
   ScoreBreakdown,
   ShopOffer,
   TalismanDefinition,
+  TalismanInstance,
   YakuCandidate,
   YakuLevelState,
 } from "../types";
@@ -92,20 +93,20 @@ const KIND_ORDER: Record<CardInstance["kind"], number> = {
   chaff: 3,
 };
 
-export function sortHand(
-  hand: readonly CardInstance[],
-  mode: GameState["handSort"],
-): CardInstance[] {
-  const byMonth = (left: CardInstance, right: CardInstance) => left.month - right.month;
-  const byKind = (left: CardInstance, right: CardInstance) =>
-    KIND_ORDER[left.kind] - KIND_ORDER[right.kind];
-  return [...hand].sort((left, right) => {
-    const primary = mode === "kind" ? byKind(left, right) : byMonth(left, right);
-    if (primary !== 0) return primary;
-    const secondary = mode === "kind" ? byMonth(left, right) : byKind(left, right);
-    if (secondary !== 0) return secondary;
-    return left.instanceId.localeCompare(right.instanceId);
-  });
+/**
+ * Always calendar order.
+ *
+ * There used to be a 광·동물·띠·피 toggle beside the hand. It cost a control and
+ * a piece of state to answer a question the player almost never has: 짓 is
+ * built out of month sums, so month order is the only arrangement that helps
+ * with the thing you are actually doing.
+ */
+export function sortHand(hand: readonly CardInstance[]): CardInstance[] {
+  return [...hand].sort((left, right) =>
+    left.month - right.month
+    || KIND_ORDER[left.kind] - KIND_ORDER[right.kind]
+    || left.instanceId.localeCompare(right.instanceId),
+  );
 }
 
 function initialYakuLevels(): Record<string, YakuLevelState> {
@@ -148,14 +149,16 @@ export function createInitialGameState(seed = DEFAULT_SEED): GameState {
     hand: [],
     usedPile: [],
     selectedCardIds: [],
-    handSort: "month",
     cupAssignments: {},
     pendingCupCardId: null,
     handsRemaining: 4,
-    discardsRemaining: 4,
+    // 버리기는 제출보다 훨씬 값이 싸다. 그리디 시뮬레이션에서 제출 한 번은
+    // 라운드 점수의 약 25%를 만들지만 버리기 한 번은 3.5%뿐이었다. 4:4로 두면
+    // 두 자원이 같은 무게로 보이지만 실제로는 7배 차이라 4:3으로 맞춘다.
+    discardsRemaining: 3,
     handSize: 8,
     baseHands: 4,
-    baseDiscards: 4,
+    baseDiscards: 3,
     targetMultiplier: 1,
     roundSettlementBonus: 0,
     failMoneyPenalty: 0,
@@ -227,8 +230,22 @@ function contractDiscount(state: GameState): number {
   return count <= 0 ? 0 : count === 1 ? 0.15 : 0.3;
 }
 
+/**
+ * What the collection board is paying right now, beyond 배수.
+ *
+ * Read straight off the cards banked this round, so the perks appear the
+ * instant a row completes and vanish when the round resets. Everything that
+ * consumes them goes through here rather than recomputing the board.
+ */
+function collectionPerks(state: GameState) {
+  return calculateCollectionBonus(
+    cardsFromIds(state, state.chain.collection.cardIds),
+    state.cupAssignments,
+  ).perks;
+}
+
 function effectiveHandSize(state: GameState): number {
-  return state.handSize + countContract(state, "hand_size");
+  return state.handSize + countContract(state, "hand_size") + collectionPerks(state).handSizeBonus;
 }
 
 /**
@@ -276,7 +293,7 @@ function refillHand(state: GameState, currentHand: CardInstance[]): GameState {
   return {
     ...state,
     rngCursor: cursor,
-    hand: sortHand([...currentHand, ...faceDownForBoss(drawn, boss)], state.handSort),
+    hand: sortHand([...currentHand, ...faceDownForBoss(drawn, boss)]),
     drawPile: pile.slice(drawn.length),
     usedPile,
   };
@@ -321,8 +338,38 @@ function startRun(state: GameState, startDeckId: string, tutorialMode: boolean):
   };
 }
 
+/**
+ * 제물 단도 eats the talisman immediately to its right when a stage opens and
+ * converts that talisman's price into permanent growth. Two daggers side by
+ * side resolve left to right, so the left one eats the right one.
+ */
+function resolveDevouringDaggers(talismans: readonly TalismanInstance[]): {
+  talismans: TalismanInstance[];
+  devoured: string[];
+} {
+  let list = [...talismans];
+  const devoured: string[] = [];
+  for (let index = 0; index < list.length; index += 1) {
+    const dagger = list[index];
+    const definition = TALISMAN_BY_ID[dagger.definitionId];
+    if (definition?.effectKey !== "devour_neighbor") continue;
+    const victim = list[index + 1];
+    if (!victim) continue;
+    const victimDefinition = TALISMAN_BY_ID[victim.definitionId];
+    if (!victimDefinition) continue;
+    devoured.push(victimDefinition.name);
+    list = [
+      ...list.slice(0, index),
+      { ...dagger, growth: dagger.growth + victimDefinition.price * (definition.amount ?? 0) },
+      ...list.slice(index + 2),
+    ];
+  }
+  return { talismans: list, devoured };
+}
+
 function startStage(state: GameState): GameState {
   const stage = getStageDefinition(state.stage, state.infiniteLap);
+  const devouring = resolveDevouringDaggers(state.talismans);
   const stageBossId = state.stage > 12
     ? BOSSES[(state.stage - 13) % BOSSES.length].id
     : stage.bossId;
@@ -336,11 +383,12 @@ function startStage(state: GameState): GameState {
   const discards = state.baseDiscards + countContract(state, "discards_per_round");
   const boss = stageBossId ? BOSS_BY_ID[stageBossId] ?? null : null;
   const handSize = effectiveHandSize(state);
-  const hand = sortHand(faceDownForBoss(pileAfterYard.slice(0, handSize).map(cloneCard), boss), state.handSort);
+  const hand = sortHand(faceDownForBoss(pileAfterYard.slice(0, handSize).map(cloneCard), boss));
   const next: GameState = {
     ...state,
     screen: "play",
     rngCursor: shuffled.state.cursor,
+    talismans: devouring.talismans,
     targetScore: Math.ceil(stage.target * state.targetMultiplier),
     bossId: stageBossId,
     weatherId: state.experimentalRules.weather ? stage.weatherId : "clear",
@@ -360,6 +408,17 @@ function startStage(state: GameState): GameState {
     lastRoundReward: 0,
     returnScreen: null,
   };
+  if (devouring.devoured.length > 0) {
+    return {
+      ...next,
+      logs: logEntry(
+        next,
+        "system",
+        "제물 단도",
+        `${devouring.devoured.join(" · ")}를 삼켰습니다.`,
+      ),
+    };
+  }
   return {
     ...next,
     logs: logEntry(
@@ -504,7 +563,8 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
       collection,
       yakuLevels: state.yakuLevels,
       cupRole,
-      allowFiveMultipleJit: rules.allowsFiveMultipleJit,
+      // 윤달 달력 부적이든 고도리 완성이든, 둘 중 하나면 5의 배수도 짓이 된다.
+      allowFiveMultipleJit: rules.allowsFiveMultipleJit || collectionPerks(state).allowFiveMultipleJit,
       includeSecretYaku: true,
     } as const;
     const bases = evaluateImmediateCandidates(baseInput).filter((entry) =>
@@ -540,6 +600,8 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
         emptyTalismanSlots: Math.max(0, getEffectiveTalismanSlots(state) - state.talismans.length),
         successfulGoCount: state.chain.goCount,
         scoredMonthsThisRound: state.scoredMonthsThisRound,
+        discardsRemaining: state.discardsRemaining,
+        yakusPlayed: state.stats.yakusPlayed,
       });
       const stateEffects = scoreEffectsForState(
         state,
@@ -613,6 +675,15 @@ function applyCardAftermath(state: GameState, scored: ScoredSelection): GameStat
       burned.add(card.instanceId);
     }
   }
+  // 무광 연습 — the drought only counts hands that actually scored.
+  const scoredABright = scoringCards.some((card) => card.kind === "bright");
+  talismans = talismans.map((item) => {
+    const definition = TALISMAN_BY_ID[item.definitionId];
+    if (definition?.effectKey !== "bright_drought_growth") return item;
+    const grown = scoredABright ? 0 : item.growth + (definition.amount ?? 0);
+    return grown === item.growth ? item : { ...item, growth: grown };
+  });
+
   const cremation = talismans.find((item) => item.definitionId === "t_cremation_deed");
   if (cremation && !roundTalismanUses.t_cremation_deed) {
     const firstChaff = scoringCards.find((card) => card.kind === "chaff");
@@ -661,7 +732,8 @@ function goThresholdFactor(state: GameState): number {
   const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
   const talismanRules = calculateTalismanRoundRuleModifiers(state.talismans);
   const bossFactor = boss?.ruleKey === "go_fail_tax" ? 1.1 : 1;
-  return talismanRules.thresholdFactor * bossFactor;
+  // 광 discount. Collecting brights is what makes calling Go affordable.
+  return talismanRules.thresholdFactor * bossFactor * collectionPerks(state).goThresholdFactor;
 }
 
 /**
@@ -713,7 +785,8 @@ function finishRound(state: GameState): GameState {
     successfulGoCount: state.chain.goCount,
     confirmedScore: state.chain.roundScore,
     targetScore: state.targetScore,
-    adjustment: talismanReward.moneyDelta + bak.bonusMoney,
+    // 피는 돈이다. 판을 이길 때만 값을 친다.
+    adjustment: talismanReward.moneyDelta + bak.bonusMoney + collectionPerks(state).moneyBonus,
   });
   const heldCoinMoney = state.hand.filter((card) => card.enhancement === "coin").length * 2;
   const blueSeals = state.hand.filter((card) => card.seal === "blue").length;
@@ -789,18 +862,26 @@ function submitHand(state: GameState): GameState {
     .find((id) => !state.cupAssignments[id]) ?? null;
   const submittedIds = new Set(scored.submitted.map((card) => card.instanceId));
   const remainingHand = state.hand.filter((card) => !submittedIds.has(card.instanceId));
-  const handsRemaining = state.handsRemaining - 1;
   const mastery = createMasteryEvents(scored.breakdown);
   const chain = addHandToRound(state.chain, scored.breakdown.score, {
     submittedCardIds: [...scored.submitted, ...scored.captured].map((card) => card.instanceId),
     completedCollectionYakuIds: scored.breakdown.newCollectionYakuIds,
     masteryEvents: mastery,
   });
+
+  // 단은 완성되는 순간 버리기를 준다. 앞뒤 상태의 특전을 빼서 차이만 지급하므로
+  // 같은 줄을 두 번 완성해도 두 번 주지 않는다.
+  const perksBefore = collectionPerks(state);
+  const perksAfter = collectionPerks({ ...state, chain });
+  const grantedDiscards = Math.max(0, perksAfter.extraDiscards - perksBefore.extraDiscards);
+  const handsRemaining = state.handsRemaining - 1;
+
   let next: GameState = {
     ...state,
     hand: remainingHand,
     usedPile: [...state.usedPile, ...scored.submitted],
     handsRemaining,
+    discardsRemaining: state.discardsRemaining + grantedDiscards,
     selectedCardIds: [],
     pendingCupCardId,
     chain,
@@ -946,14 +1027,26 @@ type ShopCategory = NonNullable<GameState["shopType"]>;
 
 const SHOP_CATEGORIES: readonly ShopCategory[] = ["talisman", "book", "forbidden", "painter"];
 
-function categoryPool(shopType: ShopCategory) {
-  return shopType === "talisman"
-    ? TALISMANS
-    : shopType === "painter"
-      ? PAINTER_CARDS
-      : shopType === "book"
-        ? BOOKS
-        : FORBIDDEN_CARDS;
+/**
+ * Talismans you already own never come back to the shelf. A duplicate 부적 does
+ * nothing you cannot already do, so seeing one is a wasted slot rather than a
+ * choice. Books and painters are consumed on purchase, and 금단패 are one-shot
+ * contracts, so only this category needs the filter.
+ */
+function ownedTalismanIds(state: GameState): Set<string> {
+  return new Set(state.talismans.map((item) => item.definitionId));
+}
+
+function categoryPool(state: GameState, shopType: ShopCategory) {
+  if (shopType === "talisman") {
+    const owned = ownedTalismanIds(state);
+    return TALISMANS.filter((entry) => !owned.has(entry.id));
+  }
+  return shopType === "painter"
+    ? PAINTER_CARDS
+    : shopType === "book"
+      ? BOOKS
+      : FORBIDDEN_CARDS;
 }
 
 /**
@@ -1010,8 +1103,8 @@ function generateShopOffers(state: GameState): { offers: ShopOffer[]; cursor: nu
     const size = SHOP_DEPARTMENT_SIZES[category];
     if (size <= 0) continue;
     const pool = category === "painter"
-      ? categoryPool(category).filter((entry) => WORKSHOP_PAINTER_IDS.includes(entry.id))
-      : categoryPool(category);
+      ? categoryPool(state, category).filter((entry) => WORKSHOP_PAINTER_IDS.includes(entry.id))
+      : categoryPool(state, category);
     const picked = draw(pool, size, `shop:${category}`);
     if (tutorialFirstShop && category === "talisman" && TALISMAN_BY_ID.t_first_charm) {
       picked[0] = TALISMAN_BY_ID.t_first_charm;
@@ -1026,7 +1119,7 @@ function generateShopOffers(state: GameState): { offers: ShopOffer[]; cursor: nu
 
 function generateOffers(state: GameState, shopType: ShopCategory, free = false): { offers: ShopOffer[]; cursor: number } {
   let cursor = state.rngCursor;
-  const pool = [...categoryPool(shopType)];
+  const pool = [...categoryPool(state, shopType)];
   const offers: ShopOffer[] = [];
   for (let index = 0; index < Math.min(3, pool.length); index += 1) {
     const pick = Math.floor(randomAt(`${state.seed}:shop:${state.stage}:${shopType}`, cursor++) * pool.length);
@@ -1250,8 +1343,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "CLEAR_SELECTION":
       return { ...state, selectedCardIds: [] };
-    case "SET_HAND_SORT":
-      return { ...state, handSort: action.mode, hand: sortHand(state.hand, action.mode) };
     case "ASSIGN_CUP_ROLE": {
       if (state.pendingCupCardId !== action.cardId) return state;
       const card = state.deck.find((entry) => entry.instanceId === action.cardId);

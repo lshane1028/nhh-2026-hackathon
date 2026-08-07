@@ -117,6 +117,21 @@ export type ScoreEffectKey =
   | "empty_slots_add_heung"
   | "money_add_heung"
   | "all_cards_score_bonus"
+  | "all_distinct_months_add"
+  | "jit_size_add"
+  // 짓고땡용 조커 키. 대부분 "다른 카드가 있어야 값이 생기는" 종류라,
+  // 손에 남긴 패·남은 버리기·이미 가진 부적·이번 런 기록을 읽는다.
+  | "held_cards_add_heung"
+  | "held_kind_multiply_heung"
+  | "discards_left_add_kkeut"
+  | "talisman_value_add_heung"
+  | "full_slots_multiply_heung"
+  | "fresh_yaku_multiply_heung"
+  | "yaku_multiply_kkeut"
+  | "yaku_multiply_heung"
+  | "jit_sum_multiply_heung"
+  | "bright_drought_growth"
+  | "devour_neighbor"
   | "copy_left_score"
   | "cup_dual_role"
   | "month_counts_as_bright"
@@ -450,7 +465,6 @@ export interface GameState {
   usedPile: CardInstance[];
   selectedCardIds: string[];
   /** How the hand is laid out: by month, or grouped 광/동물/띠/피. */
-  handSort: "month" | "kind";
   /**
    * Per-instance September cup roles. The player files each cup card onto the
    * collection board after scoring, so there is no round-wide cup role.

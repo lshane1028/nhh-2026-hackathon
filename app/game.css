@@ -117,8 +117,8 @@
 }
 .play-shell > * { min-width: 0; min-height: 0; }
 
-.play-shell button,
-.market-shell button {
+.play-shell button:not(.hwatu-card),
+.market-shell button:not(.hwatu-card) {
   min-height: 2.3rem;
   padding: 0.4rem 0.7rem;
   border: 1px solid var(--line);
@@ -128,8 +128,8 @@
   font-weight: 800;
   cursor: pointer;
 }
-.play-shell button:disabled,
-.market-shell button:disabled { cursor: not-allowed; opacity: 0.42; }
+.play-shell button:not(.hwatu-card):disabled,
+.market-shell button:not(.hwatu-card):disabled { cursor: not-allowed; opacity: 0.42; }
 .play-shell button:focus-visible,
 .market-shell button:focus-visible { outline: 3px solid #46a3ff; outline-offset: 2px; }
 .play-shell .primary-action { border-color: #6d1f19 !important; background: var(--red) !important; color: #fff6ee !important; }
@@ -293,11 +293,42 @@
 .hand-fan > li:hover,
 .hand-fan > li:focus-within { z-index: 40; }
 
-.deck-stack { display: grid; flex: 0 0 auto; gap: 0.2rem; justify-items: center; }
+/*
+  While anything is selected, everything else steps back. This is the cue that
+  actually reads at a glance — the lift and ring on the chosen cards say "these
+  ones", and the wash on the rest says "not these".
+*/
+/* Enough to push the unpicked cards back, not so much that you cannot read
+   them — you still need to see what is left in order to choose the next one. */
+.hand-fan--selecting > li:not(:hover) .hwatu-card:not(.hwatu-card--selected) {
+  filter: brightness(0.82) saturate(0.85);
+}
+.hand-fan--selecting > li .hwatu-card--selected { filter: none; opacity: 1; }
+
+/* The pile is a button now — clicking the deck opens the deck. */
+.deck-stack {
+  display: grid !important;
+  min-height: 0 !important;
+  padding: 0.2rem !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  flex: 0 0 auto;
+  gap: 0.2rem;
+  justify-items: center;
+  cursor: pointer;
+}
+.deck-stack:hover { border-color: #6b7a70 !important; }
+.deck-stack:hover .deck-stack__back { transform: translateY(-0.2rem); }
+.deck-stack > em {
+  color: #f0c96a;
+  font-size: 0.55rem;
+  font-style: normal;
+  font-weight: 900;
+}
 .deck-stack__back {
   display: grid;
   width: clamp(3.2rem, 4.6vw, 4.6rem);
-  aspect-ratio: 5 / 7;
+  aspect-ratio: 2 / 3;
   place-content: center;
   gap: 0.15rem;
   padding: 0.25rem;
@@ -310,8 +341,7 @@
   box-shadow: 0.2rem 0.2rem 0 rgb(0 0 0 / 30%), 0.4rem 0.4rem 0 rgb(0 0 0 / 18%);
   text-align: center;
 }
-.deck-stack__back > span { color: #e8c4bd; font: 700 0.5rem/1 monospace; }
-.deck-stack__back > code { overflow: hidden; color: #d8a49b; font-size: 0.34rem; text-overflow: ellipsis; white-space: nowrap; }
+.deck-stack__back { transition: transform 140ms ease; }
 .deck-stack > strong { color: #c3cdc6; font-size: 0.66rem; }
 
 .hand-meta { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; color: #9fada3; font-size: 0.6rem; font-weight: 800; }
@@ -348,9 +378,15 @@
 
 .hand-actions,
 .decision-actions { display: grid; gap: 0.4rem; }
-.hand-actions { grid-template-columns: auto auto minmax(8rem, 1.2fr) minmax(7rem, 1fr); justify-content: center; }
-.hand-actions > .primary-action,
-.hand-actions > .discard-action,
+/* Three buttons, three columns. This used to declare four — a leftover from an
+   action that no longer exists — which parked 제출 in an `auto` column so it
+   shrank to its label while 버리기 ate 1.2fr. 제출 is the primary action and
+   must be the widest thing down here. */
+.hand-actions {
+  grid-template-columns: minmax(5.5rem, 0.65fr) minmax(11rem, 1.7fr) minmax(7.5rem, 1fr);
+  justify-content: center;
+}
+.hand-actions > button,
 .decision-actions button {
   display: grid;
   gap: 0.02rem;
@@ -764,12 +800,33 @@
 .deck-editor-screen header p:not(.eyebrow) { margin: 0; color: var(--muted); }
 .editor-option { display: flex; width: fit-content; align-items: center; gap: 0.65rem; padding: 0.55rem 0.7rem; border: 1px solid var(--line); border-radius: 0.65rem; background: #fffaf0; font-weight: 800; }
 .editor-option select { min-width: 10rem; padding: 0.35rem; border: 1px solid var(--line); border-radius: 0.4rem; background: white; }
-.deck-editor-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 0.45rem; }
-.deck-editor-card { display: flex; min-width: 0; min-height: 8.5rem !important; flex-direction: column; align-items: flex-start; text-align: left; }
-.deck-editor-card strong { color: var(--red); font-size: 0.72rem; }
-.deck-editor-card span { font-size: 0.7rem; line-height: 1.35; }
-.deck-editor-card code { width: 100%; margin-top: auto; overflow: hidden; color: var(--blue); font-size: 0.55rem; text-overflow: ellipsis; white-space: nowrap; }
-.deck-editor-card small { color: var(--muted); font-size: 0.55rem; }
+/* One row per month. Real card pictures, because a wall of "3월 · ribbon" text
+   is unreadable and the pictures are what the player recognises. */
+.deck-months { display: grid; gap: 0.6rem; }
+.deck-month {
+  display: grid;
+  grid-template-columns: 3.4rem minmax(0, 1fr);
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: rgb(255 255 255 / 45%);
+}
+.deck-month > h2 {
+  display: grid;
+  margin: 0;
+  color: var(--red);
+  font-size: 1.05rem;
+  line-height: 1.1;
+}
+.deck-month > h2 > span { color: var(--muted); font-size: 0.6rem; font-weight: 700; }
+.deck-month__cards { display: flex; min-width: 0; flex-wrap: wrap; gap: 0.35rem; }
+.deck-card {
+  width: clamp(2.6rem, 4vw, 3.4rem) !important;
+  height: auto !important;
+  flex: 0 0 auto !important;
+}
 .deck-editor-card--selected { border-color: var(--red) !important; background: #fae8e4 !important; box-shadow: 0 0 0 2px rgb(159 48 41 / 18%); }
 .codex-summary { display: grid; grid-template-columns: 2fr 1fr; gap: 0.75rem; }
 .codex-summary > div { padding: 0.8rem; border: 1px solid var(--line); border-radius: 0.7rem; background: #fffaf0; }
@@ -779,6 +836,75 @@
 .codex-summary code { width: 100%; overflow: hidden; color: var(--blue); text-overflow: ellipsis; white-space: nowrap; }
 .sticky-editor-actions { position: sticky; z-index: 4; bottom: 0.5rem; display: flex; align-items: center; justify-content: flex-end; gap: 0.55rem; padding: 0.65rem; border: 1px solid var(--line); border-radius: 0.75rem; background: rgb(247 240 223 / 96%); box-shadow: 0 0.6rem 1.2rem rgb(0 0 0 / 18%); }
 .sticky-editor-actions > span { margin-right: auto; font-weight: 900; }
+
+/* --- rules modal ---------------------------------------------------------
+   Two pages: the rules said in as few words as possible, and the 끗패 ladder
+   drawn with the real cards so the shapes are recognisable rather than read. */
+
+.rules-tabs { display: flex; gap: 0.35rem; margin-bottom: 0.7rem; }
+.rules-tabs > button {
+  padding: 0.35rem 0.9rem !important;
+  border-radius: 999px !important;
+  font-size: 0.75rem;
+}
+.rules-tabs > button[aria-selected="true"] {
+  border-color: #6d1f19 !important;
+  background: var(--red) !important;
+  color: #fff6ee !important;
+}
+
+.rules-steps {
+  display: grid;
+  margin: 0;
+  padding-left: 1.1rem;
+  gap: 0.45rem;
+  color: var(--ink);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+.rules-steps b { color: var(--red); }
+
+.yaku-list { display: grid; margin: 0; padding: 0; gap: 0.25rem; list-style: none; }
+.yaku-list__row {
+  display: grid;
+  grid-template-columns: 4.4rem minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: #fffaf0;
+}
+.yaku-list__cards { display: flex; gap: 0.2rem; }
+.yaku-list__name { display: grid; min-width: 0; }
+.yaku-list__name strong { font-size: 0.82rem; }
+.yaku-list__name em { color: var(--muted); font-size: 0.62rem; font-style: normal; }
+.yaku-list__heung { color: var(--red); font-size: 0.95rem; }
+
+.yaku-sample { position: relative; display: block; width: 2rem; aspect-ratio: 2 / 3; }
+.yaku-sample__art {
+  position: absolute;
+  border: 1px solid rgb(23 17 12 / 55%);
+  border-radius: 0.2rem;
+  background-color: #f7f0df;
+  background-image: url("/assets/cards/hwatu-basic-atlas-generated-v4-aligned.png");
+  background-repeat: no-repeat;
+  background-size: 800% 600%;
+  image-rendering: pixelated;
+  inset: 0;
+}
+.yaku-sample > b {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  padding: 0 0.14rem;
+  border-radius: 0.2rem 0 0.2rem 0;
+  background: rgb(23 17 12 / 72%);
+  color: #fff6e4;
+  font-size: 0.48rem;
+  line-height: 1.4;
+}
 
 .rules-copy { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
 .rules-copy section { padding: 0.65rem; border: 1px solid var(--line); border-radius: 0.6rem; background: #fffaf0; }

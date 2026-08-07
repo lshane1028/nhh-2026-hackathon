@@ -81,13 +81,13 @@ function januaryPair(): { cards: CardInstance[]; candidate: YakuCandidate } {
 describe("complete content catalog", () => {
   it("matches every required catalog count", () => {
     expect(CONTENT_ACTUAL_COUNTS).toEqual(CONTENT_EXPECTED_COUNTS);
-    expect(CONTENT_CATALOG_VALIDATION.totalEntries).toBe(134);
+    expect(CONTENT_CATALOG_VALIDATION.totalEntries).toBe(149);
     expect(CONTENT_CATALOG_COMPLETE).toBe(true);
     expect(assertContentCatalogComplete()).toBe(true);
   });
 
   it("has globally unique IDs and asset tags with usable descriptions", () => {
-    expect(catalogEntries).toHaveLength(134);
+    expect(catalogEntries).toHaveLength(149);
     expect(new Set(catalogEntries.map((entry) => entry.id)).size).toBe(catalogEntries.length);
     expect(new Set(ALL_CONTENT_ASSET_TAGS).size).toBe(ALL_CONTENT_ASSET_TAGS.length);
     for (const entry of catalogEntries) {
@@ -158,6 +158,134 @@ describe("talisman engine", () => {
       submittedCards: bare,
       scoringCards: bare,
     })).toEqual([]);
+  });
+
+  it("pays the jokers that read the rest of the board", () => {
+    const { cards, candidate } = januaryPair();
+    const deck = createStandardHwatuDeck();
+    const heldBrights = deck.filter((card) => card.kind === "bright").slice(0, 2);
+
+    const only = (talismanId: string, extra: Record<string, unknown> = {}) =>
+      buildOrderedTalismanScoreEffects({
+        talismans: [owned(talismanId)],
+        candidate,
+        submittedCards: cards,
+        scoringCards: cards,
+        ...extra,
+      });
+
+    // 미련 — 손에 남긴 카드 3장 × 0.5.
+    expect(only("t_lingering_hand", { heldCards: deck.slice(0, 3) })).toEqual([
+      expect.objectContaining({ operation: "add_heung", value: 1.5 }),
+    ]);
+    expect(only("t_lingering_hand", { heldCards: [] })).toEqual([]);
+
+    // 달 지킴이 — 손에 든 광 2장이면 1.4^2.
+    const moonlit = only("t_moonlit_keep", { heldCards: heldBrights })[0];
+    expect(moonlit.operation).toBe("multiply_heung");
+    expect(moonlit.value).toBeCloseTo(1.96, 5);
+
+    // 곳간 셈 — 남은 버리기 3회 × 40.
+    expect(only("t_thrift_granary", { discardsRemaining: 3 })).toEqual([
+      expect.objectContaining({ operation: "add_kkeut", value: 120 }),
+    ]);
+
+    // 삯꾼 주판 — 다른 부적들의 값만 세고 자기 값은 빼야 한다.
+    const abacus = buildOrderedTalismanScoreEffects({
+      talismans: [owned("t_haggler_abacus"), owned("t_first_charm"), owned("t_empty_shrine")],
+      candidate,
+      submittedCards: cards,
+      scoringCards: cards,
+    }).filter((effect) => effect.sourceId === "owned:t_haggler_abacus");
+    const otherPrices = TALISMANS
+      .filter((entry) => entry.id === "t_first_charm" || entry.id === "t_empty_shrine")
+      .reduce((sum, entry) => sum + entry.price, 0);
+    expect(abacus).toEqual([
+      expect.objectContaining({ operation: "add_heung", value: Math.floor(otherPrices / 3) }),
+    ]);
+
+    // 빼곡한 사당 — 빈 칸이 0일 때만.
+    expect(only("t_crowded_shrine", { emptyTalismanSlots: 0 })).toEqual([
+      expect.objectContaining({ operation: "multiply_heung", value: 1.8 }),
+    ]);
+    expect(only("t_crowded_shrine", { emptyTalismanSlots: 1 })).toEqual([]);
+
+    // 첫맛 — 이번 런에서 이미 두 번 낸 끗패면 꺼진다.
+    expect(only("t_first_taste", { yakusPlayed: { ttaeng: 1 } })).toEqual([
+      expect.objectContaining({ operation: "multiply_heung", value: 1.9 }),
+    ]);
+    expect(only("t_first_taste", { yakusPlayed: { ttaeng: 2 } })).toEqual([]);
+
+    // 긴 짓 도둑 — 짓 합 30 이상.
+    const bigJit = { ...candidate, jitSum: 30, jitCardIds: ["a", "b", "c"] };
+    expect(buildOrderedTalismanScoreEffects({
+      talismans: [owned("t_long_jit_thief")],
+      candidate: bigJit,
+      submittedCards: cards,
+      scoringCards: cards,
+    })).toEqual([expect.objectContaining({ operation: "multiply_heung", value: 2.2 })]);
+    expect(only("t_long_jit_thief")).toEqual([]);
+  });
+
+  it("turns 망통 into a 월 합 multiplier rather than a dead hand", () => {
+    const { cards } = januaryPair();
+    const mangtong: YakuCandidate = {
+      yakuId: "mangtong",
+      scoringCardIds: cards.map((card) => card.instanceId),
+      jitCardIds: ["x", "y"],
+      jitSum: 20,
+      label: "망통",
+    };
+    const effects = buildOrderedTalismanScoreEffects({
+      talismans: [owned("t_mangtong_lover")],
+      candidate: mangtong,
+      submittedCards: cards,
+      scoringCards: cards,
+    });
+    // 짓 20 → ×3이므로 +40.
+    expect(effects).toEqual([expect.objectContaining({ operation: "add_kkeut", value: 40 })]);
+  });
+
+  it("pays the named-hand jokers only on their exact 끗패, and pays more for rarer ones", () => {
+    const { cards } = januaryPair();
+    const hand = (yakuId: YakuCandidate["yakuId"]): YakuCandidate => ({
+      yakuId,
+      scoringCardIds: cards.map((card) => card.instanceId),
+      jitCardIds: [],
+      jitSum: 0,
+      label: yakuId,
+    });
+    const fire = (talismanId: string, yakuId: YakuCandidate["yakuId"]) =>
+      buildOrderedTalismanScoreEffects({
+        talismans: [owned(talismanId)],
+        candidate: hand(yakuId),
+        submittedCards: cards,
+        scoringCards: cards,
+      });
+
+    // 알리 부적은 알리에만 붙는다.
+    expect(fire("t_ali_charm", "ali")).toEqual([
+      expect.objectContaining({ operation: "multiply_heung", value: 1.8 }),
+      expect.objectContaining({ operation: "add_kkeut", value: 40 }),
+    ]);
+    expect(fire("t_ali_charm", "gabo")).toEqual([]);
+
+    // 광땡 부적은 세 광땡 모두, 삼팔 봉인은 38광땡만.
+    for (const id of ["gwangttaeng_13", "gwangttaeng_18", "gwangttaeng_38"] as const) {
+      expect(fire("t_gwangttaeng_charm", id).length).toBeGreaterThan(0);
+    }
+    expect(fire("t_sampal_seal", "gwangttaeng_13")).toEqual([]);
+    expect(fire("t_sampal_seal", "gwangttaeng_38").length).toBeGreaterThan(0);
+
+    // 좁을수록 크게 갚아야 한다: 38광땡 > 광땡 아무거나 > 장땡 > 알리.
+    const factorOf = (talismanId: string, yakuId: YakuCandidate["yakuId"]) =>
+      fire(talismanId, yakuId).find((effect) => effect.operation === "multiply_heung")?.value ?? 1;
+    expect(factorOf("t_sampal_seal", "gwangttaeng_38"))
+      .toBeGreaterThan(factorOf("t_gwangttaeng_charm", "gwangttaeng_38"));
+    expect(factorOf("t_gwangttaeng_charm", "gwangttaeng_38"))
+      .toBeGreaterThan(factorOf("t_jangttaeng_charm", "jangttaeng"));
+    expect(factorOf("t_jangttaeng_charm", "jangttaeng"))
+      .toBeGreaterThan(factorOf("t_ali_charm", "ali"));
   });
 
   it("evaluates every catalog effect key without unsafe score values", () => {

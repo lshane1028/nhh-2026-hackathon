@@ -388,7 +388,7 @@
   box-shadow:
     0 0 0 9999px rgb(12 10 8 / 78%),
     0 0 1.6rem rgb(240 201 106 / 45%);
-  pointer-events: auto;
+  pointer-events: none;
   transition: top 140ms ease, left 140ms ease, width 140ms ease, height 140ms ease;
 }
 
@@ -400,6 +400,13 @@
 }
 
 /* The highlighted element is lifted above the dim layer so it stays clickable. */
+/* Catches clicks everywhere except the hole. Invisible — the hole's shadow
+   already paints the dim. */
+.tutorial-spotlight__block {
+  position: absolute;
+  pointer-events: auto;
+}
+
 .tutorial-target {
   position: relative;
   z-index: 901;

@@ -10,7 +10,6 @@ export type GameAction =
   | { type: "START_STAGE" }
   | { type: "SELECT_CARD"; cardId: string }
   | { type: "CLEAR_SELECTION" }
-  | { type: "SET_HAND_SORT"; mode: "month" | "kind" }
   | { type: "ASSIGN_CUP_ROLE"; cardId: string; role: "animal" | "double_chaff" }
   | { type: "SUBMIT_HAND" }
   | { type: "DISCARD_SELECTED" }

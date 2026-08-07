@@ -2,6 +2,7 @@
 
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
 import type { CardInstance, CardKind } from "@/game/types";
+import { getAtlasPosition } from "./hwatu-atlas";
 
 export type HwatuCupRole = "animal" | "double_chaff";
 
@@ -99,6 +100,7 @@ export function HwatuCard({
   const isDisabled = disabled || Boolean(card.disabledForRound);
   const kindLabel = getCardKindLabel(card, cupRole);
   const monthValue = card.month + card.permanentKkeutBonus;
+  const atlasPosition = getAtlasPosition(card);
   const ribbonLabel = card.ribbonGroup
     ? RIBBON_LABELS[card.ribbonGroup]
     : null;
@@ -117,11 +119,12 @@ export function HwatuCard({
      hover card below, so a hand of eight reads as eight pictures. */
   const content = (
     <>
-      <span className="hwatu-card__art" data-asset-tag={card.assetTag}>
-        <span className="hwatu-card__art-mark" aria-hidden="true">IMG</span>
-        <span className="hwatu-card__art-motif" aria-hidden="true">{card.monthName}</span>
-        <code className="hwatu-card__art-tag">{card.assetTag}</code>
-      </span>
+      <span
+        className="hwatu-card__art"
+        data-asset-tag={card.assetTag}
+        style={{ backgroundPosition: atlasPosition }}
+        aria-hidden="true"
+      />
 
       <span className="hwatu-card__corner" aria-hidden="true">{card.month}</span>
       {splitRole ? (

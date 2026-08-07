@@ -49,7 +49,7 @@ export const CARD_EFFECT_TAGS = [
   {
     id: "heavy_month",
     name: "무거운 달",
-    description: "득점하면 월 합 +8.",
+    description: "득점하면 월 합 +50.",
     weight: 16,
     assetTag: "card-effect:heavy-month",
   },

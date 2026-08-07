@@ -6,7 +6,11 @@ export interface TutorialStep {
   target: string;
   title: string;
   body: string;
-  /** Shown instead of the Next button when the player has to act. */
+  /**
+   * What to do on this screen, shown next to the Next button rather than in
+   * place of it. The button is always available, so a hint the player cannot
+   * act on right now is never a dead end.
+   */
   actionHint?: string;
   nextLabel?: string;
   /** Step is skipped unless this holds. */
@@ -19,6 +23,12 @@ export interface TutorialStep {
  * The first month is a scripted lesson. Each step dims everything except one
  * element; steps with `doneWhen` wait for the player to actually do the thing
  * instead of handing them a Next button.
+ *
+ * `doneWhen` MUST be monotonic — once true it can never go false again. The
+ * cursor is derived from game state on every render rather than stored, so a
+ * predicate that flips back snaps the tutorial to an earlier step. Anything
+ * the player can undo (a selection, a screen they can leave) belongs on the
+ * Next button, not on `doneWhen`.
  */
 export const TUTORIAL_STEPS: readonly TutorialStep[] = [
   {
@@ -32,8 +42,10 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     target: "hand",
     title: "손패를 눌러 고릅니다",
     body: "드래그는 없습니다. 카드를 누르면 위로 올라오고, 두 장부터 다섯 장까지 낼 수 있습니다. 카드 왼쪽 위 숫자가 그 패의 월입니다.",
-    actionHint: "카드 두 장을 눌러 보세요",
-    doneWhen: (state) => state.selectedCardIds.length >= 2 || state.roundSubmissionIndex >= 1,
+    // 선택은 되돌릴 수 있으므로 doneWhen 을 두지 않는다. 카드를 골랐다가 다시
+    // 빼면 튜토리얼이 이 단계로 되감기는 버그가 있었다. 다음 두 단계가 고른
+    // 카드에 붙는 짓·끗 표식을 설명하므로 선택을 유지한 채 넘어가는 편이 낫다.
+    nextLabel: "카드 두 장을 고르고 다음",
   },
   {
     id: "kkeut",
@@ -46,7 +58,6 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     target: "hand",
     title: "나머지는 ‘짓’입니다",
     body: "세 장 이상 낼 때, 끗패가 아닌 나머지 카드는 푸른 ‘짓’ 표시를 답니다. 짓에 들어간 카드들의 월을 더해 10의 배수가 되어야 제출이 됩니다. 그 합이 그대로 월 합이 됩니다. 4월과 6월이면 10, 여기에 10월 한 장을 더 얹으면 20입니다. 두 장만 낼 때는 짓이 없어 월 합이 1로 시작합니다.",
-    actionHint: "다음을 눌러 계속하세요",
   },
   {
     id: "formula",
@@ -59,20 +70,29 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     target: "submit",
     title: "점수를 냅니다",
     body: "제출하면 이 점수가 판에 쌓이고, 낼 기회가 하나 줄어듭니다. 짓이 맞지 않으면 제출 단추가 잠깁니다.",
-    actionHint: "‘제출’을 눌러 보세요",
-    doneWhen: (state) => state.roundSubmissionIndex >= 1,
+    actionHint: "‘제출’ 누르기",
+    // roundSubmissionIndex 는 판이 바뀌면 0으로 돌아가므로 stage 탈출구가 없으면
+    // 단조성이 깨진다. 지금은 튜토리얼이 1월에만 붙어 있어 드러나지 않지만,
+    // 범위를 넓히는 순간 이 단계로 되감긴다.
+    doneWhen: (state) => state.roundSubmissionIndex >= 1 || state.stage >= 2,
   },
   {
     id: "discard",
     target: "discard",
     title: "쓸모없는 패는 버립니다",
-    body: "고른 카드를 버리면 그만큼 새로 뽑습니다. 버리기는 점수를 내지 않지만, 짓이 맞는 월 조합을 찾는 가장 빠른 방법입니다.",
+    body: "고른 카드를 버리면 그만큼 새로 뽑습니다. 제출 4회보다 적은 3회로 시작하지만, 수집판의 단을 완성하면 하나씩 늘어납니다.",
   },
   {
     id: "collection",
     target: "collection",
     title: "수집판",
-    body: "왼쪽이 수집판입니다. 낸 카드는 광·동물·고도리·띠·피 줄에 쌓이고, 줄이 채워질수록 다음 손의 배수가 커집니다. 한 판 안에서만 유지됩니다.",
+    body: "낸 카드가 여기 쌓입니다. 줄마다 주는 것이 다릅니다. 광은 고 문턱을 깎고, 동물은 손패를 키우고, 고도리는 짓의 10의 배수 규칙을 풀어 주고, 단은 버리기를 늘리고, 피는 판돈이 됩니다. 어두운 카드가 아직 못 모은 패이고, 한 판이 끝나면 처음부터입니다.",
+  },
+  {
+    id: "collection-choose",
+    target: "collection",
+    title: "어느 줄을 쫓을지 고르세요",
+    body: "다섯 줄을 다 채울 수는 없습니다. 어려운 줄일수록 크게 갚습니다. 5광은 배수가 3.5배, 삼단은 2.5배가 되고, 고도리는 아예 짓 규칙을 풀어 버립니다. 반대로 피는 쉬운 대신 판돈으로 돌아옵니다.",
   },
   {
     id: "talisman",
@@ -85,7 +105,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     target: "go",
     title: "고를 외쳐 보세요",
     body: "목표를 넘겼습니다. 스톱하면 지금 판돈을 받고 끝납니다. 고를 외치면 문턱이 크게 오르는 대신 판돈이 1.7배가 됩니다. 대신 남은 제출로 그 문턱을 못 넘기면 런이 끝납니다.",
-    actionHint: "‘1고’를 눌러 보세요",
+    actionHint: "‘1고’ 누르기",
     when: (state) => state.screen === "decision",
     doneWhen: (state) => state.chain.goCount >= 1 || state.stage >= 2,
   },
@@ -96,7 +116,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     target: "go-banner",
     title: "이제 새 문턱을 넘어야 합니다",
     body: "고를 걸면 판돈이 커지는 대신 목표가 올라갑니다. 위 띠에 남은 점수가 표시됩니다. 남은 제출을 다 쓸 때까지 넘기지 못하면 런이 끝나니, 남은 손으로 넘길 수 있는지 보고 걸어야 합니다.",
-    actionHint: "문턱을 넘을 때까지 계속 제출하세요",
+    actionHint: "문턱까지 계속 제출",
     when: (state) => state.screen === "play" && state.chain.goCount >= 1,
     doneWhen: (state) =>
       state.screen === "decision" || state.screen === "reward" || state.screen === "shop" || state.stage >= 2,
@@ -106,7 +126,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     target: "stop",
     title: "이번엔 스톱",
     body: "새 문턱까지 넘겼습니다. 여기서 스톱하면 1.7배로 불어난 판돈을 그대로 받고 판이 끝납니다.",
-    actionHint: "‘스톱’을 눌러 판을 끝내세요",
+    actionHint: "‘스톱’ 누르기",
     // Only once the decision screen is actually open again.
     when: (state) => state.screen === "decision" && state.chain.goCount >= 1,
     doneWhen: (state) =>
@@ -117,7 +137,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     target: "reward-continue",
     title: "판돈",
     body: "이긴 판에서 받은 냥입니다. 남은 제출과 고 단계가 많을수록 더 받습니다.",
-    actionHint: "‘보상 받기’를 눌러 장터로 가세요",
+    actionHint: "‘보상 받기’ 누르기",
     when: (state) => state.screen === "reward",
     doneWhen: (state) => state.screen === "shop" || state.stage >= 2,
   },
@@ -161,7 +181,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     target: "shop-pick",
     title: "첫 부적을 사 보세요",
     body: "‘첫 부적’은 조건 없이 배수에 +4를 더합니다. 효과가 가장 읽기 쉬워서 첫 구매로 좋습니다.",
-    actionHint: "‘첫 부적’을 눌러 구매하세요",
+    actionHint: "‘첫 부적’ 구매",
     when: (state) => state.screen === "shop",
     doneWhen: (state) => state.talismans.length >= 1 || state.stage >= 2,
   },
@@ -177,7 +197,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     target: "shop-leave",
     title: "다음 판으로",
     body: "장터를 떠나면 2월이 시작됩니다. 여기서부터는 안내 없이 직접 판단하게 됩니다.",
-    actionHint: "‘다음 판으로’를 눌러 보세요",
+    actionHint: "‘다음 판으로’ 누르기",
     when: (state) => state.screen === "shop",
     doneWhen: (state) => state.stage >= 2,
   },

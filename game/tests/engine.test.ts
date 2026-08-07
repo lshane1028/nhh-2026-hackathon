@@ -102,7 +102,7 @@ describe("standard content registries", () => {
     expect(ALL_IMMEDIATE_YAKU_DEFINITIONS.every((entry) => entry.baseKkeut === 0 && entry.growthKkeut === 0)).toBe(true);
     expect(COLLECTION_YAKU_DEFINITIONS.every((entry) => entry.completionKkeut === 0 && entry.growthKkeut === 0)).toBe(true);
     expect(STAGES.map((stage) => stage.target)).toEqual([
-      150, 280, 500, 850, 1_400, 2_300, 3_800, 6_300, 10_500, 17_000, 28_000, 46_000,
+      150, 290, 510, 950, 1_800, 3_400, 6_400, 12_000, 22_000, 41_000, 76_000, 140_000,
     ]);
   });
 
@@ -297,11 +297,13 @@ describe("collection board and score evaluation", () => {
     ];
     const candidate = findImmediateYakuCandidates(submitted)[0];
     const modified = calculateHandScore({ candidate, submittedCards: submitted });
-    expect(INKED_MONTH_BONUS).toBe(3);
-    expect(GOLD_LEAF_MONTH_BONUS).toBe(5);
+    // 월 합의 바탕은 짓이 10/20/30으로 묶어 두므로, 각인이 작으면 카드를 아무리
+    // 치장해도 점수가 움직이지 않는다. 그래서 값이 크다.
+    expect(INKED_MONTH_BONUS).toBe(25);
+    expect(GOLD_LEAF_MONTH_BONUS).toBe(40);
     expect(candidate.yakuId).toBe("ttaeng");
     // 짓이 없으니 월 합은 1에서 시작하고, 카드는 각인 값만 얹는다.
-    expect(modified.finalKkeut).toBe(1 + 3 + 5);
+    expect(modified.finalKkeut).toBe(1 + INKED_MONTH_BONUS + GOLD_LEAF_MONTH_BONUS);
     expect(modified.finalHeung).toBeCloseTo(8 + (9 - 1) * 0.6, 5);
   });
 
@@ -333,7 +335,7 @@ describe("collection board and score evaluation", () => {
       submittedCards: [inkedGold],
       scoringCards: [inkedGold],
     });
-    expect(retriggers.map((effect) => effect.value)).toEqual([6, 3, 5, 6, 3, 5]);
+    expect(retriggers.map((effect) => effect.value)).toEqual([6, 25, 40, 6, 25, 40]);
 
     const stone = cloneCard(takeKind(2, "animal"), { enhancement: "stone" });
     const stoneRetriggers = buildOrderedTalismanScoreEffects({
