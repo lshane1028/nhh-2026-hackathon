@@ -5,6 +5,8 @@ import type {
   TalismanInstance,
 } from "@/game/types";
 
+import { getGeneratedAssetUrl } from "./generated-asset";
+
 export interface TalismanStripItem {
   instance: TalismanInstance;
   definition: TalismanDefinition;
@@ -70,9 +72,17 @@ export function TalismanStrip({
           }
 
           const isSelected = selectedInstanceId === item.instance.instanceId;
+          const artUrl = getGeneratedAssetUrl(item.definition.assetTag);
           const itemContent = (
             <>
-              <span className="talisman-strip__art" data-asset-tag={item.definition.assetTag}>
+              <span
+                className={joinClassNames(
+                  "talisman-strip__art",
+                  Boolean(artUrl) && "talisman-strip__art--generated",
+                )}
+                data-asset-tag={item.definition.assetTag}
+                style={artUrl ? { backgroundImage: `url("${artUrl}")` } : undefined}
+              >
                 <span aria-hidden="true">IMG</span>
                 <code>{item.definition.assetTag}</code>
               </span>

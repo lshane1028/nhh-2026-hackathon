@@ -1,5 +1,6 @@
 import type { AriaRole } from "react";
 
+import { getGeneratedAssetUrl } from "./generated-asset";
 import "./game-ui.css";
 
 export type AssetPlaceholderTone =
@@ -39,6 +40,8 @@ export function AssetPlaceholder({
   role = "img",
   id,
 }: AssetPlaceholderProps) {
+  const generatedArtUrl = getGeneratedAssetUrl(assetTag);
+
   return (
     <div
       id={id}
@@ -51,6 +54,7 @@ export function AssetPlaceholder({
       role={role}
       aria-label={`${label}, 에셋 태그 ${assetTag}${description ? `, ${description}` : ""}`}
       data-asset-tag={assetTag}
+      style={generatedArtUrl ? { "--generated-art": `url("${generatedArtUrl}")` } as React.CSSProperties : undefined}
     >
       <span className="asset-placeholder__marker" aria-hidden="true">
         ASSET

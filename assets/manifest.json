@@ -11,6 +11,30 @@
       "source": "public/assets/cards/hwatu-basic-atlas.png",
       "promptLog": "docs/PROMPTS/prompt-2026-08-06-hwatu-generated-v3.md",
       "notes": "The 48 generated card regions were extracted at their detected borders and rebuilt as an exact 8x6 atlas of 160x240 (2:3) cells."
+    },
+    {
+      "assetTags": "talisman:* (58 cards)",
+      "file": "public/assets/generated/talismans/*.webp",
+      "generatedAt": "2026-08-07",
+      "tool": "OpenAI image generation",
+      "mode": "text-to-image atlas generation",
+      "notes": "Four 4x4 atlases cropped into 256x384 (2:3) Korean hanji talisman cards."
+    },
+    {
+      "assetTags": "book:*, painter:*, forbidden:*, pack:* and four boss:* cards",
+      "file": "public/assets/generated/{books,painters,forbidden,packs,bosses}/*.webp",
+      "generatedAt": "2026-08-07",
+      "tool": "OpenAI image generation",
+      "mode": "text-to-image atlas generation",
+      "notes": "45 portrait gameplay cards cropped to 256x384 (2:3)."
+    },
+    {
+      "assetTags": "card-effect:*, enhancement:*, edition:* and seal:*",
+      "file": "public/assets/generated/{card-effects,modifiers}/*.webp",
+      "generatedAt": "2026-08-07",
+      "tool": "OpenAI image generation",
+      "mode": "text-to-image atlas generation",
+      "notes": "28 compact square overlay seals cropped to 256x256."
     }
   ],
   "userProvidedImages": [
