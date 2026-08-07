@@ -51,9 +51,17 @@ export interface BestScoreInput extends Omit<ScoreInput, "candidate">, YakuMatch
   manualYakuId?: YakuCandidate["yakuId"] | null;
 }
 
+/*
+ * 월 합 numbers are deliberately large.
+ *
+ * The 짓 caps the base at 10 / 20 / 30, so a "+3" enhancement was a rounding
+ * error — you could gild a whole hand and barely move the score. These are the
+ * only way the 월 합 side grows at all, so they have to be big enough that one
+ * upgraded card visibly changes a hand.
+ */
 export const STONE_MONTH_VALUE = 12;
-export const INKED_MONTH_BONUS = 3;
-export const GOLD_LEAF_MONTH_BONUS = 5;
+export const INKED_MONTH_BONUS = 25;
+export const GOLD_LEAF_MONTH_BONUS = 40;
 
 function levelOf(id: YakuId, levels: ScoreInput["yakuLevels"]): number {
   const value = levels?.[id];
@@ -115,17 +123,17 @@ function scoreP0Talisman(
       sourceId: talisman.instanceId,
       label: "피붙이",
       operation: "add_kkeut",
-      value: roles.reduce((sum, entry) => sum + (entry.role.kind === "chaff" ? entry.role.chaffValue * 3 : 0), 0),
+      value: roles.reduce((sum, entry) => sum + (entry.role.kind === "chaff" ? entry.role.chaffValue * 9 : 0), 0),
     };
   }
   if (talisman.definitionId === "t_ribbon_maker") {
-    return { sourceId: talisman.instanceId, label: "띠장이", operation: "add_kkeut", value: roles.filter((entry) => entry.role.kind === "ribbon").length * 5 };
+    return { sourceId: talisman.instanceId, label: "띠장이", operation: "add_kkeut", value: roles.filter((entry) => entry.role.kind === "ribbon").length * 15 };
   }
   if (talisman.definitionId === "t_animal_tracks") {
-    return { sourceId: talisman.instanceId, label: "산짐승 발자국", operation: "add_kkeut", value: roles.filter((entry) => entry.role.kind === "animal").length * 6 };
+    return { sourceId: talisman.instanceId, label: "산짐승 발자국", operation: "add_kkeut", value: roles.filter((entry) => entry.role.kind === "animal").length * 18 };
   }
   if (talisman.definitionId === "t_bright_polish") {
-    return { sourceId: talisman.instanceId, label: "광약", operation: "add_kkeut", value: roles.filter((entry) => entry.role.kind === "bright").length * 10 };
+    return { sourceId: talisman.instanceId, label: "광약", operation: "add_kkeut", value: roles.filter((entry) => entry.role.kind === "bright").length * 30 };
   }
   if (talisman.definitionId === "t_pair_knot" && ["ttaeng", "jangttaeng"].includes(candidate.yakuId)) {
     return { sourceId: talisman.instanceId, label: "짝패 매듭", operation: "add_heung", value: 2 };

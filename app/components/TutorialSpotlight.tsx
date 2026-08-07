@@ -127,16 +127,29 @@ export function TutorialSpotlight({
 
   return (
     <div className="tutorial-spotlight" role="dialog" aria-modal="true" aria-label={title}>
+{/*
+        The hole only PAINTS the dim, via a 9999px shadow. It must not take
+        pointer events: it sits over the highlighted element, so making it
+        clickable swallowed every click aimed at the thing the step was asking
+        the player to press. Blocking is done by four rectangles around the
+        hole instead, which leaves the hole itself genuinely open.
+      */}
       {layout.hole ? (
-        <div
-          className="tutorial-spotlight__hole"
-          style={{
-            top: layout.hole.top,
-            left: layout.hole.left,
-            width: layout.hole.width,
-            height: layout.hole.height,
-          }}
-        />
+        <>
+          <div
+            className="tutorial-spotlight__hole"
+            style={{
+              top: layout.hole.top,
+              left: layout.hole.left,
+              width: layout.hole.width,
+              height: layout.hole.height,
+            }}
+          />
+          <div className="tutorial-spotlight__block" style={{ top: 0, left: 0, right: 0, height: Math.max(0, layout.hole.top) }} />
+          <div className="tutorial-spotlight__block" style={{ top: layout.hole.top + layout.hole.height, left: 0, right: 0, bottom: 0 }} />
+          <div className="tutorial-spotlight__block" style={{ top: layout.hole.top, left: 0, width: Math.max(0, layout.hole.left), height: layout.hole.height }} />
+          <div className="tutorial-spotlight__block" style={{ top: layout.hole.top, left: layout.hole.left + layout.hole.width, right: 0, height: layout.hole.height }} />
+        </>
       ) : (
         <div className="tutorial-spotlight__scrim" />
       )}
@@ -152,14 +165,21 @@ export function TutorialSpotlight({
         </div>
         <h2>{title}</h2>
         <p>{body}</p>
+{/*
+          The Next button is ALWAYS here. `actionHint` used to replace it, which
+          meant any step whose action the player could not perform right now —
+          no legal 짓 in hand, a threshold they were about to miss — became a
+          dead end with nothing but "안내 끄기" to escape it. The hint now sits
+          beside the button: do the thing and the step advances itself, or press
+          Next and move on.
+        */}
         <div className="tutorial-spotlight__actions">
           {actionHint ? (
             <em className="tutorial-spotlight__hint">{actionHint}</em>
-          ) : (
-            <button type="button" className="tutorial-spotlight__next" onClick={onNext}>
-              {nextLabel ?? "다음"}
-            </button>
-          )}
+          ) : null}
+          <button type="button" className="tutorial-spotlight__next" onClick={onNext}>
+            {nextLabel ?? (actionHint ? "건너뛰기" : "다음")}
+          </button>
           {onSkip ? (
             <button type="button" className="tutorial-spotlight__skip" onClick={onSkip}>
               안내 끄기

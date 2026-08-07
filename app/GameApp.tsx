@@ -9,6 +9,8 @@ import { TALISMAN_BY_ID } from "@/game/content/talismans";
 import { ALL_IMMEDIATE_YAKU_DEFINITIONS } from "@/game/content/yaku";
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
 import { calculateCollectionBonus, GODORI_MONTHS } from "@/game/engine/collection-bonus";
+import { buildCollectionSlots } from "@/game/engine/collection-board";
+import { createStandardHwatuDeck } from "@/game/engine/deck";
 import { canDeclareGo, getGoRewardFactor } from "@/game/engine/go";
 import { findImmediateYakuCandidates } from "@/game/engine/yaku";
 import {
@@ -21,18 +23,21 @@ import {
   getDefinitionForOffer,
   getEffectiveTalismanSlots,
   getPendingConsumableDefinition,
+  sortHand,
 } from "@/game/state/game";
 import { clearSavedGame, loadGame, saveGame } from "@/game/state/storage";
 import type {
   CardInstance,
   ExperimentalRules,
   GameState,
+  ImmediateYakuId,
 } from "@/game/types";
 
 import { AssetPlaceholder } from "./components/AssetPlaceholder";
 import { CollectionBoard, type CollectionBoardItem } from "./components/CollectionBoard";
 import { GameModal } from "./components/GameModal";
 import { HwatuCard } from "./components/HwatuCard";
+import { getAtlasPosition } from "./components/hwatu-atlas";
 import { MarketScreen } from "./components/MarketScreen";
 import { PlayRail } from "./components/PlayRail";
 import { RunEndScreen } from "./components/RunEndScreen";
@@ -41,6 +46,31 @@ import { TitleScreen, type ExperimentalRuleOption } from "./components/TitleScre
 import { TutorialSpotlight } from "./components/TutorialSpotlight";
 import { TUTORIAL_STEPS } from "./components/tutorial-steps";
 import "./game.css";
+
+const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+
+/**
+ * One concrete example per 끗패, so the ladder can be shown with pictures.
+ *
+ * These are illustrations, not the rule — 땡 is any matching pair, not only
+ * 6월. The engine judges; this only has to make the shape recognisable.
+ */
+const YAKU_SAMPLES: Partial<Record<ImmediateYakuId, ReadonlyArray<[number, CardInstance["kind"]]>>> = {
+  gwangttaeng_38: [[3, "bright"], [8, "bright"]],
+  gwangttaeng_18: [[1, "bright"], [8, "bright"]],
+  gwangttaeng_13: [[1, "bright"], [3, "bright"]],
+  jangttaeng: [[10, "animal"], [10, "ribbon"]],
+  ttaeng: [[6, "animal"], [6, "ribbon"]],
+  ali: [[1, "chaff"], [2, "chaff"]],
+  doksa: [[1, "chaff"], [4, "chaff"]],
+  gupping: [[1, "chaff"], [9, "chaff"]],
+  jangpping: [[1, "chaff"], [10, "chaff"]],
+  jangsa: [[4, "chaff"], [10, "chaff"]],
+  seryuk: [[4, "chaff"], [6, "chaff"]],
+  gabo: [[4, "chaff"], [5, "chaff"]],
+  kkeut: [[3, "chaff"], [5, "chaff"]],
+  mangtong: [[2, "chaff"], [8, "chaff"]],
+};
 
 const EXPERIMENT_OPTIONS: ExperimentalRuleOption[] = [
   { id: "bakContracts", label: "광박·피박·멍박", description: "판 종료 시 완성한 수집 경로에 따라 추가 냥을 받는 계약.", assetTag: "rule:bak-contracts" },
@@ -80,19 +110,34 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
   const pendingCount = (track: keyof typeof total.counts): number =>
     Math.max(0, total.counts[track] - confirmed.counts[track]);
 
+  // Picture rows come from the deck, so burning a card removes its slot and a
+  // joker that turns 8월 into a 광 adds one.
+  const slotsFor = (
+    track: "bright" | "animal" | "godori" | "ribbon" | "chaff",
+    collectedOnly = false,
+  ) => buildCollectionSlots({
+    deck: state.deck,
+    confirmedCardIds: state.chain.collection.cardIds,
+    pendingCardIds: [],
+    track,
+    cupRoles: state.cupAssignments,
+    collectedOnly,
+  });
+
   return [
     {
       id: "bright",
       name: "광",
       kind: "bright",
       assetTag: "collection:bright-five-slots",
-      description: "다섯 광 중 모은 패만 빛납니다",
+      description: "모을수록 고 문턱이 싸집니다",
+      cards: slotsFor("bright"),
       confirmedCount: confirmed.counts.bright,
       pendingCount: pendingCount("bright"),
       milestones: [
-        { at: 3, label: "3장", reward: "+2배수" },
-        { at: 4, label: "4장", reward: "+4배수" },
-        { at: 5, label: "5장", reward: "+7배수" },
+        { at: 3, label: "3장", reward: "배수 ×1.6 · 고 −10%" },
+        { at: 4, label: "4장", reward: "배수 ×2.2 · 고 −20%" },
+        { at: 5, label: "5장", reward: "배수 ×3.5 · 고 −30%" },
       ],
     },
     {
@@ -100,13 +145,14 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       name: "동물",
       kind: "animal",
       assetTag: "collection:animal-track",
-      description: "동물 그림패 전체",
+      description: "5장 손패 +1 · 8장 배수 ×1.8",
+      cards: slotsFor("animal"),
       confirmedCount: confirmed.counts.animal,
       pendingCount: pendingCount("animal"),
       slotCount: 10,
       milestones: [
-        { at: 5, label: "5장", reward: "+2배수" },
-        { at: 6, label: "그 뒤", reward: "+0.5/장" },
+        { at: 5, label: "5장", reward: "손패 +1" },
+        { at: 8, label: "8장", reward: "배수 ×1.8" },
       ],
     },
     {
@@ -114,19 +160,13 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       name: "고도리",
       kind: "godori",
       assetTag: "collection:godori-track",
-      description: "2·4·8월 새 · 동물 줄에도 함께 집계",
+      description: "완성하면 짓 규칙이 풀립니다",
+      cards: slotsFor("godori"),
       confirmedCount: confirmed.counts.godori,
       pendingCount: pendingCount("godori"),
       slotLabels: GODORI_MONTHS.map((month) => `${month}월`),
-      slotStates: GODORI_MONTHS.map((month) =>
-        confirmed.matchedGodoriMonths.includes(month)
-          ? "confirmed"
-          : total.matchedGodoriMonths.includes(month)
-            ? "pending"
-            : "empty",
-      ),
       milestones: [
-        { at: 3, label: "세 마리", reward: "+2배수", active: total.completedSets.godori },
+        { at: 3, label: "세 마리", reward: "짓 5의 배수 허용", active: total.completedSets.godori },
       ],
     },
     {
@@ -134,16 +174,16 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       name: "띠",
       kind: "ribbon",
       assetTag: "collection:ribbon-track",
-      description: "띠 전체 · 홍단·초단·청단은 조합 보너스",
+      description: "단마다 버리기 +1 · 삼단이면 배수 ×2.5",
+      cards: slotsFor("ribbon"),
       confirmedCount: confirmed.counts.ribbon,
       pendingCount: pendingCount("ribbon"),
       slotCount: 10,
       milestones: [
-        { at: 3, label: "홍단", reward: "+2", active: total.completedSets.hongdan },
-        { at: 3, label: "초단", reward: "+2", active: total.completedSets.chodan },
-        { at: 3, label: "청단", reward: "+2", active: total.completedSets.cheongdan },
-        { at: 5, label: "5장", reward: "+2배수" },
-        { at: 6, label: "그 뒤", reward: "+0.5/장" },
+        { at: 3, label: "홍단", reward: "버리기 +1", active: total.completedSets.hongdan },
+        { at: 3, label: "초단", reward: "버리기 +1", active: total.completedSets.chodan },
+        { at: 3, label: "청단", reward: "버리기 +1", active: total.completedSets.cheongdan },
+        { at: 5, label: "5장", reward: "배수 ×1.4" },
       ],
     },
     {
@@ -151,13 +191,16 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       name: "피",
       kind: "chaff",
       assetTag: "collection:chaff-ten-slots",
-      description: "쌍피는 두 칸 · 10을 넘으면 월 합도 성장",
+      // 피는 덱에 24장이라 후보를 전부 깔면 판이 파묻힌다. 어차피 어떤 피든
+      // 값이 같으니 체크리스트가 될 이유도 없다. 그래서 여기만 "가져온 것"만
+      // 그리는 집계 줄이고, 쌍피는 값 배지로 두 칸어치임을 밝힌다.
+      cards: slotsFor("chaff", true),
+      description: "피는 돈입니다 · 쌍피는 두 칸",
       confirmedCount: confirmed.counts.chaff,
       pendingCount: pendingCount("chaff"),
       milestones: [
-        { at: 5, label: "5피", reward: "+1배수" },
-        { at: 10, label: "10피", reward: "+4배수" },
-        { at: 11, label: "초과", reward: "월 합 +1/피" },
+        { at: 7, label: "7피", reward: "판돈 +0.5/점" },
+        { at: 10, label: "10피", reward: "배수 ×1.5 · 월 합 +1/점" },
       ],
     },
   ];
@@ -247,7 +290,7 @@ function DeckEditor({ state, dispatch }: {
         <div>
           <p className="eyebrow">PERMANENT DECK · {state.deck.length}장</p>
           <h1>{definition ? definition.name : "내 화투 덱"}</h1>
-          <p>{definition?.description ?? "월·종류·강화 태그와 모든 이미지 교체용 assetTag를 확인합니다."}</p>
+          <p>{definition?.description ?? "지금 덱에 남아 있는 카드입니다. 카드에 손을 올리면 종류와 강화가 보입니다."}</p>
         </div>
         <AssetPlaceholder assetTag={definition?.assetTag ?? "ui:deck-editor"} label={definition?.name ?? "덱 편집기"} description={definition ? `${minTargets}~${maxTargets}장 선택` : "텍스트 플레이스홀더 목록"} tone={definition && !isPainter ? "boss" : "card"} />
       </header>
@@ -259,36 +302,38 @@ function DeckEditor({ state, dispatch }: {
           </select>
         </label>
       ) : null}
-      <div className="deck-editor-grid">
-        {state.deck.map((card) => {
-          const selected = state.pendingTargetIds.includes(card.instanceId);
+      {/* One row per month, in calendar order. The question this screen answers
+          is "what is still in there", and the deck changes every 판 — burned
+          cards vanish, bought copies show up twice. */}
+      <div className="deck-months">
+        {MONTHS.map((month) => {
+          const cards = sortHand(state.deck.filter((card) => card.month === month));
+          if (cards.length === 0) return null;
           return (
-            <button
-              type="button"
-              key={card.instanceId}
-              aria-pressed={selected}
-              className={selected ? "deck-editor-card deck-editor-card--selected" : "deck-editor-card"}
-              disabled={!definition}
-              onClick={() => dispatch({ type: "SELECT_CONSUMABLE_TARGET", cardId: card.instanceId })}
-            >
-              <strong>{card.month}월 · {card.kind}</strong>
-              <span>{card.name}</span>
-              <code>{card.assetTag}</code>
-              <small>{[card.enhancement, card.edition, card.seal].filter(Boolean).join(" · ") || "기본패"}</small>
-            </button>
+            <section className="deck-month" key={month}>
+              <h2>{month}월<span>{cards.length}장</span></h2>
+              <div className="deck-month__cards">
+                {cards.map((card) => {
+                  const selected = state.pendingTargetIds.includes(card.instanceId);
+                  return (
+                    <HwatuCard
+                      dense
+                      key={card.instanceId}
+                      card={card}
+                      selected={selected}
+                      disabled={!definition}
+                      className="deck-card"
+                      onSelect={definition
+                        ? () => dispatch({ type: "SELECT_CONSUMABLE_TARGET", cardId: card.instanceId })
+                        : undefined}
+                    />
+                  );
+                })}
+              </div>
+            </section>
           );
         })}
       </div>
-      <section className="codex-summary">
-        <div>
-          <h2>끗패 배수 레벨</h2>
-          <ul>{ALL_IMMEDIATE_YAKU_DEFINITIONS.map((yaku) => <li key={yaku.id}><span>{yaku.name}</span><strong>Lv.{state.yakuLevels[yaku.id]?.level ?? 1}</strong><code>{yaku.assetTag}</code></li>)}</ul>
-        </div>
-        <div>
-          <h2>발견한 광땡</h2>
-          <ul>{state.unlockedSecretYakuIds.length ? state.unlockedSecretYakuIds.map((id) => <li key={id}>{ALL_IMMEDIATE_YAKU_DEFINITIONS.find((entry) => entry.id === id)?.name ?? id}</li>) : <li>아직 발견하지 못했습니다.</li>}</ul>
-        </div>
-      </section>
       <footer className="sticky-editor-actions">
         {definition ? (
           <>
@@ -338,14 +383,23 @@ export default function GameApp() {
     const card = state.hand.find((entry) => entry.instanceId === id);
     return card ? [card] : [];
   });
+  // 윤달 달력 부적이든 고도리 완성이든, 둘 중 하나면 5의 배수도 짓이 된다.
+  const fiveMultipleJit = useMemo(
+    () => state.talismans.some((item) => item.definitionId === "t_leap_calendar")
+      || calculateCollectionBonus(
+        cardsFor(state, state.chain.collection.cardIds),
+        state.cupAssignments,
+      ).perks.allowFiveMultipleJit,
+    [state],
+  );
   const yakuChoices = useMemo(() => {
     const candidates = findImmediateYakuCandidates(selectedCards, {
       cupRole: preview?.usedCupRole ?? "animal",
-      allowFiveMultipleJit: state.talismans.some((item) => item.definitionId === "t_leap_calendar"),
+      allowFiveMultipleJit: fiveMultipleJit,
       includeSecretYaku: true,
     });
     return [...new Set(candidates.map((entry) => entry.yakuId))];
-  }, [selectedCards, preview?.usedCupRole, state.talismans]);
+  }, [selectedCards, preview?.usedCupRole, fiveMultipleJit]);
   const appliedYaku = preview
     ? ALL_IMMEDIATE_YAKU_DEFINITIONS.find((entry) => entry.id === preview.breakdown.yakuId) ?? null
     : null;
@@ -378,6 +432,12 @@ export default function GameApp() {
 
   // The first month is scripted. Steps whose `when` fails are skipped, and
   // steps with `doneWhen` advance the moment the player does the thing.
+  //
+  // The cursor is derived rather than stored, so every `doneWhen` MUST be
+  // monotonic — a predicate that can flip back to false snaps the tutorial to
+  // an earlier step. That is why the 손패 step advances on the Next button
+  // instead of on `selectedCardIds.length >= 2`: deselecting a card would have
+  // rewound it. See tutorial-steps.ts.
   const tutorialActive = state.tutorialMode && !tutorialOff && state.stage === 1;
   const tutorialStep = (() => {
     if (!tutorialActive) return null;
@@ -642,28 +702,15 @@ export default function GameApp() {
               : "손패를 눌러 최대 5장까지 고르세요"}
           </p>
 
-          <div className="hand-sort" role="group" aria-label="손패 정렬" data-tutorial="sort">
-            <span>정렬</span>
-            <button
-              type="button"
-              className={state.handSort === "month" ? "active" : ""}
-              aria-pressed={state.handSort === "month"}
-              onClick={() => dispatch({ type: "SET_HAND_SORT", mode: "month" })}
-            >
-              월 순
-            </button>
-            <button
-              type="button"
-              className={state.handSort === "kind" ? "active" : ""}
-              aria-pressed={state.handSort === "kind"}
-              onClick={() => dispatch({ type: "SET_HAND_SORT", mode: "kind" })}
-            >
-              광·동물·띠·피
-            </button>
-          </div>
-
           <div className="play-board__stage">
-            <ul className="hand-fan" aria-label="내 손패" data-tutorial="hand" style={{ "--n": state.hand.length } as React.CSSProperties}>
+            {/* `--selecting` dims everything the player did NOT pick, which is the
+                only cue that reads at a glance across eight fanned cards. */}
+            <ul
+              className={state.selectedCardIds.length > 0 ? "hand-fan hand-fan--selecting" : "hand-fan"}
+              aria-label="내 손패"
+              data-tutorial="hand"
+              style={{ "--n": state.hand.length } as React.CSSProperties}
+            >
               {state.hand.map((card, index) => (
                 <li key={card.instanceId} style={{ "--i": index } as React.CSSProperties}>
                   <HwatuCard
@@ -680,13 +727,19 @@ export default function GameApp() {
               ))}
             </ul>
 
-            <div className="deck-stack" aria-label={`남은 덱 ${drawnCount}장`}>
-              <div className="deck-stack__back" data-asset-tag="ui:card-back:hanji">
-                <span aria-hidden="true">IMG</span>
-                <code>ui:card-back:hanji</code>
-              </div>
+{/* The face-down pile IS the deck button. Putting it behind a "내 덱" link in
+                the rail meant the one object on screen that obviously represents
+                the deck did nothing when clicked. */}
+            <button
+              type="button"
+              className="deck-stack"
+              aria-label={`내 덱 보기 · 남은 ${drawnCount}장 / 전체 ${deckTotal}장`}
+              onClick={() => dispatch({ type: "OPEN_SCREEN", screen: "deck_editor" })}
+            >
+              <span className="deck-stack__back" data-asset-tag="ui:card-back:hanji" aria-hidden="true" />
               <strong>{drawnCount} / {deckTotal}</strong>
-            </div>
+              <em>덱 보기</em>
+            </button>
           </div>
 
           <div className="hand-meta">
@@ -780,7 +833,6 @@ export default function GameApp() {
         stageIndex={state.stage}
         stageTotal={12}
         seed={state.seed}
-        onOpenDeck={() => dispatch({ type: "OPEN_SCREEN", screen: "deck_editor" })}
         onOpenRules={() => setRulesOpen(true)}
         onRestart={() => setRestartOpen(true)}
       />
@@ -890,17 +942,85 @@ function CupChoiceModal({ card, onChoose }: {
   );
 }
 
+/**
+ * Two pages: the rules in as few words as they can be said, and the 끗패 ladder
+ * drawn with the real cards.
+ *
+ * The ladder used to live only in the rules text, which meant a player had to
+ * read "1월 광과 3월 광" and then go hunting for those cards. Showing the actual
+ * pictures is the difference between a rule and a thing you can recognise.
+ */
 function RulesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [page, setPage] = useState<"rules" | "yaku">("rules");
+  const deck = useMemo(() => createStandardHwatuDeck(), []);
+  const cardOf = (month: number, kind: CardInstance["kind"]) =>
+    deck.find((card) => card.month === month && card.kind === kind) ?? null;
+
   return (
-    <GameModal id="rules" open={open} assetTag="ui:rules:scroll" title="꽃판 규칙 요약" description="짓고땡 제출과 고·스톱의 선택을 간단히 정리했습니다." onClose={onClose}>
-      <div className="rules-copy">
-        <section><h3>1. 2~5장을 클릭</h3><p>손패에서 두 장부터 다섯 장까지 클릭합니다. 드래그는 없습니다. 낸 패는 짓과 끗패로 갈립니다.</p></section>
-        <section><h3>2. 끗패 — 배수</h3><p>두 장이 끗패가 됩니다. 두 장의 월을 더한 끝자리가 끗수이고, 9면 갑오, 0이면 망통입니다. 1·2 알리, 1·4 독사, 1·9 구삥, 1·10 장삥, 4·10 장사, 4·6 세륙은 이름이 따로 붙은 특수패라 숫자보다 셉니다. 같은 월 두 장은 땡, 10월 두 장은 장땡, 광 두 장이 만나면 광땡입니다.</p></section>
-        <section><h3>3. 짓 — 월 합</h3><p>끗패를 뺀 나머지가 짓입니다. 짓에 들어간 카드들의 월 합이 10의 배수여야 제출이 되고, 그 합이 그대로 월 합이 됩니다. 두 장만 낼 때는 짓이 없어 월 합 1에서 시작합니다.</p></section>
-        <section><h3>4. 점수</h3><p>월 합 × 배수입니다. 배수는 끗패에 광·동물·고도리·띠·피 수집과 부적이 얹은 값입니다. 갈래가 여럿이면 점수가 가장 높은 쪽이 자동으로 붙습니다. 9월 술잔은 점수를 낸 뒤 동물과 피 중 어디에 기록할지 직접 고릅니다.</p></section>
-        <section><h3>5. 고 · 스톱</h3><p>제출한 점수는 이번 판에 계속 쌓입니다. 목표를 넘긴 순간에만 고와 스톱을 고릅니다. 스톱은 지금 판돈을 받고 끝내고, 고는 문턱을 1.8배 → 2.8배 → 4.2배로 올리는 대신 판돈을 1.7배 → 2.7배 → 4.2배로 불립니다. 남은 제출로 그 문턱을 못 넘기면 런이 끝납니다.</p></section>
-        <section><h3>6. 덱빌딩</h3><p>모든 런은 기본 48장으로 시작합니다. 매달 장터에서 부적·끗패 성장·덱 손질·금단 계약을 골라 나만의 덱으로 바꿉니다.</p></section>
+    <GameModal
+      id="rules"
+      open={open}
+      assetTag="ui:rules:scroll"
+      title={page === "rules" ? "규칙" : "끗패 족보"}
+      description={page === "rules"
+        ? "낸 패를 짓과 끗패로 갈라 곱합니다."
+        : "두 장으로 만드는 족보입니다. 위로 갈수록 셉니다."}
+      onClose={onClose}
+    >
+      <div className="rules-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={page === "rules"} onClick={() => setPage("rules")}>규칙</button>
+        <button type="button" role="tab" aria-selected={page === "yaku"} onClick={() => setPage("yaku")}>끗패 족보</button>
       </div>
-      </GameModal>
+
+      {page === "rules" ? (
+        <ol className="rules-steps">
+          <li><b>2~5장</b>을 클릭해 냅니다.</li>
+          <li>그중 <b>두 장이 끗패</b>가 되어 <b>배수</b>를 정합니다. 두 장의 월을 더한 끝자리가 끗수입니다.</li>
+          <li>나머지가 <b>짓</b>입니다. 짓의 월 합이 <b>10의 배수</b>여야 낼 수 있고, 그 합이 <b>월 합</b>이 됩니다.</li>
+          <li>점수는 <b>월 합 × 배수</b>. 나누는 방법이 여럿이면 가장 높은 쪽이 자동으로 붙습니다.</li>
+          <li>낸 패는 왼쪽 <b>수집판</b>에 쌓입니다. 줄을 채울수록 배수가 곱해집니다.</li>
+          <li>목표를 넘긴 순간 <b>고</b>와 <b>스톱</b>을 고릅니다. 고는 판돈을 불리지만 문턱도 올라갑니다.</li>
+        </ol>
+      ) : (
+        <ul className="yaku-list">
+          {[...ALL_IMMEDIATE_YAKU_DEFINITIONS]
+            .slice()
+            .sort((left, right) => right.baseHeung - left.baseHeung)
+            .map((yaku) => {
+              const sample = YAKU_SAMPLES[yaku.id];
+              return (
+                <li className="yaku-list__row" key={yaku.id}>
+                  <span className="yaku-list__cards">
+                    {sample
+                      ? sample.map(([month, kind], index) => {
+                          const card = cardOf(month, kind);
+                          return card ? (
+                            <span
+                              className="yaku-sample"
+                              key={`${yaku.id}-${index}`}
+                              title={`${card.month}월 ${card.name}`}
+                            >
+                              <span
+                                className="yaku-sample__art"
+                                style={{ backgroundPosition: getAtlasPosition(card) }}
+                                aria-hidden="true"
+                              />
+                              <b>{card.month}</b>
+                            </span>
+                          ) : null;
+                        })
+                      : null}
+                  </span>
+                  <span className="yaku-list__name">
+                    <strong>{yaku.name}</strong>
+                    <em>{yaku.description}</em>
+                  </span>
+                  <b className="yaku-list__heung">×{yaku.baseHeung}</b>
+                </li>
+              );
+            })}
+        </ul>
+      )}
+    </GameModal>
   );
 }

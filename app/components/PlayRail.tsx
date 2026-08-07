@@ -24,7 +24,6 @@ export interface PlayRailProps {
   stageIndex: number;
   stageTotal: number;
   seed?: string;
-  onOpenDeck?: () => void;
   onOpenRules?: () => void;
   onRestart?: () => void;
   className?: string;
@@ -57,7 +56,6 @@ export function PlayRail({
   stageIndex,
   stageTotal,
   seed,
-  onOpenDeck,
   onOpenRules,
   onRestart,
   className,
@@ -157,7 +155,6 @@ export function PlayRail({
       </dl>
 
       <nav className="play-rail__actions" aria-label="게임 메뉴">
-        {onOpenDeck ? <button type="button" onClick={onOpenDeck}>내 덱</button> : null}
         {onOpenRules ? <button type="button" onClick={onOpenRules}>규칙</button> : null}
         {onRestart ? <button type="button" onClick={onRestart}>재시작</button> : null}
       </nav>

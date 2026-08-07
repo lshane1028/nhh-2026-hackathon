@@ -2,6 +2,7 @@
 
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
 import type { CardInstance, CardKind } from "@/game/types";
+import { getAtlasPosition } from "./hwatu-atlas";
 
 export type HwatuCupRole = "animal" | "double_chaff";
 
