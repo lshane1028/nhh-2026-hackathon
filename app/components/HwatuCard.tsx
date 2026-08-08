@@ -2,8 +2,9 @@
 
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
 import type { CardInstance, CardKind } from "@/game/types";
-import { getGeneratedAssetUrl } from "./generated-asset";
 import { getAtlasPosition } from "./hwatu-atlas";
+import { getCardMarks, getCardModifierLines, getCardSurface } from "./card-visuals";
+import { CardMark } from "./CardMark";
 
 export type HwatuCupRole = "animal" | "double_chaff";
 
@@ -41,34 +42,6 @@ const RIBBON_LABELS = {
 function joinClassNames(...values: Array<string | false | undefined>): string {
   return values.filter(Boolean).join(" ");
 }
-
-const ENHANCEMENT_LABELS: Record<
-  NonNullable<CardInstance["enhancement"]>,
-  string
-> = {
-  inked: "먹칠",
-  scarlet: "주홍",
-  wild: "야생",
-  glass: "유리",
-  steel: "강철",
-  stone: "돌",
-  coin: "엽전",
-  fortune: "복",
-};
-
-const EDITION_LABELS: Record<NonNullable<CardInstance["edition"]>, string> = {
-  gold_leaf: "금박",
-  mother_of_pearl: "자개",
-  five_color: "오방색",
-  engraved: "각인",
-};
-
-const SEAL_LABELS: Record<NonNullable<CardInstance["seal"]>, string> = {
-  yellow: "황인",
-  red: "적인",
-  blue: "청인",
-  purple: "자인",
-};
 
 function getCardKindLabel(card: CardInstance, cupRole?: HwatuCupRole) {
   if (cupRole === "double_chaff") {
@@ -110,22 +83,39 @@ export function HwatuCard({
     `${card.month}월 ${card.name}, ${kindLabel}, 월값 ${monthValue}${splitRole === "jit" ? ", 짓" : splitRole === "kkeut" ? ", 끗패" : ""}${selected ? ", 선택됨" : ""}${isDisabled ? ", 사용 불가" : ""}`;
 
   const effectTag = card.effectTagId ? CARD_EFFECT_TAG_BY_ID[card.effectTagId] : undefined;
-  const effectArtUrl = effectTag ? getGeneratedAssetUrl(effectTag.assetTag) : null;
-  const modifierArtUrl = card.seal
-    ? getGeneratedAssetUrl(`seal:${card.seal}`)
-    : card.edition
-      ? getGeneratedAssetUrl(`edition:${card.edition.replaceAll("_", "-")}`)
-      : card.enhancement
-        ? getGeneratedAssetUrl(`enhancement:${card.enhancement}`)
-        : null;
-  const modifierLabels = [
-    card.enhancement ? ENHANCEMENT_LABELS[card.enhancement] : null,
-    card.edition ? EDITION_LABELS[card.edition] : null,
-    card.seal ? SEAL_LABELS[card.seal] : null,
-  ].filter(Boolean) as string[];
+  // Every modifier gets its own sticker; only one may own the surface. A card
+  // with four things on it must read as four things, not one muddy glow.
+  const marks = getCardMarks(card);
+  const surface = getCardSurface(card);
+  const modifierLines = getCardModifierLines(card);
 
-  /* The face is the picture plus a month corner. Everything else lives in the
-     hover card below, so a hand of eight reads as eight pictures. */
+  /*
+   * Pointer tilt, the trading-card trick: the pointer position becomes two CSS
+   * variables and the transform is done in CSS. Written to the node directly
+   * rather than through state, because this fires on every mousemove and a
+   * re-render per frame would drop the hand to a crawl.
+   */
+  const tilt = (event: React.PointerEvent<HTMLElement>) => {
+    const node = event.currentTarget;
+    const box = node.getBoundingClientRect();
+    const x = (event.clientX - box.left) / box.width - 0.5;
+    const y = (event.clientY - box.top) / box.height - 0.5;
+    node.style.setProperty("--tilt-x", `${(-y * 18).toFixed(2)}deg`);
+    node.style.setProperty("--tilt-y", `${(x * 18).toFixed(2)}deg`);
+    node.style.setProperty("--shine-x", `${((x + 0.5) * 100).toFixed(1)}%`);
+    node.style.setProperty("--shine-y", `${((y + 0.5) * 100).toFixed(1)}%`);
+  };
+  const untilt = (event: React.PointerEvent<HTMLElement>) => {
+    const node = event.currentTarget;
+    node.style.removeProperty("--tilt-x");
+    node.style.removeProperty("--tilt-y");
+    node.style.removeProperty("--shine-x");
+    node.style.removeProperty("--shine-y");
+  };
+
+  /* The face is the picture, a month corner, and one sticker per modifier.
+     Everything else lives in the hover panel ABOVE the card — below it was off
+     the bottom of the screen for the hand, which is the only place it matters. */
   const content = (
     <>
       <span
@@ -134,29 +124,32 @@ export function HwatuCard({
         style={{ backgroundPosition: atlasPosition }}
         aria-hidden="true"
       />
+      {surface ? (
+        <span className={`hwatu-card__surface hwatu-card__surface--${surface}`} aria-hidden="true" />
+      ) : null}
 
       <span className="hwatu-card__corner" aria-hidden="true">{card.month}</span>
       {splitRole ? (
         <span className="hwatu-card__split" aria-hidden="true">{splitRole === "jit" ? "짓" : "끗"}</span>
       ) : null}
-      {effectTag ? <span className="hwatu-card__effect" aria-hidden="true">효</span> : null}
 
-      {effectTag ? <span className="hwatu-card__effect-field" aria-hidden="true" /> : null}
-
-      {modifierArtUrl ? (
+      {/* One mark per modifier, each in its own corner. Four can be on at once
+          and none of them will ever land on another. */}
+      {marks.map((mark) => (
         <span
-          className="hwatu-card__modifier-art"
+          className={`hwatu-card__mark hwatu-card__mark--${mark.slot}`}
+          key={mark.id}
           aria-hidden="true"
-          style={{ backgroundImage: `url("${modifierArtUrl}")` }}
-        />
-      ) : null}
+        >
+          <CardMark sprite={mark.sprite} fill={mark.fill} highlight={mark.highlight} title={mark.label} />
+        </span>
+      ))}
 
       <span className="hwatu-card__hint" role="tooltip">
         <b>{card.month}월 {monthValue > card.month ? `+${monthValue - card.month}` : ""}</b>
         <em>{kindLabel}{ribbonLabel ? ` · ${ribbonLabel}` : ""}</em>
         <i>월값 {monthValue}</i>
-        {effectTag ? <u>{effectTag.name} · {effectTag.description}</u> : null}
-        {modifierLabels.length > 0 ? <u>{modifierLabels.join(" · ")}</u> : null}
+        {modifierLines.map((line) => <u key={line}>{line}</u>)}
         {isDisabled ? <s>이번 판 사용 불가</s> : null}
       </span>
     </>
@@ -172,6 +165,7 @@ export function HwatuCard({
     card.enhancement && `hwatu-card--enhancement-${card.enhancement}`,
     card.edition && `hwatu-card--edition-${card.edition}`,
     card.seal && `hwatu-card--seal-${card.seal}`,
+    surface ? `hwatu-card--has-${surface}` : undefined,
     effectTag && `hwatu-card--effect-${effectTag.id.replaceAll("_", "-")}`,
     className,
   );
@@ -180,8 +174,7 @@ export function HwatuCard({
     card.name,
     `월값 ${monthValue}`,
     ribbonLabel,
-    ...modifierLabels,
-    effectTag ? `${effectTag.name}: ${effectTag.description}` : "",
+    ...modifierLines,
     card.tags.map((tag) => `#${tag}`).join(" "),
   ]
     .filter(Boolean)
@@ -195,9 +188,8 @@ export function HwatuCard({
     "data-enhancement": card.enhancement,
     "data-edition": card.edition,
     "data-seal": card.seal,
-    style: effectArtUrl
-      ? ({ "--card-effect-art": `url("${effectArtUrl}")` } as React.CSSProperties)
-      : undefined,
+    onPointerMove: tilt,
+    onPointerLeave: untilt,
   };
 
   if (!onSelect) {

@@ -81,132 +81,213 @@
   font-size: 0.62rem;
 }
 
+/*
+  CARD FRAME.
+
+  The atlas cell is exactly 160x240 and the printed red border runs to the very
+  edge of it — measured, not assumed. Every ring we used to paint on top (a 1px
+  card border, a 3px inset white shadow, a dashed inner rule, a 2px border on
+  the art) ate into that printed border and made the picture look cropped. The
+  art IS the card now: no rings, and `aspect-ratio` sits on the card itself.
+*/
 .hwatu-card {
-  --card-accent: var(--game-red);
-  --card-wash: linear-gradient(transparent, transparent);
-  --card-sheen: linear-gradient(transparent, transparent);
-  --card-seal: transparent;
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  --lift: 0rem;
+  --pop: 1;
+  --shine-x: 50%;
+  --shine-y: 50%;
   position: relative;
-  isolation: isolate;
   display: block;
   width: 7.7rem;
-  height: 11.55rem;
+  height: auto;
   aspect-ratio: 2 / 3;
   flex: 0 0 7.7rem;
+  /*
+    NEVER let a container stretch this. A grid or flex item defaults to
+    `align-self: stretch`, which gives the card a definite height — and once
+    both width and height are definite, `aspect-ratio` is ignored outright and
+    the picture squashes. That is what turned the pack picker into a row of
+    tall thin cards.
+  */
+  align-self: center;
+  justify-self: center;
   padding: 0;
-  overflow: visible;
-  border: 1px solid color-mix(in srgb, var(--card-accent) 38%, var(--game-line));
-  border-radius: 0.68rem;
-  background:
-    var(--card-wash),
-    var(--card-sheen),
-    linear-gradient(155deg, #fffdf5 0%, var(--game-paper) 72%, #e7d9ba 100%);
-  box-shadow:
-    inset 0 0 0 3px rgb(255 255 255 / 52%),
-    0 0.38rem 0.9rem rgb(36 30 20 / 16%);
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  box-shadow: 0 0.35rem 0.8rem rgb(20 13 8 / 35%);
   color: var(--game-ink);
   font: inherit;
   text-align: left;
-  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  /*
+    THE WHOLE CARD TILTS.
+
+    `perspective` lives inside the transform chain rather than on a parent, so
+    the card is self-contained — it tilts the same way in the hand, in the deck
+    screen and in a pack. An earlier version rotated an inner plate, which left
+    the month badge and the marks sitting flat on top like stickers on glass.
+    Lift and pop are variables so selection and hover compose with the tilt
+    instead of overwriting it.
+  */
+  transform:
+    perspective(760px)
+    translateY(var(--lift))
+    scale(var(--pop))
+    rotateX(var(--tilt-x))
+    rotateY(var(--tilt-y));
+  transform-style: preserve-3d;
+  transition: transform 90ms ease-out, box-shadow 140ms ease, filter 140ms ease;
 }
 
-.hwatu-card::before {
-  position: absolute;
-  z-index: 0;
-  inset: 0.25rem;
-  border: 1px solid color-mix(in srgb, var(--card-accent) 20%, transparent);
-  border-radius: 0.48rem;
-  content: "";
-  pointer-events: none;
-}
-
-.hwatu-card > * { position: relative; z-index: 1; }
+.hwatu-card > * { position: absolute; }
 button.hwatu-card { cursor: pointer; }
-button.hwatu-card:hover:not(:disabled) { transform: translateY(-0.22rem); }
+button.hwatu-card:not(.hwatu-card--selected):hover:not(:disabled) { --lift: -0.28rem; }
+
 /*
   SELECTED STATE.
 
   A thin red edge was invisible once the picture filled the whole face, so three
   cues stack instead: a lift out of the fan, a gold ring that reads against any
-  card art, and (in game.css) a light wash over the rest of the hand.
-
-  The wash is deliberately gentle. A hard dim did make the selection obvious,
-  but it also hid the cards you still have to choose from, which is the thing
-  you are actually looking at while deciding.
+  card art, and (in game.css) a light wash over the rest of the hand. The wash
+  is deliberately gentle — a hard dim made the selection obvious but hid the
+  cards you still have to choose from.
 */
 .hwatu-card--selected {
+  --lift: -1.15rem;
+  --pop: 1.06;
   z-index: 5;
-  border-color: var(--game-gold);
   box-shadow:
-    inset 0 0 0 3px rgb(255 246 214 / 78%),
-    0 0 0 4px var(--game-gold),
-    0 0 0 7px rgb(165 50 42 / 45%),
+    0 0 0 3px var(--game-gold),
+    0 0 0 5px rgb(165 50 42 / 45%),
     0 0.9rem 1.5rem rgb(20 13 8 / 45%);
-  transform: translateY(-1.15rem) scale(1.06);
 }
-.hwatu-card--scoring {
-  border-color: var(--game-gold);
-  box-shadow:
-    inset 0 0 0 3px rgb(255 255 255 / 58%),
-    0 0 0 2px rgb(177 131 47 / 24%),
-    0 0.45rem 1rem rgb(36 30 20 / 18%);
-}
-.hwatu-card--selected.hwatu-card--scoring {
-  border-color: var(--game-gold);
-  box-shadow:
-    inset 0 0 0 3px rgb(255 246 214 / 78%),
-    0 0 0 4px var(--game-gold),
-    0 0 0 7px rgb(165 50 42 / 45%),
-    0 0.9rem 1.5rem rgb(20 13 8 / 45%);
-  transform: translateY(-1.15rem) scale(1.06);
-}
-
+.hwatu-card--scoring { box-shadow: 0 0 0 2px var(--game-gold), 0 0.45rem 1rem rgb(36 30 20 / 25%); }
+.hwatu-card--split-jit:not(.hwatu-card--selected) { box-shadow: 0 0 0 2px #2f5d8c, 0 0.35rem 0.8rem rgb(20 13 8 / 35%); }
+.hwatu-card--split-kkeut:not(.hwatu-card--selected) { box-shadow: 0 0 0 2px #8c2f3d, 0 0.35rem 0.8rem rgb(20 13 8 / 35%); }
 .hwatu-card--disabled { opacity: 0.55; filter: grayscale(0.45); }
 
-/*
-  IMAGE SLOT — the whole card face.
-  Drop a real picture in later with one rule, no markup change:
-    .hwatu-card__art[data-asset-tag="card-01-bright-crane"] {
-      background-image: url("/assets/cards/card-01-bright-crane.webp");
-    }
-*/
+/* The picture, edge to edge. Nothing is drawn on top of it. */
 .hwatu-card__art {
-  position: relative;
   display: block;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--card-accent) 38%, #17110c);
-  border-radius: 0.4rem;
+  border-radius: 0.5rem;
   background-color: var(--game-paper);
   background-image: url("/assets/cards/hwatu-basic-atlas-generated-v4-aligned.png");
   background-repeat: no-repeat;
   background-size: 800% 600%;
-  box-shadow:
-    inset 0 0 0 2px rgb(255 247 220 / 18%),
-    0 1px 0 rgb(255 255 255 / 45%);
   image-rendering: pixelated;
+  inset: 0;
 }
-.hwatu-card__art::before {
-  position: absolute;
+
+/*
+  SURFACE — at most one per card, chosen in card-visuals.ts.
+
+  No rainbow. A hwatu card is already red, black, gold and cream; a spectrum on
+  top of that is noise, not shine.
+*/
+.hwatu-card__surface {
   z-index: 2;
+  border-radius: 0.5rem;
   inset: 0;
-  background: linear-gradient(135deg, rgb(255 246 216 / 5%), transparent 45%, rgb(41 27 16 / 5%));
-  content: "";
-  mix-blend-mode: multiply;
-  opacity: 0.35;
   pointer-events: none;
 }
-.hwatu-card__art::after {
-  position: absolute;
-  z-index: 3;
-  inset: 0;
-  border: 2px solid rgb(20 13 8 / 36%);
-  border-radius: inherit;
-  box-shadow: inset 0 0 0.75rem rgb(31 13 6 / 24%);
-  content: "";
+
+/*
+  판본 — the holo.
+
+  Real foil is a fine diagonal grating that flares where the light hits it, so
+  that is what this is: hard-edged gold bands, lit by a highlight that follows
+  the pointer. The previous version was one soft radial blob, which is why it
+  read as nothing at all — a blur over pixel art just looks like a smudge.
+
+  It breathes on its own too, so a foil card is visible sitting in the hand
+  rather than only when the pointer happens to be on it.
+
+  Still no rainbow. One hue, gold, because the cards are already red/black/gold
+  and a spectrum on top is noise.
+*/
+.hwatu-card__surface--holo {
+  background:
+    /* the flare, riding the pointer */
+    radial-gradient(
+      circle at var(--shine-x) var(--shine-y),
+      rgb(255 250 226 / 85%) 0%,
+      rgb(255 226 150 / 35%) 22%,
+      transparent 52%
+    ),
+    /* the grating */
+    repeating-linear-gradient(
+      115deg,
+      rgb(255 226 150 / 42%) 0 2px,
+      rgb(255 244 208 / 16%) 2px 4px,
+      transparent 4px 9px
+    );
+  animation: hwatu-holo 3.4s ease-in-out infinite;
+  mix-blend-mode: color-dodge;
+}
+
+@keyframes hwatu-holo {
+  0%, 100% { background-position: 0 0, 0 0; opacity: 0.72; }
+  50% { background-position: 0 0, 14px 0; opacity: 1; }
+}
+
+/* 유리패 — cold, flat, clearly a different material. */
+.hwatu-card__surface--glass {
+  border: 1px solid rgb(198 232 255 / 55%);
+  border-radius: 0.5rem;
+  background: linear-gradient(150deg, rgb(206 238 255 / 34%), transparent 45%, rgb(150 205 240 / 26%));
+  mix-blend-mode: screen;
+}
+
+/* 복패 — unstable. Scanlines that jump, so it needs no caption. Vertical only,
+   so it can never shift the layout. */
+.hwatu-card__surface--glitch {
+  background: repeating-linear-gradient(
+    0deg,
+    rgb(120 255 214 / 22%) 0,
+    rgb(120 255 214 / 22%) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  animation: hwatu-glitch 1.4s steps(3, end) infinite;
+  mix-blend-mode: screen;
+}
+
+@keyframes hwatu-glitch {
+  0%, 72% { opacity: 0.35; transform: translateY(0); }
+  76% { opacity: 0.9; transform: translateY(-1px); }
+  80% { opacity: 0.5; transform: translateY(2px); }
+  84% { opacity: 0.95; transform: translateY(-2px); }
+  88%, 100% { opacity: 0.35; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hwatu-card__surface--glitch { animation: none; opacity: 0.5; }
+  .hwatu-card__surface--holo { animation: none; }
+  .hwatu-card { --tilt-x: 0deg !important; --tilt-y: 0deg !important; transition: none; }
+}
+
+/*
+  MARKS — one per modifier, each in its own corner.
+
+  This is the part that has to survive doubling up. Four modifiers can be on one
+  card, so each category owns a fixed anchor and no two marks can ever land on
+  each other. They sit slightly outside the card edge so they read as objects
+  ON the card rather than parts of the picture.
+*/
+.hwatu-card__mark {
+  z-index: 5;
+  display: block;
+  width: 26%;
+  aspect-ratio: 1;
+  filter: drop-shadow(0 1px 0 rgb(20 13 8 / 75%));
   pointer-events: none;
 }
+.hwatu-card__mark--top-right { top: 5%; right: 5%; }
+.hwatu-card__mark--bottom-left { bottom: 4%; left: 5%; }
+.hwatu-card__mark--bottom-right { right: 5%; bottom: 4%; }
+.hwatu-card__mark--mid-left { top: 38%; left: 5%; }
+.card-mark { display: block; width: 100%; height: 100%; }
 
 /* Month marker — the only text that stays on the face. */
 .hwatu-card__corner {
@@ -296,7 +377,13 @@ button.hwatu-card:hover:not(:disabled) { transform: translateY(-0.22rem); }
   max-width: 12rem;
   gap: 0.06rem;
   padding: 0.4rem 0.55rem;
-  transform: translateX(-50%) translateY(0.25rem);
+  /* Cancels the card's tilt so the text stays flat and readable while the
+     card underneath it leans. */
+  transform:
+    translateX(-50%)
+    translateY(0.25rem)
+    rotateX(calc(-1 * var(--tilt-x)))
+    rotateY(calc(-1 * var(--tilt-y)));
   border: 1px solid #4a4436;
   border-radius: 0.5rem;
   background: #241f19;

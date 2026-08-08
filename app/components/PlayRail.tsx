@@ -1,6 +1,7 @@
 "use client";
 
 import type { ScoreBreakdown } from "@/game/types";
+import type { ScoreRevealState } from "./useScoreReveal";
 
 export interface PlayRailProps {
   assetTag: string;
@@ -18,6 +19,12 @@ export interface PlayRailProps {
   /** The hand currently being previewed, or the hand that was just played. */
   breakdown?: ScoreBreakdown | null;
   formulaCaption: string;
+  /**
+   * Live playback of a submitted hand. While this is running the rail shows the
+   * running numbers instead of the final ones, which is the whole point — the
+   * payoff is watching the effects land, not reading the total.
+   */
+  reveal?: ScoreRevealState;
   handsRemaining: number;
   discardsRemaining: number;
   money: number;
@@ -50,6 +57,7 @@ export function PlayRail({
   goCount,
   breakdown,
   formulaCaption,
+  reveal,
   handsRemaining,
   discardsRemaining,
   money,
@@ -113,21 +121,51 @@ export function PlayRail({
         </div>
       </section>
 
-      <section className="play-rail__formula" aria-label="점수 계산" aria-live="polite" data-tutorial="rail-formula">
+{/*
+        Before submit this shows the BARE hand — 짓 월합 x 끗패 배수 — and nothing
+        else. Everything the collection and the talismans add is withheld until
+        the hand is played, so the reveal has something left to reveal.
+      */}
+      <section
+        className={joinClassNames("play-rail__formula", reveal?.playing && "play-rail__formula--revealing")}
+        aria-label="점수 계산"
+        aria-live="polite"
+        data-tutorial="rail-formula"
+      >
         <span className="play-rail__formula-yaku">
           {breakdown ? breakdown.yakuName : "—"}
         </span>
         <div className="play-rail__formula-values">
-          <b className="play-rail__month-sum">
-            {breakdown ? formatNumber(breakdown.finalKkeut) : 0}
+          <b className="play-rail__month-sum" key={`k${reveal?.index ?? -1}`}>
+            {reveal
+              ? formatNumber(reveal.kkeut)
+              : breakdown ? formatNumber(breakdown.startingKkeut) : 0}
           </b>
           <i aria-hidden="true">×</i>
-          <b className="play-rail__multiplier">
-            {breakdown ? formatNumber(breakdown.finalHeung) : 0}
+          <b className="play-rail__multiplier" key={`h${reveal?.index ?? -1}`}>
+            {reveal
+              ? formatNumber(reveal.heung)
+              : breakdown ? formatNumber(breakdown.startingHeung) : 0}
           </b>
         </div>
+
+        {reveal?.current ? (
+          <div className="play-rail__pop" key={`p${reveal.index}`}>
+            <span>{reveal.current.label}</span>
+            <b>
+              {reveal.current.operation === "multiply_heung"
+                ? `x${formatNumber(reveal.current.value)}`
+                : `+${formatNumber(reveal.current.value)}`}
+            </b>
+          </div>
+        ) : null}
+
         <div className="play-rail__formula-total">
-          <span>= {breakdown ? formatNumber(breakdown.score) : 0}</span>
+          <span>
+            = {reveal
+              ? reveal.total === null ? "…" : formatNumber(reveal.total)
+              : breakdown ? formatNumber(breakdown.startingKkeut * breakdown.startingHeung) : 0}
+          </span>
         </div>
         <small>{formulaCaption}</small>
       </section>

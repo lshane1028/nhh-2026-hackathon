@@ -349,15 +349,23 @@ textarea {
 }
 .play-board__felt::before,
 .play-board__felt::after { width: 24px !important; height: 24px !important; border-width: 3px !important; }
+/*
+  The card frame is NOT redrawn here. The atlas art already carries the printed
+  red border edge to edge (measured: 160x240 cell, zero gutter), so a border on
+  top of it eats the picture.
+
+  And never touch `transform` on .hwatu-card. This rule used to force
+  `transform: translateY(-4px) !important` on hover, which threw away the whole
+  perspective/rotate chain — the card stopped tilting at exactly the moment the
+  pointer was on it, which is the only moment tilt exists for. Lift is a CSS
+  variable now; set that instead.
+*/
 .hwatu-card {
-  border: 4px solid #8f1f19 !important;
   border-radius: 2px !important;
-  background: #a92a22 !important;
-  box-shadow: 3px 4px 0 rgb(0 0 0 / 52%), inset 0 0 0 2px #e66b58 !important;
-  transition: none !important;
+  box-shadow: 3px 4px 0 rgb(0 0 0 / 52%) !important;
 }
 .hwatu-card__art { border-radius: 0 !important; }
-.hwatu-card:hover:not(:disabled) { transform: translateY(-4px) !important; }
+.hwatu-card:not(.hwatu-card--selected):hover:not(:disabled) { --lift: -4px; }
 .hwatu-card--selected { box-shadow: 0 0 0 3px var(--px-gold-1), 4px 6px 0 rgb(0 0 0 / 58%) !important; }
 .hwatu-card__corner,
 .hwatu-card__split,
