@@ -19,6 +19,13 @@ export interface TalismanStripProps {
   items: readonly TalismanStripItem[];
   slots: number;
   selectedInstanceId?: string | null;
+  /**
+   * The talisman firing right now during a score reveal. Talismans stay on
+   * screen after a hand is submitted — unlike the cards, which have already
+   * left the hand — so this is where "that joker just did something" can
+   * actually be seen.
+   */
+  firingInstanceId?: string | null;
   onSelect?: (item: TalismanStripItem) => void;
   className?: string;
 }
@@ -39,6 +46,7 @@ export function TalismanStrip({
   items,
   slots,
   selectedInstanceId,
+  firingInstanceId,
   onSelect,
   className,
 }: TalismanStripProps) {
@@ -100,6 +108,7 @@ export function TalismanStrip({
           const itemClassName = joinClassNames(
             "talisman-strip__item",
             isSelected && "talisman-strip__item--selected",
+            firingInstanceId === item.instance.instanceId && "talisman-strip__item--firing",
             item.disabled && "talisman-strip__item--disabled",
           );
 

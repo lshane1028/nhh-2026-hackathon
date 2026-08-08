@@ -270,9 +270,12 @@
 .play-board__prompt { color: #b8c9bd; letter-spacing: 0.06em; }
 .hand-fan { padding-block: 1.25rem 0.8rem; }
 .hand-fan > li { margin-inline: clamp(-1.55rem, -0.9vw, -0.4rem); }
-.hwatu-card { border: 0.2rem solid #8f1f19; border-radius: 0.5rem; background: #a92a22; box-shadow: 0 0.5rem 1rem rgb(0 0 0 / 42%), inset 0 0 0 1px #ec7466; }
+/* No frame drawn on top of the card. The atlas cell IS the card, red border
+   included — measured at 160x240 with zero gutter — so any ring we add here
+   crops the artwork by exactly its own width. */
+.hwatu-card { border-radius: 0.5rem; box-shadow: 0 0.5rem 1rem rgb(0 0 0 / 42%); }
 .hwatu-card::before { display: none; }
-.hwatu-card__art { border: 1px solid #250e0b; border-radius: 0.23rem; box-shadow: inset 0 0 0 2px rgb(255 245 213 / 16%); }
+.hwatu-card__art { border-radius: 0.5rem; }
 .hwatu-card--selected { box-shadow: 0 0 0 3px #f1c85d, 0 0 1.5rem rgb(241 200 93 / 55%), 0 1.2rem 2rem rgb(0 0 0 / 55%); }
 .deck-stack { border-color: #8e6b38 !important; border-radius: 0.22rem !important; background: rgb(10 9 7 / 45%) !important; }
 .deck-stack__back { aspect-ratio: 2 / 3; border-radius: 0.35rem; background: repeating-linear-gradient(45deg, #7f201b 0 5px, #47130f 5px 10px); }

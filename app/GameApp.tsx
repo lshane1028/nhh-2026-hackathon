@@ -47,6 +47,7 @@ import { TalismanStrip } from "./components/TalismanStrip";
 import { TitleScreen, type ExperimentalRuleOption } from "./components/TitleScreen";
 import { TutorialSpotlight } from "./components/TutorialSpotlight";
 import { TUTORIAL_STEPS } from "./components/tutorial-steps";
+import { useScoreReveal } from "./components/useScoreReveal";
 import "./game.css";
 import "./components/art-direction.css";
 import "./components/pixel-direction.css";
@@ -393,6 +394,10 @@ export default function GameApp() {
 
   const stage = getStageDefinition(state.stage, state.infiniteLap);
   const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
+  // Only a SUBMITTED hand gets played back. The preview must stay a still
+  // picture of the bare 짓 × 끗패, otherwise there is nothing left to show.
+  // Declared up here with the other hooks, above every early screen return.
+  const reveal = useScoreReveal(state.lastScore);
   const preview = useMemo(() => {
     try {
       return evaluateSelectedHand(state);
@@ -693,7 +698,9 @@ export default function GameApp() {
   );
   const goRewardFactor = getGoRewardFactor(state.chain.goCount + 1);
   const isDecision = state.screen === "decision";
-  const shownBreakdown = isDecision ? state.lastScore : preview?.breakdown ?? null;
+  // A live selection wins; otherwise the last scored hand stays on the rail so
+  // the reveal has somewhere to play out after the cards have left the hand.
+  const shownBreakdown = preview?.breakdown ?? state.lastScore;
   const drawnCount = state.drawPile.length;
   const deckTotal = state.deck.length;
 
@@ -705,7 +712,12 @@ export default function GameApp() {
 
       <main className="play-board">
         <div className="play-board__top" data-tutorial="talisman">
-          <TalismanStrip assetTag="ui:talisman-strip" items={talismanItems} slots={getEffectiveTalismanSlots(state)} />
+          <TalismanStrip
+            assetTag="ui:talisman-strip"
+            items={talismanItems}
+            slots={getEffectiveTalismanSlots(state)}
+            firingInstanceId={reveal.playing ? reveal.current?.sourceId ?? null : null}
+          />
         </div>
 
         {state.chain.goCount > 0 && !isDecision ? (
@@ -840,11 +852,14 @@ export default function GameApp() {
         roundScore={state.chain.roundScore}
         goCount={state.chain.goCount}
         breakdown={shownBreakdown}
+        reveal={state.lastScore && shownBreakdown === state.lastScore ? reveal : undefined}
         formulaCaption={
           shownBreakdown
-            ? isDecision
-              ? "방금 낸 점수"
-              : `짓 ${shownBreakdown.startingKkeut} × 끗패 배수`
+            ? reveal.playing
+              ? `효과 적용 중 ${reveal.index}/${reveal.count}`
+              : shownBreakdown === state.lastScore
+                ? "방금 낸 점수"
+                : `짓 ${shownBreakdown.startingKkeut} × 끗패 배수 · 제출하면 효과가 붙습니다`
             : state.selectedCardIds.length
               ? "짓의 월 합이 10의 배수가 되어야 합니다"
               : "2~5장을 고르면 가장 높은 짓·끗패 갈래가 자동으로 붙습니다"
@@ -957,11 +972,6 @@ function PackPickModal({ pack, onPick, onClose }: {
                   onSelect={() => handlePick(card.instanceId)}
                   ariaLabel={`${card.month}월 ${card.name}${tag ? `, ${tag.name}` : ""}`}
                 />
-                <div className="pack-pick__copy">
-                  <strong>{card.month}월 {card.monthName}</strong>
-                  <span>{card.name}</span>
-                  {tag ? <em><b>{tag.name}</b>{tag.description}</em> : null}
-                </div>
               </li>
             );
           })}

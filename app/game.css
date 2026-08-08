@@ -207,6 +207,76 @@
 .play-rail__pot > strong { margin-left: auto; color: #e8b34f; font-size: 0.86rem; }
 .play-rail__pot > em { padding: 0.02rem 0.3rem; border: 1px solid #6a5a33; border-radius: 999px; color: #d2b169; font-size: 0.52rem; font-style: normal; font-weight: 900; }
 
+/* --- score reveal -------------------------------------------------------
+   The payoff. Before submit the rail shows the bare 짓 x 끗패; on submit the
+   effects land one at a time and the numbers climb with them. Every animation
+   here is transform/opacity only — the rail sits in a fixed viewport and a
+   reveal that reflows the layout would shove the whole board around. */
+
+.play-rail__formula--revealing {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgb(177 131 47 / 25%), 0 0 1.4rem rgb(177 131 47 / 22%);
+}
+
+/* Keyed on the step index, so React remounts them and the pop replays. */
+.play-rail__formula--revealing .play-rail__month-sum,
+.play-rail__formula--revealing .play-rail__multiplier {
+  animation: rail-tick 240ms ease-out;
+}
+
+@keyframes rail-tick {
+  0% { transform: scale(1); }
+  38% { transform: scale(1.16); }
+  100% { transform: scale(1); }
+}
+
+.play-rail__pop {
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
+  justify-content: center;
+  min-height: 1.15rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.4rem;
+  background: rgb(177 131 47 / 16%);
+  animation: rail-pop 320ms ease-out;
+}
+.play-rail__pop > span {
+  overflow: hidden;
+  color: #f0e2c0;
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.play-rail__pop > b { color: var(--gold); font-size: 0.82rem; }
+
+@keyframes rail-pop {
+  0% { opacity: 0; transform: translateY(0.4rem); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* The talisman that just fired. Cards have already left the hand by the time a
+   hand is scored, so the joker strip is the only place a source can be seen. */
+.talisman-strip__item--firing {
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 0 2px var(--gold), 0 0 1.2rem rgb(177 131 47 / 45%) !important;
+  animation: talisman-fire 300ms ease-out;
+}
+
+@keyframes talisman-fire {
+  0% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-0.3rem) scale(1.08); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .play-rail__pop,
+  .talisman-strip__item--firing,
+  .play-rail__formula--revealing .play-rail__month-sum,
+  .play-rail__formula--revealing .play-rail__multiplier { animation: none; }
+}
+
 .play-rail__formula { display: grid; gap: 0.28rem; padding: 0.5rem; border: 1px solid #3d3830; border-radius: 0.6rem; background: #1b1915; text-align: center; }
 .play-rail__formula-yaku { overflow: hidden; color: var(--paper); font-size: 0.82rem; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
 .play-rail__formula-values { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 0.25rem; align-items: stretch; }
@@ -977,7 +1047,11 @@
   padding: 0;
   list-style: none;
 }
-.pack-picks > li { display: grid; min-width: 0; }
+/* Just the cards. The effect used to be written out under every one of them,
+   which turned a five-card choice into a wall of prose — and the same text is
+   already one hover away on the card itself. */
+.pack-picks > li { display: grid; min-width: 0; justify-items: center; }
+.pack-pick__card { width: clamp(5.5rem, 9vw, 7.4rem) !important; flex: 0 0 auto !important; }
 
 .game-modal .pack-pick {
   display: grid;
