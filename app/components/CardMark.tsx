@@ -20,7 +20,6 @@ const SIZE = 12;
 export type MarkSprite =
   | "coin"
   | "star"
-  | "stamp"
   | "gem"
   | "ink"
   | "rings"
@@ -64,21 +63,11 @@ const STAR = [
   "............",
 ];
 
-/* 낙관 — a carved chop, corners notched. */
-const STAMP = [
-  "oooooooooooo",
-  "oXXXXXXXXXXo",
-  "oXX+....+XXo",
-  "oX+......+Xo",
-  "oX........Xo",
-  "oX........Xo",
-  "oX........Xo",
-  "oX+......+Xo",
-  "oXX+....+XXo",
-  "oXXXXXXXXXXo",
-  "oooooooooooo",
-  "............",
-];
+/*
+  The 낙관 sprite is gone with the rest of the seal artwork — see
+  docs/HANDOFF-SEALS.md. Two versions were tried and neither landed, so the
+  slate is deliberately clean for whoever builds it.
+*/
 
 const GEM = [
   "...oooooo...",
@@ -256,7 +245,6 @@ const MOON = [
 const SPRITES: Record<MarkSprite, readonly string[]> = {
   coin: COIN,
   star: STAR,
-  stamp: STAMP,
   gem: GEM,
   ink: INK,
   rings: RINGS,

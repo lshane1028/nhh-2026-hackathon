@@ -1,13 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { getCardMarks, getCardModifierLines, getCardSurface } from "../../app/components/card-visuals";
+import {
+  getCardMarks,
+  getCardMaterial,
+  getCardModifierLines,
+  getCardShine,
+  getCardSurface,
+} from "../../app/components/card-visuals";
 import { CARD_EFFECT_TAGS } from "../content/card-effects";
 import { createStandardHwatuDeck } from "../engine/deck";
 import type { CardInstance } from "../types";
 
 /**
- * A card can carry four modifiers at once and packs roll doubles on purpose,
- * so the rule these tests defend is: every modifier gets its own object on the
- * card, and only one may own the surface.
+ * A card can carry four modifiers at once and packs roll doubles on purpose.
+ *
+ * The rule these tests defend is that the four are on four different CHANNELS —
+ * material, surface, and two corner objects — so none of them can push another
+ * off the card. The old design gave all four a corner token, which meant they
+ * competed for the same space and the fix kept being "draw a better token".
  */
 
 const base = createStandardHwatuDeck()[0];
@@ -16,29 +25,50 @@ const withMods = (patch: Partial<CardInstance>): CardInstance => ({ ...base, tag
 describe("card visuals", () => {
   it("gives a plain card nothing to show", () => {
     expect(getCardMarks(base)).toEqual([]);
+    expect(getCardMaterial(base)).toBeNull();
     expect(getCardSurface(base)).toBeNull();
     expect(getCardModifierLines(base)).toEqual([]);
   });
 
-  it("gives every modifier its own mark, in its own corner", () => {
+  it("shows all four modifiers at once, each on its own channel", () => {
     const loaded = withMods({
-      enhancement: "coin",
+      enhancement: "glass",
       edition: "gold_leaf",
       seal: "red",
       effectTagId: "gilded",
     });
-    const marks = getCardMarks(loaded);
-    expect(marks).toHaveLength(4);
 
-    // Separated on three axes at once, because any single axis fails somewhere:
-    // two circles differ only by colour on a red card, two red things differ
-    // only by shape at 14px. All four must be distinct on every axis.
-    expect(new Set(marks.map((mark) => mark.slot)).size).toBe(4);
-    expect(new Set(marks.map((mark) => mark.id)).size).toBe(4);
-    expect(new Set(marks.map((mark) => `${mark.sprite}|${mark.fill}`)).size).toBe(4);
+    // 각인 is the material, 판본 is the finish. Neither may consume the other.
+    expect(getCardMaterial(loaded)).toBe("glass");
+    expect(getCardSurface(loaded)).toBe("gold_leaf");
 
-    // 엽전 is drawn as an actual coin — the one shape nobody misreads.
-    expect(marks.find((mark) => mark.id === "enhancement-coin")?.sprite).toBe("coin");
+    // The effect tag is the only token drawn today — 낙관 is unbuilt and
+    // waiting on docs/HANDOFF-SEALS.md.
+    expect(getCardMarks(loaded).map((mark) => mark.id)).toEqual(["effect-gilded"]);
+
+    // All four still reach the player in words, including the undrawn one. A
+    // seal you own and cannot see anywhere at all would be worse than one that
+    // is only named.
+    expect(getCardModifierLines(loaded)).toHaveLength(4);
+  });
+
+  it("draws nothing for 낙관 but never loses it", () => {
+    const sealed = withMods({ seal: "purple" });
+    expect(getCardMarks(sealed)).toEqual([]);
+    expect(getCardModifierLines(sealed)).toEqual(["낙관 · 자인"]);
+    // The data itself is untouched, which is the whole point of the handoff.
+    expect(sealed.seal).toBe("purple");
+  });
+
+  it("never lets 각인 swallow 판본", () => {
+    // This is the regression. 유리패 and 복패 used to outrank the edition for the
+    // surface, so a glass card silently threw its 판본 away with nothing on
+    // screen to say so.
+    for (const enhancement of ["glass", "fortune", "stone", "steel"] as const) {
+      const card = withMods({ enhancement, edition: "mother_of_pearl" });
+      expect(getCardMaterial(card), enhancement).toBe(enhancement);
+      expect(getCardSurface(card), enhancement).toBe("mother_of_pearl");
+    }
   });
 
   it("keeps every effect tag visually distinct from every other", () => {
@@ -52,22 +82,38 @@ describe("card visuals", () => {
     }
   });
 
-  it("never lets two surfaces fight, and keeps the unstable one on top", () => {
-    // 복패 is defined by being unstable, so its glitch has to survive being
-    // gilded. 유리패 is a fact about the card, so it beats mere decoration.
-    expect(getCardSurface(withMods({ enhancement: "fortune", edition: "gold_leaf" }))).toBe("glitch");
-    expect(getCardSurface(withMods({ enhancement: "glass", edition: "gold_leaf" }))).toBe("glass");
-    expect(getCardSurface(withMods({ edition: "mother_of_pearl" }))).toBe("holo");
-    expect(getCardSurface(withMods({ enhancement: "inked" }))).toBeNull();
+  it("hands the foil to 무거운 달 and to nothing else", () => {
+    // The foil is the loudest thing a card can do, so it is worth one effect
+    // at a time. If this ever starts failing because a second tag was added,
+    // that is the question to answer first: is the new one really louder than
+    // +50 to the month sum? Two foils and neither one marks anything out.
+    expect(getCardShine(withMods({ effectTagId: "heavy_month" }))).toBe("gilt");
+    expect(getCardShine(base)).toBeNull();
+    const shining = CARD_EFFECT_TAGS.filter(
+      (tag) => getCardShine(withMods({ effectTagId: tag.id })) !== null,
+    );
+    expect(shining.map((tag) => tag.id)).toEqual(["heavy_month"]);
   });
 
-  it("lists one hover line per modifier", () => {
+  it("names every modifier in the hover panel", () => {
     const lines = getCardModifierLines(withMods({
       enhancement: "coin",
+      edition: "engraved",
       seal: "blue",
       effectTagId: "keeper_coin",
     }));
-    expect(lines).toHaveLength(3);
-    expect(lines.some((line) => line.includes("곳간패"))).toBe(true);
+    expect(lines).toEqual([
+      "각인 · 금전패",
+      "판본 · 음각",
+      "낙관 · 청인",
+      expect.stringContaining("곳간패"),
+    ]);
+  });
+
+  it("keeps the bottom-right slot free for 낙관", () => {
+    // Reserved, not unused. If an effect token ever drifts into this corner the
+    // seal will land on top of it the moment someone builds it.
+    const everything = CARD_EFFECT_TAGS.flatMap((tag) => getCardMarks(withMods({ effectTagId: tag.id })));
+    expect(everything.some((mark) => mark.slot === "bottom-right")).toBe(false);
   });
 });

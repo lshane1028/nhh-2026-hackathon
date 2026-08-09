@@ -368,9 +368,7 @@ textarea {
 .hwatu-card:not(.hwatu-card--selected):hover:not(:disabled) { --lift: -4px; }
 .hwatu-card--selected { box-shadow: 0 0 0 3px var(--px-gold-1), 4px 6px 0 rgb(0 0 0 / 58%) !important; }
 .hwatu-card__corner,
-.hwatu-card__split,
-.hwatu-card__effect,
-.hwatu-card__modifier-art {
+.hwatu-card__split {
   border-width: 2px !important;
   border-radius: 0 !important;
   box-shadow: 2px 2px 0 rgb(0 0 0 / 45%) !important;
@@ -768,35 +766,20 @@ button small,
 }
 .pack-pick__copy > em b { color: #3c2768; font-size: 0.82rem; }
 
-/* Card-bound effects are visible in the art, not only as a corner badge. */
-.hwatu-card__effect-field {
-  position: absolute !important;
-  z-index: 2 !important;
-  inset: 0.22rem;
-  overflow: hidden;
-  border: 0 !important;
-  background: var(--card-effect-field, transparent);
-  background-size: var(--card-effect-size, auto);
-  mix-blend-mode: var(--card-effect-blend, normal);
-  opacity: var(--card-effect-opacity, 0.58);
-  pointer-events: none;
-}
-.hwatu-card__effect { z-index: 5 !important; }
-.hwatu-card--effect-keeper-coin { --card-effect-field: radial-gradient(circle at 76% 72%, transparent 0 8%, #d7a733 9% 13%, transparent 14%), repeating-radial-gradient(circle at 76% 72%, rgb(241 196 82 / 44%) 0 2px, transparent 3px 8px); --card-effect-opacity: 0.72; }
-.hwatu-card--effect-partner-boost { --card-effect-field: linear-gradient(135deg, transparent 0 38%, rgb(199 57 44 / 56%) 39% 43%, transparent 44% 55%, rgb(43 111 89 / 52%) 56% 60%, transparent 61%); }
-.hwatu-card--effect-heavy-month { --card-effect-field: linear-gradient(180deg, rgb(20 17 15 / 45%), transparent 34%), linear-gradient(90deg, rgb(20 17 15 / 32%), transparent 22% 78%, rgb(20 17 15 / 32%)); --card-effect-blend: multiply; }
-.hwatu-card--effect-echo { --card-effect-field: repeating-radial-gradient(circle at 50% 54%, transparent 0 12px, rgb(78 103 174 / 42%) 13px 16px, transparent 17px 27px); animation: card-effect-echo 900ms steps(5, end) infinite; }
-.hwatu-card--effect-drawn-luck { --card-effect-field: repeating-linear-gradient(155deg, transparent 0 16px, rgb(180 43 39 / 48%) 17px 20px, transparent 21px 38px); }
-.hwatu-card--effect-as-bright { --card-effect-field: conic-gradient(from 0deg at 50% 50%, transparent 0 8%, rgb(243 194 72 / 48%) 9% 12%, transparent 13% 21%, rgb(243 194 72 / 48%) 22% 25%, transparent 26%); --card-effect-blend: screen; animation: card-effect-pulse 800ms steps(3, end) infinite; }
-.hwatu-card--effect-as-animal { --card-effect-field: radial-gradient(ellipse at 23% 78%, rgb(53 112 70 / 50%) 0 6%, transparent 7%), radial-gradient(ellipse at 34% 67%, rgb(53 112 70 / 50%) 0 5%, transparent 6%), radial-gradient(ellipse at 45% 57%, rgb(53 112 70 / 50%) 0 4%, transparent 5%); }
-.hwatu-card--effect-as-ribbon { --card-effect-field: linear-gradient(118deg, transparent 0 43%, rgb(194 45 39 / 64%) 44% 52%, transparent 53%); }
-.hwatu-card--effect-extra-pi { --card-effect-field: radial-gradient(ellipse at 20% 78%, rgb(235 225 194 / 54%) 0 9%, transparent 10%), radial-gradient(ellipse at 80% 78%, rgb(235 225 194 / 54%) 0 9%, transparent 10%); }
-.hwatu-card--effect-twin-kind { --card-effect-field: linear-gradient(90deg, rgb(35 85 106 / 28%) 0 48%, transparent 49% 51%, rgb(173 48 40 / 28%) 52%); }
-.hwatu-card--effect-gilded { --card-effect-field: linear-gradient(112deg, transparent 0 32%, rgb(255 216 103 / 62%) 34% 42%, transparent 44% 66%, rgb(255 216 103 / 38%) 68% 72%, transparent 74%); --card-effect-blend: screen; animation: card-effect-shimmer 1.25s steps(8, end) infinite; }
-.hwatu-card--effect-stubborn { --card-effect-field: linear-gradient(58deg, transparent 0 48%, rgb(53 49 44 / 55%) 49% 51%, transparent 52%), linear-gradient(122deg, transparent 0 61%, rgb(53 49 44 / 48%) 62% 64%, transparent 65%); --card-effect-blend: multiply; }
-@keyframes card-effect-echo { 0%, 100% { transform: scale(0.86); opacity: 0.28; } 50% { transform: scale(1.16); opacity: 0.7; } }
-@keyframes card-effect-pulse { 0%, 100% { opacity: 0.38; } 50% { opacity: 0.82; } }
-@keyframes card-effect-shimmer { 0% { background-position: -7rem 0; } 100% { background-position: 7rem 0; } }
+/*
+  Removed: a `.hwatu-card__effect-field` layer with a per-effect gradient for
+  all twelve tags.
+
+  None of it had drawn anything for a long time — nothing rendered an element
+  with that class, so the twelve rules sat here looking like twelve working
+  effects. That is the same failure as the old `--card-wash`, and it is worse
+  than having no styling at all, because it answers "are the effects drawn?"
+  with a convincing yes.
+
+  Effects are drawn in game-ui.css now: 각인 as `.hwatu-card__material`, 판본 as
+  `.hwatu-card__surface`, 낙관 and effect tags as `.hwatu-card__mark`. If you add
+  a rule here, render an element for it in HwatuCard.tsx in the same change.
+*/
 
 /* Department clipping used to cut off hover explanations. */
 .market-dept { overflow: visible !important; clip-path: none !important; }
@@ -819,7 +802,6 @@ button small,
   .pack-opening__bundle--opening,
   .pack-opening__bundle--opening .pack-opening__cord,
   .pack-opening__bundle--opening .pack-opening__seal,
-  .pack-picks__item--revealed,
-  .hwatu-card__effect-field { animation: none !important; }
+  .pack-picks__item--revealed { animation: none !important; }
   .pack-picks__item--revealed { opacity: 1; transform: none; }
 }

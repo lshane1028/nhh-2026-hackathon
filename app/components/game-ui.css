@@ -91,12 +91,35 @@
   art IS the card now: no rings, and `aspect-ratio` sits on the card itself.
 */
 .hwatu-card {
-  --tilt-x: 0deg;
-  --tilt-y: 0deg;
+  /*
+    DEFAULT ACCENT. Do not delete this line again.
+
+    The month badge paints itself with
+    `color-mix(in srgb, var(--card-accent) 88%, black)`, and only the
+    `--enhancement-*` classes define `--card-accent`. When the face became
+    full-bleed art this default went missing, so on every ordinary card the
+    custom property was undefined -- which makes the whole `background`
+    declaration invalid at computed-value time and drops it to transparent.
+    The badge lost its plate and near-white text was left printed directly onto
+    cream card art. Not faint: invisible.
+  */
+  --card-accent: var(--game-red);
+
+  /*
+    Pointer position, written by HwatuCard on every move, as a plain number
+    from -0.5 to 0.5. Degrees are worked out here rather than in JS so the
+    amplitude is a stylesheet decision -- `prefers-reduced-motion` turns it
+    down at the bottom of this file without JS knowing anything about it.
+  */
+  --pointer-x: 0;
+  --pointer-y: 0;
+  --tilt-max: 16deg;
   --lift: 0rem;
   --pop: 1;
   --shine-x: 50%;
   --shine-y: 50%;
+  /* 1 only while the pointer is actually on the card. */
+  --shine-on: 0;
   position: relative;
   display: block;
   width: 7.7rem;
@@ -134,14 +157,17 @@
     perspective(760px)
     translateY(var(--lift))
     scale(var(--pop))
-    rotateX(var(--tilt-x))
-    rotateY(var(--tilt-y));
+    rotateX(calc(var(--pointer-y) * var(--tilt-max) * -1))
+    rotateY(calc(var(--pointer-x) * var(--tilt-max)));
   transform-style: preserve-3d;
   transition: transform 90ms ease-out, box-shadow 140ms ease, filter 140ms ease;
 }
 
 .hwatu-card > * { position: absolute; }
 button.hwatu-card { cursor: pointer; }
+/* Tilt is for every card, so the hover cues hang off `.hwatu-card`, not off
+   `button` — the deck screen and the pack picker render plain articles. */
+.hwatu-card:hover { --shine-on: 1; }
 button.hwatu-card:not(.hwatu-card--selected):hover:not(:disabled) { --lift: -0.28rem; }
 
 /*
@@ -180,10 +206,337 @@ button.hwatu-card:not(.hwatu-card--selected):hover:not(:disabled) { --lift: -0.2
 }
 
 /*
-  SURFACE — at most one per card, chosen in card-visuals.ts.
+  MATERIAL — 각인. What the card is made OF.
 
-  No rainbow. A hwatu card is already red, black, gold and cream; a spectrum on
-  top of that is noise, not shine.
+  This layer is the reason four modifiers can sit on one card and still be
+  read. It occupies the whole face, so it never competes for the corners the
+  seal and the effect token use, and it is a different KIND of statement from
+  the finish above it: a card can be made of glass AND be foil-stamped.
+
+  Two of these used to be drawn as surfaces instead, which quietly meant a
+  유리패 or a 복패 could never show its 판본 at all.
+
+  Each material is picked to match what the 각인 actually does, so the face is a
+  reminder rather than decoration — 돌패 loses its month and kind, so the stone
+  genuinely buries the picture; 강철패 only pays while it stays in hand, so it
+  looks untouched and cold.
+
+  Alphas stay low. The picture underneath is the card's identity and no
+  modifier is allowed to cost you the ability to tell 3월 from 7월.
+*/
+/*
+  MATERIAL — 각인. What the card is made OF.
+
+  This layer is the reason four modifiers can sit on one card and still be
+  read. It occupies the whole face, so it never competes for the corners the
+  seal and the effect token use, and it is a different KIND of statement from
+  the finish above it: a card can be made of glass AND be foil-stamped.
+
+  WHAT KILLS A MATERIAL: multiplying a colour the card already has.
+
+  A hwatu card is red, black, gold and cream. Multiply a red wash over it and
+  the cream turns pinkish, the black stays black, and the red areas — of which
+  there are many — do not move at all. The result is camouflage. 홍칠, 만능화 and
+  금전패 all failed exactly this way, and no amount of nudging the alpha fixes
+  it, because the problem is hue, not strength.
+
+  What works instead:
+  - separate on VALUE, not hue. A material that is much lighter or much darker
+    than the art reads instantly; one that is merely a different colour does not
+  - use a STRUCTURE the woodblock never draws — perfect circles, straight
+    parallel rules, hard cracks. The art has no geometry in it at all
+  - flood first, then put the structure on top in `screen`, so it survives the
+    black areas as well as the cream ones
+
+  That last point needs two blend modes, which one element cannot have. So the
+  awkward materials are built as ::before (the flood) plus ::after (the
+  structure), and the container itself stays neutral — see the z-index note.
+
+  Alphas on the flood stay under the level where the month becomes unreadable.
+  돌패 is the deliberate exception: it throws its month and kind away, so
+  burying the picture is the honest thing to draw.
+*/
+
+/*
+  NO `z-index` HERE, for the same reason as `.hwatu-card__shine`.
+
+  `.hwatu-card > *` makes this absolutely positioned, and absolute + a numeric
+  z-index is a stacking context — which would seal the pseudo-elements off from
+  the card art and leave their `mix-blend-mode` blending against nothing. Left
+  on `auto` it paints in DOM order: above the art, below the finish.
+*/
+.hwatu-card__material {
+  border-radius: 0.5rem;
+  inset: 0;
+  pointer-events: none;
+}
+.hwatu-card__material::before,
+.hwatu-card__material::after {
+  position: absolute;
+  border-radius: inherit;
+  content: "";
+  inset: 0;
+}
+
+/*
+  먹칠 — dipped in ink, with a wet line where it stopped.
+
+  A soft dark haze was the wrong idea entirely. Half the deck is mostly black
+  already — 1월, 8월, 11월 are enormous fields of it — so darkening a card is
+  the one thing that says nothing at all. It was the same camouflage failure as
+  홍칠 and 금전패, just with black instead of a hue.
+
+  What fixes it is the boundary, not the darkness: a hard straight edge with a
+  bright meniscus riding on it. The woodblock never cuts a straight line, so the
+  edge alone identifies the card, and the pair carries everywhere — the dark
+  field shows against cream, the bright line shows against black.
+
+  Tilted a few degrees off level so it reads as a liquid line rather than a UI
+  divider, and it stops at 58% so the top of the picture is untouched.
+*/
+.hwatu-card__material--inked::before {
+  background: linear-gradient(186deg, transparent 0 58%, rgb(16 13 11 / 82%) 60%);
+  mix-blend-mode: multiply;
+}
+.hwatu-card__material--inked::after {
+  background: linear-gradient(
+    186deg,
+    transparent 0 57.2%,
+    rgb(158 180 198 / 82%) 57.2% 59.2%,
+    transparent 59.2%
+  );
+  mix-blend-mode: screen;
+}
+
+/*
+  홍칠 — lacquered red.
+
+  Was thin red stripes in multiply, which is the camouflage case above: red
+  stripes on a card covered in red things. It is a flood now, so the card stops
+  being a cream card with red on it and becomes a RED card — no ordinary hwatu
+  card is uniformly red, so the silhouette alone gives it away. The gloss band
+  on top is what says lacquer rather than paint.
+*/
+/*
+  The flood is deliberately weak, and the strokes do the work.
+
+  It was at 86% and the picture went with it — you could see the card was red
+  and no longer which month it was, which is a bad trade for a modifier. The
+  identity of a card outranks the identity of its 각인, always.
+
+  Dropping it to 42% costs nothing, because the flood was never what made this
+  legible: the bright strokes on top are. A tint says the colour, a pattern
+  says which modifier, and only the pattern needs to be loud.
+*/
+.hwatu-card__material--scarlet::before {
+  background: linear-gradient(158deg, rgb(146 22 18 / 48%), rgb(192 44 32 / 36%));
+  mix-blend-mode: multiply;
+}
+/*
+  Thick HORIZONTAL brush strokes. Direction is doing real work here: 유리패,
+  오방색 and 음각 are all diagonal or vertical rules, so a diagonal gloss on this
+  one would have been the fourth set of slanted stripes on the card and told
+  you nothing. Horizontal is unclaimed, and it also happens to be how a brush
+  actually lays lacquer down.
+*/
+.hwatu-card__material--scarlet::after {
+  background: repeating-linear-gradient(
+    3deg,
+    rgb(255 224 202 / 72%) 0 2.4%,
+    rgb(255 152 118 / 46%) 2.4% 4.4%,
+    transparent 4.4% 16%
+  );
+  mix-blend-mode: screen;
+}
+
+/*
+  만능화 — overgrown, because it counts as every kind.
+
+  Green was the worst possible choice on its own: 5월 and 6월 are full of
+  leaves, so green blobs read as more leaves. The flood fixes the value and the
+  pale shoots climbing across it are far lighter than anything the art contains,
+  so they hold up over the black areas too.
+*/
+/* Same trade as 홍칠: a tint you can see through, and a net you cannot miss. */
+.hwatu-card__material--wild::before {
+  background: linear-gradient(150deg, rgb(20 78 50 / 46%), rgb(40 116 78 / 34%));
+  mix-blend-mode: multiply;
+}
+/*
+  A LATTICE, not scattered dots. Six small bright blobs were too little ink to
+  see at hand size, and worse, green blobs on 5월 and 6월 read as more leaves —
+  a camouflage problem that no amount of extra contrast solves.
+
+  Crossing it in two directions is the fix: every other pattern on a card runs
+  one way, so a net is unmistakable at a glance, and a net over the picture is
+  a fair thing for "counts as every kind" to look like.
+*/
+.hwatu-card__material--wild::after {
+  background:
+    repeating-linear-gradient(58deg, rgb(212 252 218 / 74%) 0 2%, transparent 2% 15%),
+    repeating-linear-gradient(-58deg, rgb(212 252 218 / 64%) 0 2%, transparent 2% 15%);
+  mix-blend-mode: screen;
+}
+
+/*
+  유리패 — hard diagonal panes with a lit edge. Brittle, and it shows.
+  Already works: white against woodblock art is a value the card never contains.
+*/
+.hwatu-card__material--glass {
+  background: repeating-linear-gradient(
+    122deg,
+    rgb(255 255 255 / 52%) 0 3px,
+    rgb(176 220 246 / 30%) 3px 7px,
+    transparent 7px 22px
+  );
+  box-shadow: inset 0 0 0 2px rgb(214 240 255 / 55%);
+  mix-blend-mode: screen;
+}
+
+/* 강철패 — brushed metal, vertical grain, cold. Pays for being left alone. */
+.hwatu-card__material--steel {
+  background:
+    linear-gradient(90deg, rgb(196 214 226 / 34%), transparent 22% 78%, rgb(196 214 226 / 34%)),
+    repeating-linear-gradient(90deg, rgb(226 238 246 / 26%) 0 1px, transparent 1px 4px);
+  box-shadow: inset 0 0 0 2px rgb(150 168 180 / 60%);
+  mix-blend-mode: screen;
+}
+
+/*
+  돌패 — the loudest material, on purpose.
+
+  A stone card has thrown its month and its kind away, so it is barely a hwatu
+  card any more. Burying the picture is the honest way to say that; anything
+  gentler leaves the player reading a month that no longer counts.
+
+  It was invisible for a stupid reason: `mix-blend-mode: hard-light` with a
+  mid-grey source is very nearly a no-op. Hard-light multiplies where the
+  source is below 50% and screens where it is above, so a colour sitting right
+  at the middle returns almost exactly the backdrop. All that careful stone
+  colour was being computed and then thrown away. It composites normally now,
+  and the art ghosts through at the alpha it is given rather than by accident.
+*/
+.hwatu-card__material--stone::before {
+  background:
+    radial-gradient(circle at 26% 32%, rgb(88 83 75 / 55%) 0 9%, transparent 10%),
+    radial-gradient(circle at 68% 58%, rgb(88 83 75 / 45%) 0 12%, transparent 13%),
+    radial-gradient(circle at 44% 80%, rgb(88 83 75 / 40%) 0 7%, transparent 8%),
+    linear-gradient(158deg, #9b9386 0%, #7a736a 55%, #635d55 100%);
+  box-shadow: inset 0 0 0 2px rgb(72 67 60 / 75%);
+  opacity: 0.88;
+}
+/* Cracks. Straight hard lines — the one thing the woodblock art never draws. */
+.hwatu-card__material--stone::after {
+  background:
+    linear-gradient(74deg, transparent 0 37%, rgb(46 42 37 / 72%) 37% 38.2%, transparent 38.2%),
+    linear-gradient(-58deg, transparent 0 61%, rgb(46 42 37 / 60%) 61% 62%, transparent 62%),
+    linear-gradient(96deg, transparent 0 19%, rgb(46 42 37 / 48%) 19% 19.8%, transparent 19.8%);
+  mix-blend-mode: multiply;
+}
+
+/*
+  금전패 — strung cash. Pays out if you keep it, so it is literally money.
+
+  The old version was small gold rings in multiply. Gold on a card that already
+  has gold, darkened rather than lit: they vanished into the art. Big bright
+  rings in `screen` instead — a perfect circle is a shape the woodblock never
+  cuts, and lighting them means they show on the black areas as well.
+*/
+.hwatu-card__material--coin::before {
+  background: linear-gradient(160deg, rgb(206 158 46 / 46%), rgb(160 112 22 / 34%));
+  mix-blend-mode: multiply;
+}
+/*
+  Three 엽전, drawn OPAQUE and large.
+
+  Thin lit rings kept losing to the art. A coin is a solid object lying on the
+  card, so it is painted as one — no blend mode at all, so nothing underneath
+  can dilute it, and it looks the same over cream, over black and over red.
+
+  `ellipse 11% 7.3%` rather than `circle`: the card is 2:3, and a circle sized
+  in percentages of a 2:3 box comes out as an egg. 11 x 2 = 7.3 x 3, so these
+  land round.
+*/
+.hwatu-card__material--coin::after {
+  background-image:
+    radial-gradient(ellipse 11% 7.3% at 25% 23%,
+      rgb(58 42 18) 0 30%, rgb(250 208 96) 30% 74%, rgb(142 98 20) 74% 100%, transparent 100%),
+    radial-gradient(ellipse 11% 7.3% at 74% 47%,
+      rgb(58 42 18) 0 30%, rgb(246 202 88) 30% 74%, rgb(142 98 20) 74% 100%, transparent 100%),
+    radial-gradient(ellipse 10% 6.6% at 40% 77%,
+      rgb(58 42 18) 0 30%, rgb(240 196 82) 30% 74%, rgb(142 98 20) 74% 100%, transparent 100%);
+}
+
+/*
+  복패 — unstable. Everything it does is a dice roll, so it will not hold still.
+
+  The scanlines were 1px at 26% and simply too small to see. Thicker bands, a
+  harder colour split, and a torn slice that jumps position — the tear is what
+  actually sells it, because a card that is momentarily BROKEN reads faster
+  than a card that is merely tinted.
+*/
+.hwatu-card__material--fortune::before {
+  background: repeating-linear-gradient(
+    0deg,
+    rgb(236 96 168 / 46%) 0 2px,
+    transparent 2px 5px,
+    rgb(96 226 214 / 42%) 5px 7px,
+    transparent 7px 11px
+  );
+  animation: hwatu-fortune-jitter 1.5s steps(4, end) infinite;
+  mix-blend-mode: screen;
+}
+.hwatu-card__material--fortune::after {
+  background: linear-gradient(
+    0deg,
+    transparent 0 42%,
+    rgb(255 246 250 / 55%) 42% 47%,
+    rgb(96 226 214 / 40%) 47% 49%,
+    transparent 49%
+  );
+  animation: hwatu-fortune-tear 1.9s steps(1, end) infinite;
+  mix-blend-mode: screen;
+}
+
+@keyframes hwatu-fortune-jitter {
+  0%, 68% { opacity: 0.55; transform: translateY(0); }
+  74% { opacity: 1; transform: translateY(-2px); }
+  80% { opacity: 0.6; transform: translateY(2px); }
+  86% { opacity: 1; transform: translateY(-1px); }
+  92%, 100% { opacity: 0.55; transform: translateY(0); }
+}
+
+@keyframes hwatu-fortune-tear {
+  0%, 62% { opacity: 0; transform: translateY(0); }
+  66% { opacity: 1; transform: translateY(-28%) translateX(4%); }
+  72% { opacity: 0; transform: translateY(-28%); }
+  78% { opacity: 1; transform: translateY(22%) translateX(-5%); }
+  84%, 100% { opacity: 0; transform: translateY(22%); }
+}
+/*
+  SURFACE — 판본. A PATTERN laid over the card.
+
+  This was "the shape of the reflection" and it did not work. Reflections are
+  made of light, and light on a busy woodblock print is just more busy — you
+  cannot tell a sweeping highlight from a bright bit of the picture.
+
+  The one that did read was the concentric rings on 자개, and the reason is that
+  a ring is a GRAPHIC, not a glint. Geometry survives on top of art because the
+  art contains no geometry: the woodblock draws petals, birds and brushstrokes,
+  and never once draws a circle, a straight rule or a hard band. So all four
+  editions are now flat graphic patterns, bright enough to hold over the black
+  areas, and they are told apart by shape at a glance:
+
+      금박   torn square sheets      자개   concentric rings
+      오방색 five hard bands          음각   cut grooves
+
+  This does mean 각인 and 판본 both cover the whole face, so they are kept on
+  different visual jobs: the material owns COLOUR (it floods and tints), the
+  finish owns PATTERN (it draws bright geometry on top). A red lacquered card
+  with gold leaf on it looks like exactly that.
+
+  Still no rainbow — 오방색 is the five NAMED colours 청·적·황·백·흑, which is a
+  fixed traditional set, and the white and black bands are what make it carry.
 */
 .hwatu-card__surface {
   z-index: 2;
@@ -193,78 +546,234 @@ button.hwatu-card:not(.hwatu-card--selected):hover:not(:disabled) { --lift: -0.2
 }
 
 /*
-  판본 — the holo.
+  금박 — beaten leaf, scattered.
 
-  Real foil is a fine diagonal grating that flares where the light hits it, so
-  that is what this is: hard-edged gold bands, lit by a highlight that follows
-  the pointer. The previous version was one soft radial blob, which is why it
-  read as nothing at all — a blur over pixel art just looks like a smudge.
+  Four big axis-aligned rectangles looked stuck on, and the reason is that CSS
+  cannot rotate an individual background layer: every block was perfectly
+  square to the card, which nothing on a gilded object ever is. Small flakes at
+  varying sizes and aspect ratios have no alignment to read as wrong, and old
+  gilding really does craze into scattered islands like this.
 
-  It breathes on its own too, so a foil card is visible sitting in the hand
-  rather than only when the pointer happens to be on it.
-
-  Still no rainbow. One hue, gold, because the cards are already red/black/gold
-  and a spectrum on top is noise.
+  Also keeps it clear of the 무거운 달 foil, which is a single travelling sweep.
 */
-.hwatu-card__surface--holo {
+.hwatu-card__surface--gold_leaf {
   background:
-    /* the flare, riding the pointer */
-    radial-gradient(
-      circle at var(--shine-x) var(--shine-y),
-      rgb(255 250 226 / 85%) 0%,
-      rgb(255 226 150 / 35%) 22%,
-      transparent 52%
+    radial-gradient(ellipse 6% 3% at 17% 13%, rgb(255 226 138 / 92%) 0 100%, transparent 100%),
+    radial-gradient(ellipse 3% 4% at 31% 22%, rgb(255 240 186 / 82%) 0 100%, transparent 100%),
+    radial-gradient(ellipse 5% 2.5% at 62% 16%, rgb(255 218 116 / 88%) 0 100%, transparent 100%),
+    radial-gradient(ellipse 2.5% 3.5% at 79% 29%, rgb(255 234 164 / 78%) 0 100%, transparent 100%),
+    radial-gradient(ellipse 4% 5% at 22% 38%, rgb(255 222 128 / 86%) 0 100%, transparent 100%),
+    radial-gradient(ellipse 6.5% 2.8% at 48% 44%, rgb(255 240 180 / 80%) 0 100%, transparent 100%),
+    radial-gradient(ellipse 3% 4.5% at 72% 52%, rgb(255 216 112 / 90%) 0 100%, transparent 100%),
+    radial-gradient(ellipse 5% 3% at 14% 58%, rgb(255 232 156 / 76%) 0 100%, transparent 100%),
+    radial-gradient(ellipse 3.5% 2.5% at 38% 66%, rgb(255 222 130 / 88%) 0 100%, transparent 100%),
+    radial-gradient(ellipse 5.5% 4% at 66% 73%, rgb(255 238 172 / 82%) 0 100%, transparent 100%),
+    radial-gradient(ellipse 2.8% 3% at 26% 82%, rgb(255 218 120 / 86%) 0 100%, transparent 100%),
+    radial-gradient(ellipse 4.5% 2.6% at 55% 89%, rgb(255 234 158 / 78%) 0 100%, transparent 100%),
+    radial-gradient(ellipse 3% 3.6% at 84% 84%, rgb(255 224 134 / 84%) 0 100%, transparent 100%);
+  animation: hwatu-leaf-breathe 3.8s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+
+@keyframes hwatu-leaf-breathe {
+  0%, 100% { opacity: 0.78; }
+  50% { opacity: 1; }
+}
+
+/*
+  자개 — inlaid shell. The rings, kept and turned up.
+
+  Nacre grows in concentric layers, so the pattern is also the true one. Two
+  centres rather than one, because a single ring set reads as a target.
+*/
+.hwatu-card__surface--mother_of_pearl {
+  background:
+    repeating-radial-gradient(
+      circle at 26% 79%,
+      rgb(216 250 255 / 62%) 0 2px,
+      rgb(168 216 240 / 30%) 2px 4px,
+      transparent 4px 11px
     ),
-    /* the grating */
-    repeating-linear-gradient(
-      115deg,
-      rgb(255 226 150 / 42%) 0 2px,
-      rgb(255 244 208 / 16%) 2px 4px,
-      transparent 4px 9px
+    repeating-radial-gradient(
+      circle at 78% 22%,
+      rgb(206 242 252 / 52%) 0 2px,
+      transparent 2px 9px
     );
-  animation: hwatu-holo 3.4s ease-in-out infinite;
-  mix-blend-mode: color-dodge;
-}
-
-@keyframes hwatu-holo {
-  0%, 100% { background-position: 0 0, 0 0; opacity: 0.72; }
-  50% { background-position: 0 0, 14px 0; opacity: 1; }
-}
-
-/* 유리패 — cold, flat, clearly a different material. */
-.hwatu-card__surface--glass {
-  border: 1px solid rgb(198 232 255 / 55%);
-  border-radius: 0.5rem;
-  background: linear-gradient(150deg, rgb(206 238 255 / 34%), transparent 45%, rgb(150 205 240 / 26%));
   mix-blend-mode: screen;
 }
 
-/* 복패 — unstable. Scanlines that jump, so it needs no caption. Vertical only,
-   so it can never shift the layout. */
-.hwatu-card__surface--glitch {
+/*
+  오방색 — 청·적·황·백·흑, as five hard bands.
+
+  Composited normally rather than blended. Every blend mode available washes
+  at least one of the five out — `overlay` kills the white, `screen` kills the
+  black — and losing either one is losing the half of the set that does the
+  work, because they are the only two with real value contrast against the art.
+*/
+.hwatu-card__surface--five_color {
   background: repeating-linear-gradient(
-    0deg,
-    rgb(120 255 214 / 22%) 0,
-    rgb(120 255 214 / 22%) 1px,
-    transparent 1px,
-    transparent 4px
+    118deg,
+    rgb(46 106 170 / 60%) 0 5%,
+    rgb(198 54 44 / 60%) 5% 10%,
+    rgb(232 190 60 / 58%) 10% 15%,
+    rgb(248 244 234 / 62%) 15% 20%,
+    rgb(30 26 22 / 58%) 20% 25%,
+    transparent 25% 50%
   );
-  animation: hwatu-glitch 1.4s steps(3, end) infinite;
-  mix-blend-mode: screen;
 }
 
-@keyframes hwatu-glitch {
-  0%, 72% { opacity: 0.35; transform: translateY(0); }
-  76% { opacity: 0.9; transform: translateY(-1px); }
-  80% { opacity: 0.5; transform: translateY(2px); }
-  84% { opacity: 0.95; transform: translateY(-2px); }
-  88%, 100% { opacity: 0.35; transform: translateY(0); }
+/*
+  음각 — cut INTO the card.
+
+  A groove is a dark wall and a lit wall side by side; that pairing is the
+  whole illusion, and it is why this reads as carved rather than as stripes.
+  Normal compositing so both walls survive on cream and on black alike.
+*/
+.hwatu-card__surface--engraved {
+  background: repeating-linear-gradient(
+    96deg,
+    rgb(18 14 10 / 62%) 0 2px,
+    rgb(255 250 232 / 52%) 2px 4px,
+    transparent 4px 13px
+  );
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hwatu-card__surface--glitch { animation: none; opacity: 0.5; }
-  .hwatu-card__surface--holo { animation: none; }
-  .hwatu-card { --tilt-x: 0deg !important; --tilt-y: 0deg !important; transition: none; }
+  /* The animation moved onto the pseudo-elements, so it has to be stopped
+     there — stopping it on the container silently does nothing. */
+  .hwatu-card__material--fortune::before { animation: none; opacity: 0.7; }
+  /* The tear is a jump, not a drift. Nothing to slow down; it just goes. */
+  .hwatu-card__material--fortune::after { animation: none; opacity: 0; }
+  .hwatu-card__surface--gold_leaf { animation: none; }
+}
+/*
+  THE FOIL — the Pokémon-card shine, for one effect at a time.
+
+  Two layers doing two different jobs, because either alone fails. The warm
+  pool of light says where the light source is; the fine diagonal grating is
+  what makes it read as FOIL rather than a smudge, and it is masked to the pool
+  so the whole card does not turn into a hatched mess. A grating everywhere is
+  the mistake that makes cheap holo effects look like a texture overlay.
+
+  It stays on one warm hue on purpose. The art is red, black, gold and cream
+  already; a spectrum across it is noise, not shine.
+
+  Off-pointer it glints slowly on its own, so a foil card is findable in a fan
+  of eight without hovering every one. On-pointer the idle sweep stops and the
+  pool takes over — two moving highlights at once just look broken.
+*/
+/*
+  NO `z-index` HERE, deliberately.
+
+  `.hwatu-card > *` makes this absolutely positioned, and absolute + a numeric
+  z-index would turn it into a stacking context — which would seal its two
+  pseudo-elements off from the card art underneath, so their `mix-blend-mode`
+  would have nothing but transparency to blend against and the foil would
+  flatten into a plain milky overlay. Left on `auto` it paints in DOM order:
+  after the art, before the month badge and the marks, which is exactly right.
+*/
+.hwatu-card__shine {
+  overflow: hidden;
+  border-radius: inherit;
+  inset: 0;
+  pointer-events: none;
+}
+
+/*
+  The lit pool and its grating, as one element.
+
+  Both live on the same pseudo so a single mask can confine them together —
+  and each pseudo carries its own opacity gate, which is the whole reason the
+  pool is not on the container. Fading the container would take the idle sweep
+  down with it, and the sweep is precisely what has to show when the pool does
+  not.
+*/
+.hwatu-card__shine--gilt::after {
+  position: absolute;
+  background:
+    repeating-linear-gradient(
+      108deg,
+      rgb(255 246 214 / 46%) 0 1px,
+      rgb(255 226 150 / 20%) 1px 2px,
+      transparent 2px 7px
+    ),
+    radial-gradient(
+      farthest-corner at var(--shine-x) var(--shine-y),
+      rgb(255 249 226 / 58%) 0%,
+      rgb(255 227 158 / 22%) 26%,
+      transparent 58%
+    );
+  content: "";
+  inset: 0;
+  mask-image: radial-gradient(
+    farthest-side at var(--shine-x) var(--shine-y),
+    #000 0%,
+    rgb(0 0 0 / 45%) 40%,
+    transparent 72%
+  );
+  mix-blend-mode: screen;
+  opacity: var(--shine-on);
+  transition: opacity 160ms ease;
+}
+
+/*
+  THE RESTING STATE — this is the one that has to sell it.
+
+  A foil card is spotted in the shop, in a row of four, with the pointer
+  nowhere near it. So the work happens here, not on hover: an always-on foil
+  grain gives the card a texture you can read at a glance and at small size,
+  and a broad highlight travels across it every few seconds to say the texture
+  is metallic rather than printed.
+
+  Both live on one pseudo-element as two background layers, moved by
+  `background-position`, because ::before and ::after are all we get and the
+  lit pool already owns ::after. It also means the glint slides ACROSS the
+  grain, which is what a real foil does — an independent overlay sliding over a
+  flat card is the tell that gives cheap holo effects away.
+
+  The grain is held at low alpha on purpose. Under `screen` it barely touches
+  the cream of the card and lifts the black ink into a warm sheen, which is
+  where the eye catches it. Push the alpha up and the black stops reading as
+  ink and the card just looks fogged.
+*/
+.hwatu-card__shine--gilt::before {
+  position: absolute;
+  background:
+    /* the travelling glint */
+    linear-gradient(
+      100deg,
+      transparent 34%,
+      rgb(255 246 214 / 40%) 44%,
+      rgb(255 236 184 / 62%) 50%,
+      rgb(255 246 214 / 40%) 56%,
+      transparent 66%
+    ),
+    /* the grain that is always there */
+    repeating-linear-gradient(
+      108deg,
+      rgb(255 240 198 / 17%) 0 1px,
+      rgb(255 226 150 / 7%) 1px 2px,
+      transparent 2px 6px
+    );
+  background-repeat: no-repeat, repeat;
+  background-size: 240% 100%, auto;
+  /* Parked off the right edge, so reduced motion freezes it out of sight
+     instead of leaving a bright band stuck across the card. */
+  background-position: 165% 0, 0 0;
+  animation: hwatu-gilt-sweep 4.2s ease-in-out infinite;
+  content: "";
+  inset: 0;
+  mix-blend-mode: screen;
+  /* Dimmed under the pointer rather than switched off: the grain should stay
+     while the pool takes over, or the card looks like it lost its finish at
+     the moment you reached for it. */
+  opacity: calc(1 - var(--shine-on) * 0.45);
+  transition: opacity 160ms ease;
+}
+
+@keyframes hwatu-gilt-sweep {
+  0% { background-position: -65% 0, 0 0; }
+  42%, 100% { background-position: 165% 0, 0 0; }
 }
 
 /*
@@ -278,15 +787,29 @@ button.hwatu-card:not(.hwatu-card--selected):hover:not(:disabled) { --lift: -0.2
 .hwatu-card__mark {
   z-index: 5;
   display: block;
-  width: 26%;
+  width: 29%;
   aspect-ratio: 1;
-  filter: drop-shadow(0 1px 0 rgb(20 13 8 / 75%));
+  /*
+    A hard offset shadow, not a soft glow. These sit on top of dense woodblock
+    art, and a blurred halo reads as part of the picture; a crisp dark edge
+    reads as a separate object lying on it. Pixel sprites also stay pixel-sharp
+    under an offset shadow and go mushy under a blurred one.
+  */
+  filter: drop-shadow(0 1px 0 rgb(20 13 8 / 80%)) drop-shadow(1px 0 0 rgb(20 13 8 / 55%));
   pointer-events: none;
 }
+/*
+  Only two anchors are in use — the 낙관 and the effect token, on opposite
+  edges. The other two are kept because a fifth category would want one, and
+  because leaving the map complete is what stops the next person putting two
+  things in the same corner.
+*/
 .hwatu-card__mark--top-right { top: 5%; right: 5%; }
 .hwatu-card__mark--bottom-left { bottom: 4%; left: 5%; }
-.hwatu-card__mark--bottom-right { right: 5%; bottom: 4%; }
-.hwatu-card__mark--mid-left { top: 38%; left: 5%; }
+/* bottom-right is the 낙관 anchor. Nothing is drawn there yet — the slot is
+   reserved so the effect token cannot creep into it. See docs/HANDOFF-SEALS.md. */
+.hwatu-card__mark--bottom-right { right: 4%; bottom: 3.5%; }
+.hwatu-card__mark--mid-left { top: 34%; left: 4%; width: 32%; }
 .card-mark { display: block; width: 100%; height: 100%; }
 
 /* Month marker — the only text that stays on the face. */
@@ -347,26 +870,6 @@ button.hwatu-card:not(.hwatu-card--selected):hover:not(:disabled) { --lift: -0.2
 .hwatu-card--dense .hwatu-card__split { min-width: 1rem; font-size: 0.64rem; }
 
 /* Hover card — holds everything the face no longer prints. */
-/* Effect-tag marker. Label only until the tags are wired to real behaviour. */
-.hwatu-card__effect {
-  position: absolute;
-  z-index: 2;
-  top: 0.28rem;
-  right: 0.28rem;
-  display: grid;
-  width: 1.05rem;
-  height: 1.05rem;
-  place-items: center;
-  border: 1px solid rgb(255 255 255 / 60%);
-  border-radius: 50%;
-  background: #6b4a9c;
-  color: #f3ecff;
-  font-size: 0.56rem;
-  font-weight: 900;
-  pointer-events: none;
-}
-.hwatu-card--dense .hwatu-card__effect { width: 0.86rem; height: 0.86rem; font-size: 0.46rem; }
-
 .hwatu-card__hint {
   position: absolute;
   z-index: 60;
@@ -377,13 +880,21 @@ button.hwatu-card:not(.hwatu-card--selected):hover:not(:disabled) { --lift: -0.2
   max-width: 12rem;
   gap: 0.06rem;
   padding: 0.4rem 0.55rem;
-  /* Cancels the card's tilt so the text stays flat and readable while the
-     card underneath it leans. */
+  /*
+    Cancels the card's tilt so the text stays flat while the card leans. The
+    card is `preserve-3d`, so without this the panel leans with it and the
+    text skews.
+
+    These MUST stay the exact inverse of the rotations on `.hwatu-card`. They
+    also have to reference variables that exist: an undefined custom property
+    invalidates the whole declaration, which would take `translateX(-50%)` down
+    with it and drop the panel off to one side rather than merely un-tilting it.
+  */
   transform:
     translateX(-50%)
     translateY(0.25rem)
-    rotateX(calc(-1 * var(--tilt-x)))
-    rotateY(calc(-1 * var(--tilt-y)));
+    rotateX(calc(var(--pointer-y) * var(--tilt-max)))
+    rotateY(calc(var(--pointer-x) * var(--tilt-max) * -1));
   border: 1px solid #4a4436;
   border-radius: 0.5rem;
   background: #241f19;
@@ -405,26 +916,6 @@ button.hwatu-card:not(.hwatu-card--selected):hover:not(:disabled) { --lift: -0.2
   background: #241f19;
   content: "";
 }
-/* Effect-tag marker. Label only until the tags are wired to real behaviour. */
-.hwatu-card__effect {
-  position: absolute;
-  z-index: 2;
-  top: 0.28rem;
-  right: 0.28rem;
-  display: grid;
-  width: 1.05rem;
-  height: 1.05rem;
-  place-items: center;
-  border: 1px solid rgb(255 255 255 / 60%);
-  border-radius: 50%;
-  background: #6b4a9c;
-  color: #f3ecff;
-  font-size: 0.56rem;
-  font-weight: 900;
-  pointer-events: none;
-}
-.hwatu-card--dense .hwatu-card__effect { width: 0.86rem; height: 0.86rem; font-size: 0.46rem; }
-
 /* The hover card only appears on hover or keyboard focus. */
 .hwatu-card:hover .hwatu-card__hint,
 .hwatu-card:focus-visible .hwatu-card__hint {
@@ -469,74 +960,23 @@ button.hwatu-card:not(.hwatu-card--selected):hover:not(:disabled) { --lift: -0.2
 }
 .collection-board__track--godori .collection-board__slot--filled { color: #fffaf0; }
 
-.hwatu-card--enhancement-inked {
-  --card-accent: #27231f;
-  --card-wash: radial-gradient(circle at 77% 34%, rgb(28 25 22 / 23%), transparent 43%);
-}
-.hwatu-card--enhancement-scarlet {
-  --card-accent: #b52f28;
-  --card-wash: linear-gradient(145deg, rgb(181 47 40 / 19%), transparent 46%);
-}
-.hwatu-card--enhancement-wild {
-  --card-accent: #3e7042;
-  --card-wash: repeating-linear-gradient(128deg, rgb(62 112 66 / 12%) 0 0.32rem, transparent 0.32rem 0.72rem);
-}
-.hwatu-card--enhancement-glass {
-  --card-accent: #4c89a4;
-  --card-wash: linear-gradient(132deg, rgb(255 255 255 / 58%) 22%, rgb(76 137 164 / 17%) 23% 40%, transparent 41%);
-}
-.hwatu-card--enhancement-steel {
-  --card-accent: #63717a;
-  --card-wash: linear-gradient(120deg, rgb(95 111 120 / 20%), transparent 38%, rgb(255 255 255 / 42%) 39% 48%, transparent 49%);
-}
-.hwatu-card--enhancement-stone {
-  --card-accent: #716d62;
-  --card-wash: radial-gradient(circle at 18% 22%, rgb(79 75 67 / 16%) 0 0.18rem, transparent 0.2rem), radial-gradient(circle at 76% 71%, rgb(79 75 67 / 12%) 0 0.25rem, transparent 0.27rem);
-}
-.hwatu-card--enhancement-coin {
-  --card-accent: #a67416;
-  --card-wash: radial-gradient(circle at 78% 25%, transparent 0 0.58rem, rgb(166 116 22 / 20%) 0.6rem 0.75rem, transparent 0.77rem);
-}
-.hwatu-card--enhancement-fortune {
-  --card-accent: #9e315f;
-  --card-wash: radial-gradient(circle at 22% 76%, rgb(158 49 95 / 17%), transparent 40%), radial-gradient(circle at 83% 20%, rgb(190 145 38 / 20%), transparent 36%);
-}
+/*
+  각인 accent — the colour the month badge and the selected ring pick up.
 
-.hwatu-card--edition-gold_leaf {
-  --card-sheen: linear-gradient(118deg, transparent 12%, rgb(211 167 67 / 28%) 30%, transparent 47%, rgb(238 204 113 / 23%) 72%, transparent 90%);
-}
-.hwatu-card--edition-mother_of_pearl {
-  --card-sheen: linear-gradient(125deg, rgb(95 193 186 / 16%), rgb(157 111 190 / 15%) 32%, transparent 48%, rgb(235 145 153 / 15%) 68%, rgb(98 158 203 / 14%));
-}
-.hwatu-card--edition-five_color {
-  --card-sheen: linear-gradient(135deg, rgb(37 104 153 / 13%) 0 20%, rgb(182 47 42 / 13%) 20% 40%, rgb(211 153 35 / 14%) 40% 60%, rgb(48 112 72 / 13%) 60% 80%, rgb(94 55 128 / 12%) 80%);
-}
-.hwatu-card--edition-engraved {
-  --card-sheen: repeating-linear-gradient(162deg, transparent 0 0.38rem, rgb(48 43 36 / 10%) 0.4rem 0.44rem);
-}
-
-.hwatu-card--seal-yellow { --card-seal: #d4a522; }
-.hwatu-card--seal-red { --card-seal: #b3342b; }
-.hwatu-card--seal-blue { --card-seal: #306a91; }
-.hwatu-card--seal-purple { --card-seal: #754b92; }
-.hwatu-card[class*="hwatu-card--seal-"]::after {
-  position: absolute;
-  z-index: 2;
-  right: 0.52rem;
-  bottom: 0.52rem;
-  display: grid;
-  width: 1.08rem;
-  height: 1.08rem;
-  place-items: center;
-  border: 1px solid rgb(255 255 255 / 70%);
-  border-radius: 50%;
-  background: var(--card-seal);
-  box-shadow: 0 0.1rem 0.25rem rgb(0 0 0 / 24%);
-  color: white;
-  content: "印";
-  font: 800 0.55rem/1 serif;
-  pointer-events: none;
-}
+  The old `--card-wash` and `--card-sheen` that used to live here are gone.
+  They had not been consumed by anything since the face became full-bleed art,
+  so every 각인 and every 판본 was reduced to a corner dot while the code still
+  looked as though it drew them. They are real layers now: see
+  `.hwatu-card__material` and `.hwatu-card__surface` above.
+*/
+.hwatu-card--enhancement-inked { --card-accent: #27231f; }
+.hwatu-card--enhancement-scarlet { --card-accent: #b52f28; }
+.hwatu-card--enhancement-wild { --card-accent: #3e7042; }
+.hwatu-card--enhancement-glass { --card-accent: #4c89a4; }
+.hwatu-card--enhancement-steel { --card-accent: #63717a; }
+.hwatu-card--enhancement-stone { --card-accent: #716d62; }
+.hwatu-card--enhancement-coin { --card-accent: #a67416; }
+.hwatu-card--enhancement-fortune { --card-accent: #9e315f; }
 
 .hwatu-card:focus-visible,
 .game-modal button:focus-visible {
@@ -1089,10 +1529,29 @@ button.talisman-strip__item { cursor: pointer; }
   .game-modal__action { width: 100%; min-height: 2.8rem; }
 }
 
+/*
+  Reduced motion turns the MOVEMENT down, not the geometry off.
+
+  This block used to say `transform: none` on hover and on the selected card.
+  That threw away the entire perspective/rotate/scale chain — and since hover is
+  the only moment the tilt exists at all, anyone whose OS had animation effects
+  switched off got no trading-card tilt whatsoever, with nothing in the UI to
+  say why. On Windows that is one toggle in Accessibility, so it is not a rare
+  configuration.
+
+  Tilt is direct manipulation: it tracks the pointer 1:1 and stops the instant
+  the hand does, which is not the autonomous animation the setting is aimed at.
+  So it stays, at a smaller amplitude, while the things that DO move on their
+  own — the idle foil sweep, the transitions — are stopped outright.
+*/
 @media (prefers-reduced-motion: reduce) {
-  .hwatu-card { transition: none; }
-  button.hwatu-card:hover:not(:disabled),
-.hwatu-card--selected { transform: none; }
+  .hwatu-card {
+    --tilt-max: 5deg;
+    transition: none;
+  }
+  .hwatu-card__surface,
+  .hwatu-card__shine,
+  .hwatu-card__shine::before { animation: none !important; }
 }
 
 @media (forced-colors: active) {

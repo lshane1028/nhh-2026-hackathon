@@ -1,0 +1,175 @@
+<meta charset="utf-8">
+<title>카드 효과 대조표</title>
+
+<!--
+  Open straight from the file system. Loads the real game-ui.css and the real
+  cut cards, so what you see here is what the game draws.
+
+  The top three tables are the catalogue. The bottom section is the one that
+  decides whether the design works: cards carrying two, three and four
+  modifiers at once. A modifier that only reads when it is alone has not been
+  solved, it has been avoided.
+-->
+<link rel="stylesheet" href="./app/components/game-ui.css">
+
+<style>
+  body {
+    margin: 0;
+    padding: 2.5rem;
+    background: #14100c;
+    color: #e8dcc2;
+    font: 14px/1.6 system-ui, sans-serif;
+  }
+  h1 { margin: 2.5rem 0 0.25rem; font-size: 1.05rem; font-weight: 500; }
+  h1:first-child { margin-top: 0; }
+  h1 + p { margin: 0 0 1.5rem; color: #9a8f7c; font-size: 13px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 1.6rem; }
+  figure { margin: 0; width: 7.7rem; }
+  figcaption { margin-top: 0.6rem; font-size: 12px; }
+  figcaption b { display: block; font-weight: 500; }
+  figcaption span { color: #9a8f7c; font-size: 11px; }
+  .hwatu-card__art { background-size: cover; background-position: center; }
+  hr { margin: 2.5rem 0 0; border: 0; border-top: 1px solid #2c2620; }
+</style>
+
+<h1>각인 — 카드가 무엇으로 만들어졌나</h1>
+<p>카드 면 전체. 구석을 쓰지 않으니 효과 표식과 절대 겹치지 않습니다. 원래 그림이 뭔지 계속 읽혀야 합니다.</p>
+<div class="grid" id="materials"></div>
+
+<hr>
+<h1>판본 — 빛을 어떻게 받나</h1>
+<p>표면. 빛이 아니라 <em>문양</em>으로 구분합니다 — 목판화에는 기하학이 없어서 기하 문양은 무조건 이깁니다.</p>
+<div class="grid" id="surfaces"></div>
+
+<hr>
+<h1>효과 — 카드가 지니고 있는 것</h1>
+<p>좌중단. 낙관은 지웠습니다 — <code>docs/HANDOFF-SEALS.md</code> 참고.</p>
+<div class="grid" id="objects"></div>
+
+<hr>
+<h1>겹쳐도 보이나</h1>
+<p>여기가 진짜 시험입니다. 각 카드에 몇 개가 붙어 있는지 세어보세요.</p>
+<div class="grid" id="stacks"></div>
+
+<script>
+  const ART = {
+    1: "card-01-bright-crane", 3: "card-03-bright-curtain", 5: "card-05-animal-bridge",
+    7: "card-07-animal-boar", 8: "card-08-bright-moon", 9: "card-09-animal-cup",
+    10: "card-10-animal-deer", 11: "card-11-bright-phoenix", 12: "card-12-bright-rain",
+  };
+  const MONTHS = Object.keys(ART).map(Number);
+
+  const MATERIALS = [
+    ["inked", "먹칠", "월 합 +3 · 잉크 경계선"], ["scarlet", "홍칠", "배수 +3 · 가로 붓결"],
+    ["wild", "만능화", "모든 종류로 취급"], ["glass", "유리패", "배수 ×1.75, 깨질 수 있음"],
+    ["steel", "강철패", "손에 남으면 ×1.25"], ["stone", "돌패", "월·종류를 잃음"],
+    ["coin", "금전패", "남으면 +2냥"], ["fortune", "복패", "확률로 크게"],
+  ];
+  const SURFACES = [
+    ["gold_leaf", "금박", "흩뿌린 금박 조각"], ["mother_of_pearl", "자개", "동심원"],
+    ["five_color", "오방색", "청·적·황·백·흑 다섯 띠"], ["engraved", "음각", "파낸 홈"],
+  ];
+  const EFFECTS = [
+    ["keeper-coin", "곳간패"], ["partner-boost", "짝패"], ["heavy-month", "무거운 달"],
+    ["echo", "메아리패"], ["drawn-luck", "행운패"], ["as-bright", "광 취급"],
+    ["as-animal", "동물 취급"], ["as-ribbon", "띠 취급"], ["extra-pi", "덧피"],
+    ["twin-kind", "쌍패"], ["gilded", "금칠패"], ["stubborn", "고집패"],
+  ];
+  const SPRITE = {
+    "keeper-coin": ["coin", "#b8863a"], gilded: ["star", "#c2352a"], "partner-boost": ["rings", "#c2352a"],
+    "heavy-month": ["weight", "#2c2622"], echo: ["ripple", "#2f7a63"], "drawn-luck": ["knot", "#2f7a63"],
+    "as-bright": ["moon", "#e0ad45"], "as-animal": ["knot", "#8a5a2b"], "as-ribbon": ["ribbon", "#c2352a"],
+    "extra-pi": ["drops", "#3a5f8a"], "twin-kind": ["rings", "#7a3f74"], stubborn: ["pin", "#6a6f74"],
+  };
+
+  const SPRITES = {
+    coin: ["....oooo....","..ooXXXXoo..",".oXXXXXXXXo.",".oXXoooo XXo","oXXo....oXXo","oXXo....oXXo","oXXo....oXXo",".oXXoooooXXo",".oXXXXXXXXo.","..ooXXXXoo..","....oooo....","............"],
+    star: [".....oo.....",".....XX.....","....oXXo....","..ooXXXXoo..","ooXXXXXXXXoo",".oXXXXXXXXo.","..oXXXXXXo..","..oXXooXXo..",".oXXo..oXXo.","ooXo....oXoo",".o........o.","............"],
+    ink: ["....oooo....","..ooXXXXoo..",".oXXXXXXXXo.","oXXXXXXXXXXo","oXXXXXXXXXXo","oXXXXXXXXXXo",".oXXXXXXXXo.","..oXXXXXXo..","...oXXXXo...","..o.oXXo..o.",".....oo.....","............"],
+    rings: ["............",".ooo...ooo..","oXXXo.oXXXo.","oX.Xo.oX.Xo.","oX.XoooX.Xo.","oXXXoooXXXo.",".oooo.oooo..","............","............","............","............","............"],
+    weight: ["............","..oooooooo..",".oXXXXXXXXo.","oXX++++++XXo","oXXXXXXXXXXo","oXXXXXXXXXXo","oXXXXXXXXXXo","oXXXXXXXXXXo",".oXXXXXXXXo.","..oooooooo..","............","............"],
+    drops: ["............","..oo....oo..",".oXXo..oXXo.",".oXXo..oXXo.","..oo....oo..","............",".....oo.....","....oXXo....","....oXXo....",".....oo.....","............","............"],
+    ripple: ["...oooooo...","..o......o..",".o..oooo..o.","o..o....o..o","o.o..oo..o.o","o.o.oXXo.o.o","o.o..oo..o.o","o..o....o..o",".o..oooo..o.","..o......o..","...oooooo...","............"],
+    knot: ["............","..oo....oo..",".oXXo..oXXo.","..oXXooXXo..","...oXXXXo...","...oXXXXo...","..oXXooXXo..",".oXXo..oXXo.","..oo....oo..","............","............","............"],
+    pin: ["..oooooooo..",".oXXXXXXXXo.","..oooXXooo..","....oXXo....","....oXXo....","....oXXo....","....oXXo....",".....oXo....",".....oXo....","......o.....","............","............"],
+    ribbon: ["............","..oooooooo..",".oXXXXXXXXo.",".oX++++++Xo.",".oXXXXXXXXo.","..oooooooo..","...o....o...","...oXo.oXo..","...oXo.oXo..","....o...o...","............","............"],
+    moon: ["....oooo....","..ooXXXXoo..",".oXX++++XXo.","oXX++++++XXo","oX++++++++Xo","oX++++++++Xo","oXX++++++XXo",".oXX++++XXo.","..ooXXXXoo..","....oooo....","............","............"],
+  };
+
+  function markSvg(sprite, fill) {
+    let cells = "";
+    (SPRITES[sprite] || SPRITES.coin).forEach((row, y) => {
+      for (let x = 0; x < row.length; x++) {
+        const g = row[x];
+        if (g === "." || g === " ") continue;
+        const c = g === "o" ? "#17110c" : g === "+" ? "#fff3d2" : fill;
+        cells += `<rect x="${x}" y="${y}" width="1" height="1" fill="${c}"/>`;
+      }
+    });
+    return `<svg class="card-mark" viewBox="0 0 12 12" shape-rendering="crispEdges">${cells}</svg>`;
+  }
+
+  let seed = 0;
+  const pick = (list) => list[seed++ % list.length];
+
+  /* Mirrors HwatuCard: material, then surface, then shine, then the objects. */
+  function card({ month, material, surface, effect }) {
+    const classes = ["hwatu-card"];
+    if (material) classes.push("hwatu-card--enhancement-" + material);
+    let html = `<article class="${classes.join(" ")}">`;
+    html += `<span class="hwatu-card__art" style="background-image:url('./public/assets/cards/hwatu/${ART[month]}.webp')"></span>`;
+    if (material) html += `<span class="hwatu-card__material hwatu-card__material--${material}"></span>`;
+    if (surface) html += `<span class="hwatu-card__surface hwatu-card__surface--${surface}"></span>`;
+    if (effect === "heavy-month") html += `<span class="hwatu-card__shine hwatu-card__shine--gilt"></span>`;
+    html += `<span class="hwatu-card__corner">${month}</span>`;
+    if (effect) {
+      const [sprite, fill] = SPRITE[effect];
+      html += `<span class="hwatu-card__mark hwatu-card__mark--mid-left">${markSvg(sprite, fill)}</span>`;
+    }
+    return html + "</article>";
+  }
+
+  function render(target, items) {
+    document.getElementById(target).innerHTML = items.map(
+      ({ spec, title, note }) => `<figure>${card(spec)}<figcaption><b>${title}</b><span>${note}</span></figcaption></figure>`,
+    ).join("");
+  }
+
+  render("materials", MATERIALS.map(([id, name, note]) => ({
+    spec: { month: pick(MONTHS), material: id }, title: name, note,
+  })));
+
+  render("surfaces", SURFACES.map(([id, name, note]) => ({
+    spec: { month: pick(MONTHS), surface: id }, title: name, note,
+  })));
+
+  render("objects", EFFECTS.map(([id, name]) => ({
+    spec: { month: pick(MONTHS), effect: id }, title: name, note: "효과 · 좌중단",
+  })));
+
+  render("stacks", [
+    { spec: { month: 3, material: "glass", surface: "gold_leaf" }, title: "2개", note: "유리패 + 금박" },
+    { spec: { month: 7, material: "inked", effect: "heavy-month" }, title: "2개", note: "먹칠 + 무거운 달" },
+    { spec: { month: 9, material: "steel", surface: "mother_of_pearl", effect: "as-bright" }, title: "3개", note: "강철패 + 자개 + 광 취급" },
+    { spec: { month: 10, material: "coin", surface: "five_color", effect: "twin-kind" }, title: "3개", note: "금전패 + 오방색 + 쌍패" },
+    { spec: { month: 11, material: "fortune", surface: "engraved", effect: "echo" }, title: "3개", note: "복패 + 음각 + 메아리패" },
+    { spec: { month: 1, material: "inked", surface: "five_color", effect: "extra-pi" }, title: "3개", note: "먹칠 + 오방색 + 덧피" },
+    { spec: { month: 12, material: "stone", surface: "gold_leaf", effect: "heavy-month" }, title: "3개", note: "돌패 + 금박 + 무거운 달" },
+  ]);
+
+  /* Same handler as the game: publish the pointer, let CSS decide what it means. */
+  for (const el of document.querySelectorAll(".hwatu-card")) {
+    el.addEventListener("pointermove", (event) => {
+      const box = el.getBoundingClientRect();
+      const x = (event.clientX - box.left) / box.width - 0.5;
+      const y = (event.clientY - box.top) / box.height - 0.5;
+      el.style.setProperty("--pointer-x", x.toFixed(3));
+      el.style.setProperty("--pointer-y", y.toFixed(3));
+      el.style.setProperty("--shine-x", ((x + 0.5) * 100).toFixed(1) + "%");
+      el.style.setProperty("--shine-y", ((y + 0.5) * 100).toFixed(1) + "%");
+    });
+    el.addEventListener("pointerleave", () => {
+      for (const n of ["--pointer-x", "--pointer-y", "--shine-x", "--shine-y"]) el.style.removeProperty(n);
+    });
+  }
+</script>
