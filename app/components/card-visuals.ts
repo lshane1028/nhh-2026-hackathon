@@ -6,20 +6,37 @@ import type { MarkSprite } from "./CardMark";
  * How a card shows what is riding on it.
  *
  * A card can carry four things at once — an 각인, a 판본, a 낙관 and an effect
- * tag — and packs deliberately roll doubles. So marks are separated on three
- * axes at once: each category owns a CORNER, each mark has its own SHAPE, and
- * each has its own COLOUR. Any one axis alone fails somewhere; together they
- * hold up with four marks on one card.
+ * tag — and packs deliberately roll doubles, so all four have to be legible
+ * simultaneously.
  *
- * The single shared channel is the SURFACE, and only one modifier may own it.
- * That is the Balatro lesson: there is exactly one holo look, and everything
- * else is a thing sitting on top of the card.
+ * The trick is not to make four badges more distinct from each other. It is to
+ * stop them being the same KIND of thing. Balatro reads cleanly with three
+ * modifiers stacked because each one is a different physical fact about the
+ * card, and two different facts cannot occupy the same pixels:
  *
- * Deliberately NOT a rainbow. A hwatu card is already red, black, gold and
- * cream; a rainbow sweep on top turns it into noise.
+ *   MATERIAL  what the card is made of      → the whole face   → 각인
+ *   SURFACE   how it catches the light      → a sheen over it  → 판본
+ *   OBJECT    what is stuck to it           → a corner         → 낙관, effect
+ *
+ * A glass card with a red wax seal and a foil finish reads as all three at
+ * once, because "made of glass", "has a blob of wax on it" and "shines" are
+ * answers to different questions. Four badges in four corners are answers to
+ * the same question, which is why the old version looked like clutter no
+ * matter how the badges were drawn.
+ *
+ * 각인 used to steal the surface — 유리패 and 복패 were drawn as surfaces — which
+ * silently meant a glass card could never show its 판본. Materials and surfaces
+ * are separate layers now, so it can.
+ *
+ * Deliberately NOT a rainbow anywhere. A hwatu card is already red, black, gold
+ * and cream; a spectrum on top turns it into noise.
  */
 
-export type CardSurface = "holo" | "glass" | "glitch" | null;
+/** How the card catches light. 판본 only — one card, one finish. */
+export type CardSurface = "gold_leaf" | "mother_of_pearl" | "five_color" | "engraved" | null;
+
+/** What the card is made of. 각인 only. */
+export type CardMaterial = NonNullable<CardInstance["enhancement"]>;
 
 /** Fixed anchors, one per category, so two marks can never collide. */
 export type MarkSlot = "top-right" | "bottom-left" | "bottom-right" | "mid-left";
@@ -46,30 +63,41 @@ const BONE = "#e8dcc2";
 
 interface MarkArt { sprite: MarkSprite; fill: string; highlight?: string }
 
-const ENHANCEMENT_ART: Record<NonNullable<CardInstance["enhancement"]>, MarkArt & { label: string }> = {
-  // 엽전 gets the real coin — round with a square hole.
-  coin: { sprite: "coin", fill: GOLD, label: "엽전" },
-  fortune: { sprite: "star", fill: GOLD, label: "복" },
-  inked: { sprite: "ink", fill: INK, label: "먹칠" },
-  scarlet: { sprite: "ink", fill: RED, label: "주홍" },
-  wild: { sprite: "star", fill: JADE, label: "야생" },
-  glass: { sprite: "shard", fill: INDIGO, label: "유리" },
-  steel: { sprite: "weight", fill: "#6a6f74", label: "강철" },
-  stone: { sprite: "weight", fill: "#7d7264", label: "돌" },
+/*
+  Names only. 각인 and 판본 are drawn as the material and the finish, not as
+  tokens, so all they need here is the wording for the hover panel.
+*/
+export const MATERIAL_LABELS: Record<CardMaterial, string> = {
+  inked: "먹칠",
+  scarlet: "홍칠",
+  wild: "만능화",
+  glass: "유리패",
+  steel: "강철패",
+  stone: "돌패",
+  coin: "금전패",
+  fortune: "복패",
 };
 
-const EDITION_ART: Record<NonNullable<CardInstance["edition"]>, MarkArt & { label: string }> = {
-  gold_leaf: { sprite: "gem", fill: GOLD, label: "금박" },
-  mother_of_pearl: { sprite: "gem", fill: "#9fc8cf", label: "자개" },
-  five_color: { sprite: "gem", fill: JADE, label: "오방색" },
-  engraved: { sprite: "gem", fill: INK, highlight: BONE, label: "각인" },
+export const SURFACE_LABELS: Record<NonNullable<CardSurface>, string> = {
+  gold_leaf: "금박",
+  mother_of_pearl: "자개",
+  five_color: "오방색",
+  engraved: "음각",
 };
 
-const SEAL_ART: Record<NonNullable<CardInstance["seal"]>, MarkArt & { label: string }> = {
-  yellow: { sprite: "stamp", fill: GOLD, label: "황인" },
-  red: { sprite: "stamp", fill: RED, label: "적인" },
-  blue: { sprite: "stamp", fill: INDIGO, label: "청인" },
-  purple: { sprite: "stamp", fill: PLUM, label: "자인" },
+/*
+  낙관 has no artwork on purpose — see docs/HANDOFF-SEALS.md.
+
+  The data is untouched: `card.seal` is still set, still saved, still read by
+  the engine, and still named in the hover panel. Only the drawing is gone, so
+  whoever picks this up starts from a clean face instead of unpicking a version
+  that was already rejected.
+*/
+export const SEAL_LABELS: Record<NonNullable<CardInstance["seal"]>, string> = {
+  yellow: "황인",
+  red: "적인",
+  blue: "청인",
+  purple: "자인",
 };
 
 /** No two effect tags share both sprite and colour. The test enforces it. */
@@ -89,60 +117,63 @@ const EFFECT_ART: Record<string, MarkArt> = {
 };
 
 /**
- * Which modifier owns the surface, hardest to override first.
+ * The finish. 판본 and nothing else.
  *
- * 복패 wins outright because its whole character is that it is unstable — the
- * glitch has to be visible even when the card is also gilded. 유리패 next, since
- * "this card is made of glass" is a fact about the card itself. Editions come
- * last: they are decoration, and decoration yields.
+ * No contest to resolve any more, which is the point: 각인 answers "what is it
+ * made of" and 판본 answers "how does it shine", so neither has to lose. The
+ * old version had 유리패 and 복패 outrank the edition for this slot, meaning a
+ * glass card silently threw its 판본 away and the player was never told.
  */
 export function getCardSurface(card: CardInstance): CardSurface {
-  if (card.enhancement === "fortune") return "glitch";
-  if (card.enhancement === "glass") return "glass";
-  if (card.edition) return "holo";
-  return null;
+  return card.edition ?? null;
 }
 
-/** Everything stuck to the card, in a stable order. */
+/** What it is made of. 각인 and nothing else. */
+export function getCardMaterial(card: CardInstance): CardMaterial | null {
+  return card.enhancement ?? null;
+}
+
+/**
+ * Which effects get the trading-card foil.
+ *
+ * Deliberately almost empty. The foil is the loudest thing the card can do, so
+ * it is worth exactly one effect at a time — put it on everything and it stops
+ * marking anything out. 무거운 달 has it because +50 to the month sum is the
+ * single biggest number a card can carry, and it should be the one you spot
+ * across the table.
+ *
+ * One warm hue, never a spectrum: the art is already red, black, gold and
+ * cream, and a rainbow over that is noise rather than shine.
+ */
+export type CardShine = "gilt" | null;
+
+const SHINE_BY_EFFECT: Record<string, CardShine> = {
+  heavy_month: "gilt",
+};
+
+export function getCardShine(card: CardInstance): CardShine {
+  if (!card.effectTagId) return null;
+  return SHINE_BY_EFFECT[card.effectTagId] ?? null;
+}
+
+/**
+ * Only what is physically STUCK to the card.
+ *
+ * 각인 and 판본 deliberately get no token: they are the material and the finish,
+ * so they are already visible across the whole face. Giving them corner tokens
+ * as well was the actual problem — four tokens in four corners read as one
+ * cluttered pile no matter how carefully each is drawn, because they all answer
+ * the same question.
+ *
+ * 낙관 has none either, but for a different reason: it is unbuilt, and waiting
+ * on docs/HANDOFF-SEALS.md.
+ *
+ * So this is the effect tag alone right now. Every name still reaches the
+ * player through the hover panel, which is where they go for exact wording.
+ */
 export function getCardMarks(card: CardInstance): CardMarkSpec[] {
   const marks: CardMarkSpec[] = [];
 
-  if (card.enhancement) {
-    const art = ENHANCEMENT_ART[card.enhancement];
-    marks.push({
-      id: `enhancement-${card.enhancement}`,
-      slot: "bottom-left",
-      sprite: art.sprite,
-      fill: art.fill,
-      highlight: art.highlight,
-      label: art.label,
-      detail: `각인 · ${art.label}`,
-    });
-  }
-  if (card.edition) {
-    const art = EDITION_ART[card.edition];
-    marks.push({
-      id: `edition-${card.edition}`,
-      slot: "top-right",
-      sprite: art.sprite,
-      fill: art.fill,
-      highlight: art.highlight,
-      label: art.label,
-      detail: `판본 · ${art.label}`,
-    });
-  }
-  if (card.seal) {
-    const art = SEAL_ART[card.seal];
-    marks.push({
-      id: `seal-${card.seal}`,
-      slot: "bottom-right",
-      sprite: art.sprite,
-      fill: art.fill,
-      highlight: art.highlight,
-      label: art.label,
-      detail: `낙관 · ${art.label}`,
-    });
-  }
   const effect = card.effectTagId ? CARD_EFFECT_TAG_BY_ID[card.effectTagId] : undefined;
   if (effect) {
     const art = EFFECT_ART[effect.id] ?? { sprite: "star" as MarkSprite, fill: RED };
@@ -160,7 +191,20 @@ export function getCardMarks(card: CardInstance): CardMarkSpec[] {
   return marks;
 }
 
-/** Lines for the hover panel, one per thing riding on the card. */
+/**
+ * Lines for the hover panel, one per thing riding on the card.
+ *
+ * Covers all four categories, not just the two that get objects. The face
+ * tells you a card is made of glass; this is where you find out it is 유리패
+ * and what 유리패 costs you.
+ */
 export function getCardModifierLines(card: CardInstance): string[] {
-  return getCardMarks(card).map((mark) => mark.detail);
+  const lines: string[] = [];
+  if (card.enhancement) lines.push(`각인 · ${MATERIAL_LABELS[card.enhancement]}`);
+  if (card.edition) lines.push(`판본 · ${SURFACE_LABELS[card.edition]}`);
+  // Kept even though nothing is drawn for it. A seal the player owns and
+  // cannot see anywhere at all is worse than one that is only named.
+  if (card.seal) lines.push(`낙관 · ${SEAL_LABELS[card.seal]}`);
+  lines.push(...getCardMarks(card).map((mark) => mark.detail));
+  return lines;
 }

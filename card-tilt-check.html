@@ -1,0 +1,122 @@
+<meta charset="utf-8">
+<title>기울임 · 홀로 확인</title>
+
+<!--
+  Open this straight from the file system. No dev server, no build.
+
+  It loads the REAL app/components/game-ui.css and the REAL cut cards, so if
+  the tilt or the foil works here it works in the game, and if it does not, the
+  fault is in the stylesheet rather than in React state or the layout around it.
+  That separation is the entire point of the page: the tilt has now been
+  reported broken three times, and twice the cause was another rule quietly
+  overriding `transform`, which is invisible from inside the app.
+
+  The one thing this page does NOT prove is the hand layout. A card in a grid
+  gets `align-self: stretch` by default, which hands it a definite height and
+  makes `aspect-ratio` drop out entirely.
+-->
+<link rel="stylesheet" href="./app/components/game-ui.css">
+
+<style>
+  body {
+    margin: 0;
+    padding: 3rem 2rem;
+    background: #14100c;
+    color: #e8dcc2;
+    font: 15px/1.7 system-ui, sans-serif;
+  }
+  h1 { margin: 0 0 0.25rem; font-size: 1.1rem; font-weight: 500; }
+  p { margin: 0 0 2rem; color: #9a8f7c; }
+  .row { display: flex; gap: 2.5rem; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { margin-top: 1rem; width: 7.7rem; color: #9a8f7c; font-size: 12px; }
+  /* The demo supplies its own picture, since the atlas URL in game-ui.css is
+     site-absolute and will not resolve over file://. */
+  .hwatu-card__art { background-size: cover; background-position: center; }
+  .state { margin-top: 2.5rem; color: #6f6757; font-size: 12px; }
+  code { color: #d9b86a; }
+</style>
+
+<h1>카드 위에 마우스를 올려보세요</h1>
+<p>카드 전체가 기울어지고, 오른쪽 카드에만 금빛이 커서를 따라옵니다.</p>
+
+<div class="row">
+  <figure>
+    <article class="hwatu-card" id="plain">
+      <span class="hwatu-card__art" style="background-image:url('./public/assets/cards/hwatu/card-01-bright-crane.webp')"></span>
+      <span class="hwatu-card__corner">1</span>
+    </article>
+    <figcaption>기본 패 — 기울임만</figcaption>
+  </figure>
+
+  <figure>
+    <article class="hwatu-card hwatu-card--effect-heavy-month" id="foil">
+      <span class="hwatu-card__art" style="background-image:url('./public/assets/cards/hwatu/card-07-animal-boar.webp')"></span>
+      <span class="hwatu-card__shine hwatu-card__shine--gilt"></span>
+      <span class="hwatu-card__corner">7</span>
+    </article>
+    <figcaption>무거운 달 — 기울임 + 금빛</figcaption>
+  </figure>
+</div>
+
+<p class="state" id="state">–</p>
+
+<!--
+  The real test for the foil. Four cards, pointer on none of them, at the size
+  the shop actually draws them: can you tell which one is special without being
+  told? If it only works when you hover it, it does not work.
+-->
+<h1 style="margin-top:3.5rem">상점에서 스쳐 볼 때</h1>
+<p>커서를 올리지 말고 보세요. 7월 멧돼지 한 장만 무거운 달입니다.</p>
+
+<div class="row" id="shop">
+  <article class="hwatu-card">
+    <span class="hwatu-card__art" style="background-image:url('./public/assets/cards/hwatu/card-01-bright-crane.webp')"></span>
+    <span class="hwatu-card__corner">1</span>
+  </article>
+  <article class="hwatu-card hwatu-card--effect-heavy-month">
+    <span class="hwatu-card__art" style="background-image:url('./public/assets/cards/hwatu/card-07-animal-boar.webp')"></span>
+    <span class="hwatu-card__shine hwatu-card__shine--gilt"></span>
+    <span class="hwatu-card__corner">7</span>
+  </article>
+  <article class="hwatu-card">
+    <span class="hwatu-card__art" style="background-image:url('./public/assets/cards/hwatu/card-08-bright-moon.webp')"></span>
+    <span class="hwatu-card__corner">8</span>
+  </article>
+  <article class="hwatu-card">
+    <span class="hwatu-card__art" style="background-image:url('./public/assets/cards/hwatu/card-12-bright-rain.webp')"></span>
+    <span class="hwatu-card__corner">12</span>
+  </article>
+</div>
+
+<script>
+  /* The same handler HwatuCard uses: publish the pointer position and let the
+     stylesheet decide what it means. */
+  for (const card of document.querySelectorAll(".row .hwatu-card")) {
+    card.addEventListener("pointermove", (event) => {
+      const box = card.getBoundingClientRect();
+      const x = (event.clientX - box.left) / box.width - 0.5;
+      const y = (event.clientY - box.top) / box.height - 0.5;
+      card.style.setProperty("--pointer-x", x.toFixed(3));
+      card.style.setProperty("--pointer-y", y.toFixed(3));
+      card.style.setProperty("--shine-x", ((x + 0.5) * 100).toFixed(1) + "%");
+      card.style.setProperty("--shine-y", ((y + 0.5) * 100).toFixed(1) + "%");
+      report(card);
+    });
+    card.addEventListener("pointerleave", () => {
+      for (const name of ["--pointer-x", "--pointer-y", "--shine-x", "--shine-y"]) {
+        card.style.removeProperty(name);
+      }
+    });
+  }
+
+  /* Reads back the COMPUTED transform. If some other rule is overriding it this
+     line says so outright, instead of leaving you to guess from a still card. */
+  function report(card) {
+    const t = getComputedStyle(card).transform;
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.getElementById("state").innerHTML =
+      "computed transform: <code>" + (t === "none" ? "none  ← 다른 규칙이 덮고 있음" : t) + "</code>"
+      + " · prefers-reduced-motion: <code>" + (reduced ? "reduce (기울기 5도로 축소)" : "no-preference") + "</code>";
+  }
+</script>

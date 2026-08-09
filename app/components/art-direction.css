@@ -411,35 +411,12 @@
   .market-shell button { transition: none; }
 }
 
-/* Generated gameplay art: small seals stay crisp and boss omens keep the hwatu ratio. */
-.hwatu-card[style*="--card-effect-art"] .hwatu-card__effect {
-  overflow: hidden;
-  border-color: #d4b56f;
-  border-radius: 50%;
-  background-color: #211b17;
-  background-image: var(--card-effect-art);
-  background-position: center;
-  background-size: cover;
-  color: transparent;
-  image-rendering: pixelated;
-}
-.hwatu-card__modifier-art {
-  position: absolute;
-  z-index: 4;
-  bottom: 0.24rem;
-  left: 0.24rem;
-  width: 0.95rem;
-  aspect-ratio: 1;
-  border: 1px solid rgb(255 240 202 / 72%);
-  border-radius: 50%;
-  background-color: #1d1814;
-  background-position: center;
-  background-size: cover;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 45%);
-  image-rendering: pixelated;
-  pointer-events: none;
-}
-.hwatu-card--dense .hwatu-card__modifier-art { width: 0.72rem; }
+/*
+  Removed with the same reasoning as the block in pixel-direction.css: round
+  photo-style badges for `.hwatu-card__effect` and `.hwatu-card__modifier-art`,
+  neither of which has been rendered by any component. Modifiers are the card's
+  material, finish and corner tokens now — see game-ui.css.
+*/
 .intro-screen__rules article[style*="--boss-art"] .intro-screen__rule-mark {
   width: 3rem;
   aspect-ratio: 2 / 3;

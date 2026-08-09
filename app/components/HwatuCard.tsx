@@ -3,7 +3,13 @@
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
 import type { CardInstance, CardKind } from "@/game/types";
 import { getAtlasPosition } from "./hwatu-atlas";
-import { getCardMarks, getCardModifierLines, getCardSurface } from "./card-visuals";
+import {
+  getCardMarks,
+  getCardMaterial,
+  getCardModifierLines,
+  getCardShine,
+  getCardSurface,
+} from "./card-visuals";
 import { CardMark } from "./CardMark";
 
 export type HwatuCupRole = "animal" | "double_chaff";
@@ -83,32 +89,40 @@ export function HwatuCard({
     `${card.month}월 ${card.name}, ${kindLabel}, 월값 ${monthValue}${splitRole === "jit" ? ", 짓" : splitRole === "kkeut" ? ", 끗패" : ""}${selected ? ", 선택됨" : ""}${isDisabled ? ", 사용 불가" : ""}`;
 
   const effectTag = card.effectTagId ? CARD_EFFECT_TAG_BY_ID[card.effectTagId] : undefined;
-  // Every modifier gets its own sticker; only one may own the surface. A card
-  // with four things on it must read as four things, not one muddy glow.
+  // Four categories, four channels: 각인 is what the card is MADE of, 판본 is how
+  // it CATCHES LIGHT, 낙관 and the effect tag are things STUCK to it. Different
+  // questions, so they cannot crowd each other out however many are on at once.
   const marks = getCardMarks(card);
+  const material = getCardMaterial(card);
   const surface = getCardSurface(card);
+  const shine = getCardShine(card);
   const modifierLines = getCardModifierLines(card);
 
   /*
-   * Pointer tilt, the trading-card trick: the pointer position becomes two CSS
-   * variables and the transform is done in CSS. Written to the node directly
-   * rather than through state, because this fires on every mousemove and a
-   * re-render per frame would drop the hand to a crawl.
+   * Pointer tilt, the trading-card trick.
+   *
+   * All this does is publish where the pointer is, as a plain number from -0.5
+   * to 0.5 on each axis. How far that leans the card, and how much of the foil
+   * it lights, are decisions in game-ui.css — which is what lets reduced-motion
+   * turn the amplitude down without JS being involved.
+   *
+   * Written straight onto the node instead of through state: this fires on
+   * every mousemove, and a re-render per frame would drag the whole hand down.
    */
   const tilt = (event: React.PointerEvent<HTMLElement>) => {
     const node = event.currentTarget;
     const box = node.getBoundingClientRect();
     const x = (event.clientX - box.left) / box.width - 0.5;
     const y = (event.clientY - box.top) / box.height - 0.5;
-    node.style.setProperty("--tilt-x", `${(-y * 18).toFixed(2)}deg`);
-    node.style.setProperty("--tilt-y", `${(x * 18).toFixed(2)}deg`);
+    node.style.setProperty("--pointer-x", x.toFixed(3));
+    node.style.setProperty("--pointer-y", y.toFixed(3));
     node.style.setProperty("--shine-x", `${((x + 0.5) * 100).toFixed(1)}%`);
     node.style.setProperty("--shine-y", `${((y + 0.5) * 100).toFixed(1)}%`);
   };
   const untilt = (event: React.PointerEvent<HTMLElement>) => {
     const node = event.currentTarget;
-    node.style.removeProperty("--tilt-x");
-    node.style.removeProperty("--tilt-y");
+    node.style.removeProperty("--pointer-x");
+    node.style.removeProperty("--pointer-y");
     node.style.removeProperty("--shine-x");
     node.style.removeProperty("--shine-y");
   };
@@ -124,8 +138,15 @@ export function HwatuCard({
         style={{ backgroundPosition: atlasPosition }}
         aria-hidden="true"
       />
+      {/* Material first: it is the card stock, so everything else sits on top. */}
+      {material ? (
+        <span className={`hwatu-card__material hwatu-card__material--${material}`} aria-hidden="true" />
+      ) : null}
       {surface ? (
         <span className={`hwatu-card__surface hwatu-card__surface--${surface}`} aria-hidden="true" />
+      ) : null}
+      {shine ? (
+        <span className={`hwatu-card__shine hwatu-card__shine--${shine}`} aria-hidden="true" />
       ) : null}
 
       <span className="hwatu-card__corner" aria-hidden="true">{card.month}</span>
