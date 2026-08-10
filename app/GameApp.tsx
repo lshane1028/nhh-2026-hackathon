@@ -15,7 +15,13 @@ import {
   playCardRevealSound,
   playDrawSnapSound,
   playPackOpenSound,
+  playShopEntrySound,
+  playShopPurchaseSound,
+  playShopRerollSound,
+  playShopSaleSound,
   primeGameAudio,
+  resolveGameMusicScene,
+  setGameMusicScene,
   toggleGameAudio,
 } from "./audio/game-sfx";
 import {
@@ -63,6 +69,7 @@ import type {
 } from "@/game/types";
 
 import { AssetPlaceholder } from "./components/AssetPlaceholder";
+import { BossSeasonOverlay, getBossSeasonForMonth } from "./components/BossSeasonOverlay";
 import { CollectionBoard, type CollectionBoardItem } from "./components/CollectionBoard";
 import {
   DiscardTheater,
@@ -681,11 +688,16 @@ export default function GameApp() {
   const [landedCollectionTargets, setLandedCollectionTargets] = useState<Set<string>>(() => new Set());
   const [drawFeedbackIds, setDrawFeedbackIds] = useState<Set<string>>(() => new Set());
   const previousHandIds = useRef<Set<string>>(new Set());
+  const previousScreen = useRef(state.screen);
   const collectionLandingTimer = useRef<number | null>(null);
   useEffect(() => {
     const timer = window.setTimeout(() => setAudioMuted(getGameAudioMuted()), 0);
     return () => window.clearTimeout(timer);
   }, []);
+  useEffect(() => {
+    if (state.screen === "shop" && previousScreen.current !== "shop") playShopEntrySound();
+    previousScreen.current = state.screen;
+  }, [state.screen]);
   const handleAudioToggle = useCallback(() => {
     primeGameAudio();
     setAudioMuted(toggleGameAudio());
@@ -763,6 +775,9 @@ export default function GameApp() {
 
   const stage = getStageDefinition(state.stage, state.infiniteLap);
   const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
+  const bossSeason = getBossSeasonForMonth(stage.month, Boolean(boss));
+  const musicScene = resolveGameMusicScene(state.screen, boss ? stage.month : null);
+  useEffect(() => setGameMusicScene(musicScene), [musicScene]);
   // Only a SUBMITTED hand gets played back. The preview must stay a still
   // picture of the bare 짓 × 끗패, otherwise there is nothing left to show.
   // Declared up here with the other hooks, above every early screen return.
@@ -1013,7 +1028,7 @@ export default function GameApp() {
 
   if (state.screen === "title" || state.screen === "deck_select") {
     return (
-      <div className="game-root title-root">
+      <div className="game-root title-root" onPointerDownCapture={primeGameAudio}>
         <section className="title-controls" aria-label="판 설정">
           <label><span>재현 시드</span><input value={state.seed} onChange={(event) => dispatch({ type: "SET_SEED", seed: event.target.value })} /></label>
           <label className="tutorial-toggle"><input type="checkbox" checked={tutorialMode} onChange={(event) => setTutorialMode(event.target.checked)} /><span>처음이라면 단계별 안내 켜기</span></label>
@@ -1189,10 +1204,24 @@ export default function GameApp() {
           assetTag: definition.assetTag,
           sellPrice: Math.max(1, Math.floor(definition.price / 2)),
         }))}
-        onSellTalisman={(instanceId) => dispatch({ type: "SELL_TALISMAN", instanceId })}
+        onSellTalisman={(instanceId) => {
+          primeGameAudio();
+          playShopSaleSound();
+          dispatch({ type: "SELL_TALISMAN", instanceId });
+        }}
         onOpenDeck={() => dispatch({ type: "OPEN_SCREEN", screen: "deck_editor" })}
-        onBuyOffer={(offerId) => dispatch({ type: "BUY_OFFER", offerId })}
-        onReroll={() => dispatch({ type: "REROLL_SHOP" })}
+        onBuyOffer={(offerId) => {
+          const offer = state.shopOffers.find((entry) => entry.offerId === offerId);
+          if (!offer || offer.sold) return;
+          primeGameAudio();
+          playShopPurchaseSound(offer.category);
+          dispatch({ type: "BUY_OFFER", offerId });
+        }}
+        onReroll={() => {
+          primeGameAudio();
+          playShopRerollSound();
+          dispatch({ type: "REROLL_SHOP" });
+        }}
         onLeave={() => dispatch({ type: "NEXT_STAGE" })}
       />,
     );
@@ -1332,6 +1361,7 @@ export default function GameApp() {
         ) : null}
 
         <div className="play-board__felt">
+          <BossSeasonOverlay season={bossSeason} />
           <p className="play-board__prompt">
             {isDecision
               ? `${format(state.chain.roundScore)}점 · 문턱 ${format(requirement)}점을 넘겼습니다`
