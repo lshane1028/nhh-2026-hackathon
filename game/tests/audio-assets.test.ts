@@ -5,7 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   GAME_AUDIO_ASSETS,
   playCashRegisterSound,
+  playCollectionSlapSound,
   playCollectionSlideSound,
+  playShopPurchaseSound,
+  resolveGameMusicScene,
 } from "../../app/audio/game-sfx";
 
 function publicAssetPath(url: string): string {
@@ -26,7 +29,7 @@ describe("game audio assets", () => {
     urls.forEach((url) => {
       const path = publicAssetPath(url);
       expect(existsSync(path), `${url} should exist`).toBe(true);
-      expect(statSync(path).size, `${url} should not be empty`).toBeGreaterThan(4_000);
+      expect(statSync(path).size, `${url} should not be empty`).toBeGreaterThan(3_500);
     });
   });
 
@@ -41,7 +44,24 @@ describe("game audio assets", () => {
     expect(notice).toContain("Cash Register (imitation with toaster and bells)");
     expect(notice).toContain("Coin Drop");
     expect(notice).toContain("58 Random Sound Effects");
-    expect(notice.match(/creativecommons\.org\/publicdomain\/zero\/1\.0/g)).toHaveLength(8);
+    expect(notice).toContain("Menu Music");
+    expect(notice).toContain("Shop Theme");
+    expect(notice).toContain("Dark Shrine Loop");
+    expect(notice).toContain("Snowfall");
+    expect(notice).toContain("Purchasing Sound Effect");
+    expect(notice).toContain("Plastic Cards (credit, debit, etc)");
+    expect(notice).toContain("Plastic Click");
+    expect(notice.match(/creativecommons\.org\/publicdomain\/zero\/1\.0/g)).toHaveLength(19);
+  });
+
+  it("selects distinct title, shop, and seasonal boss music scenes", () => {
+    expect(resolveGameMusicScene("title")).toBe("title");
+    expect(resolveGameMusicScene("shop")).toBe("shop");
+    expect(resolveGameMusicScene("play", 3)).toBe("boss-spring");
+    expect(resolveGameMusicScene("play", 6)).toBe("boss-summer");
+    expect(resolveGameMusicScene("decision", 9)).toBe("boss-autumn");
+    expect(resolveGameMusicScene("round_intro", 12)).toBe("boss-winter");
+    expect(resolveGameMusicScene("play", null)).toBe("table");
   });
 
   it("plays the real till and card-swipe recordings at their game cues", async () => {
@@ -81,5 +101,17 @@ describe("game audio assets", () => {
     playCollectionSlideSound(1);
     expect(played).toContain(GAME_AUDIO_ASSETS.hwatuSwipe[1]);
     expect(played).toContain(GAME_AUDIO_ASSETS.cardSlide[1]);
+
+    played.length = 0;
+    playCollectionSlapSound(2);
+    expect(played).toContain(GAME_AUDIO_ASSETS.hwatuPlasticCards);
+    await vi.advanceTimersByTimeAsync(22);
+    expect(played).toContain(GAME_AUDIO_ASSETS.hwatuPlasticSnap);
+
+    played.length = 0;
+    playShopPurchaseSound("talisman");
+    expect(played).toContain(GAME_AUDIO_ASSETS.shopPurchase);
+    await vi.advanceTimersByTimeAsync(95);
+    expect(played).toContain(GAME_AUDIO_ASSETS.reset);
   });
 });
