@@ -40,6 +40,7 @@ describe("game audio assets", () => {
     expect(notice).toContain("Kenney Interface Sounds");
     expect(notice).toContain("Kenney Music Jingles");
     expect(notice).toContain("Moil");
+    expect(notice).toContain("Oh! boss!");
     expect(notice).toContain("Thwack Sounds");
     expect(notice).toContain("Cash Register (imitation with toaster and bells)");
     expect(notice).toContain("Coin Drop");
@@ -52,7 +53,7 @@ describe("game audio assets", () => {
     expect(notice).toContain("Plastic Cards (credit, debit, etc)");
     expect(notice).toContain("Plastic Click");
     expect(notice).toContain("Face Slap Sound Effect");
-    expect(notice.match(/creativecommons\.org\/publicdomain\/zero\/1\.0/g)).toHaveLength(20);
+    expect(notice.match(/creativecommons\.org\/publicdomain\/zero\/1\.0/g)).toHaveLength(21);
   });
 
   it("selects distinct title, shop, and seasonal boss music scenes", () => {

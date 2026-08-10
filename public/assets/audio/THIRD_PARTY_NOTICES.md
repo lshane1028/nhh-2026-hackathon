@@ -117,6 +117,13 @@ recorded here so the project can audit and update its audio safely.
 - License: https://creativecommons.org/publicdomain/zero/1.0/
 - Included: the seamless version in `bgm/boss-winter.ogg`.
 
+## Oh! boss!
+
+- Creator: haruta
+- Source: https://opengameart.org/content/oh-boss
+- License: https://creativecommons.org/publicdomain/zero/1.0/
+- Included: `bgm/boss-oh-boss.mp3`; used as the shared high-tension boss theme.
+
 ## Purchasing Sound Effect
 
 - Creator: Spring Spring
