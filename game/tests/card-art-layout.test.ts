@@ -26,7 +26,7 @@ describe("uncropped card art", () => {
 
     for (const card of deck.filter(({ month }) => month >= 11)) {
       const html = renderToStaticMarkup(createElement(HwatuCard, { card }));
-      expect(html, card.assetTag).toContain(`class="hwatu-card__art"`);
+      expect(html, card.assetTag).toContain(`class="hwatu-card__art card-art-frame"`);
       expect(html, card.assetTag).toContain(`src="${getCardArtUrl(card)}"`);
       expect(html, card.assetTag).toContain(`draggable="false"`);
     }

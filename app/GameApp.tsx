@@ -24,6 +24,11 @@ import {
   type CupRoleLookup,
 } from "@/game/engine/collection-board";
 import { getBookLevelPreview } from "@/game/engine/book-preview";
+import {
+  canPayForbiddenCost,
+  getEligibleForbiddenTargetIds,
+  isForbiddenTargetSelectionValid,
+} from "@/game/engine/consumables";
 import { createStandardHwatuDeck } from "@/game/engine/deck";
 import { getBossDiscardMoneyCost } from "@/game/engine/boss";
 import { canDeclareGo, getGoRewardFactor } from "@/game/engine/go";
@@ -44,6 +49,7 @@ import {
 import { clearSavedGame, loadGame, saveGame } from "@/game/state/storage";
 import type {
   CardInstance,
+  ForbiddenDefinition,
   GameState,
   ImmediateYakuId,
 } from "@/game/types";
@@ -69,7 +75,11 @@ import { TalismanStrip } from "./components/TalismanStrip";
 import { TitleScreen } from "./components/TitleScreen";
 import { TutorialSpotlight } from "./components/TutorialSpotlight";
 import { TUTORIAL_STEPS } from "./components/tutorial-steps";
-import { useScoreReveal } from "./components/useScoreReveal";
+import {
+  selectScoreRailBreakdown,
+  selectScoreRevealBreakdown,
+  useScoreReveal,
+} from "./components/useScoreReveal";
 import "./game.css";
 import "./components/art-direction.css";
 import "./components/pixel-direction.css";
@@ -92,6 +102,37 @@ interface SubmissionPlayback {
 }
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+
+function getForbiddenUnavailableReason(
+  state: GameState,
+  definition: ForbiddenDefinition,
+): string | undefined {
+  const costCheckState = {
+    ...state,
+    money: definition.additionalCost ?? 0,
+  };
+  if (!canPayForbiddenCost(costCheckState, definition)) {
+    if (
+      definition.effectKey === "double_duplicate_hand_penalty"
+      || definition.effectKey === "engrave_talisman_hand_penalty"
+    ) {
+      return "손패가 이미 최소 5장이라 대가를 치를 수 없음";
+    }
+    return "현재 상태에서는 의식의 대가를 치를 수 없음";
+  }
+
+  if (
+    definition.targetKind !== "none"
+    && getEligibleForbiddenTargetIds(state, definition).length < definition.minTargets
+  ) {
+    if (definition.effectKey === "make_bright_pay") return "광으로 올릴 비광 패가 없음";
+    if (definition.effectKey === "engrave_talisman_hand_penalty") return "음각을 새길 부적이 없음";
+    if (definition.effectKey === "sacrifice_copy") return "왼쪽 제물을 남길 수 있는 부적이 없음";
+    return "의식에 쓸 수 있는 대상이 부족함";
+  }
+
+  return undefined;
+}
 
 /**
  * One concrete example per 끗패, so the ladder can be shown with pictures.
@@ -409,15 +450,60 @@ function DeckEditor({ state, dispatch }: {
   const definition = getPendingConsumableDefinition(state);
   const optionConfig = cardEditorOption(definition);
   const [option, setOption] = useState(optionConfig?.values[0]?.value ?? "");
-  const isPainter = Boolean(definition && "minTargets" in definition);
-  const forbiddenMinimum = definition && !("minTargets" in definition)
-    ? definition.effectKey === "all_to_january" ? 2
-      : ["double_duplicate_hand_penalty", "make_bright_pay", "all_hand_chaff_bonus", "wild_month_zero_base"].includes(definition.effectKey) ? 1
-        : 0
-    : 0;
-  const minTargets = definition && "minTargets" in definition ? definition.minTargets : forbiddenMinimum;
-  const maxTargets = definition && "maxTargets" in definition ? definition.maxTargets : 5;
-  const canApply = Boolean(definition) && state.pendingTargetIds.length >= minTargets;
+  const forbidden = definition && "benefit" in definition ? definition : null;
+  const isPainter = Boolean(definition && !forbidden);
+  const targetKind = forbidden?.targetKind ?? (definition ? "card" : "none");
+  const minTargets = definition?.minTargets ?? 0;
+  const maxTargets = definition?.maxTargets ?? 0;
+  const eligibleTargetIds = new Set(forbidden
+    ? getEligibleForbiddenTargetIds(state, forbidden)
+    : state.deck.map((card) => card.instanceId));
+  const canApply = Boolean(definition) && (forbidden
+    ? isForbiddenTargetSelectionValid(state, forbidden, state.pendingTargetIds)
+      && canPayForbiddenCost(state, forbidden)
+    : state.pendingTargetIds.length >= minTargets && state.pendingTargetIds.length <= maxTargets);
+  const singleTargetCard = targetKind === "card" && maxTargets === 1
+    ? state.deck.find((card) => card.instanceId === state.pendingTargetIds[0]) ?? null
+    : null;
+  const sacrificeTargetCard = forbidden?.effectKey === "all_to_january"
+    ? state.deck.find((card) => card.instanceId === state.pendingTargetIds.at(-1)) ?? null
+    : null;
+  const singleTargetOutcome = forbidden?.effectKey === "double_duplicate_hand_penalty"
+    ? "같은 패 2장 추가 · 손패 크기 -1"
+    : forbidden?.effectKey === "make_bright_pay"
+      ? "패의 그림은 유지 · 종류만 광으로 승격"
+      : forbidden?.effectKey === "wild_month_zero_base"
+        ? "모든 월에 연결 · 이 패의 월값은 0"
+        : null;
+  const talismanItems = state.talismans.flatMap((instance) => {
+    const talisman = TALISMAN_BY_ID[instance.definitionId];
+    return talisman ? [{
+      instance,
+      definition: talisman,
+      disabled: !eligibleTargetIds.has(instance.instanceId),
+      contributionLabel: !eligibleTargetIds.has(instance.instanceId) && forbidden?.effectKey === "sacrifice_copy"
+        ? "전승 불가 · 중첩되지 않거나 제물/슬롯 조건을 충족하지 못함"
+        : undefined,
+    }] : [];
+  });
+  const inheritanceTargetIndex = forbidden?.effectKey === "sacrifice_copy"
+    ? state.talismans.findIndex((item) => item.instanceId === state.pendingTargetIds[0])
+    : -1;
+  const inheritanceTarget = inheritanceTargetIndex >= 0 ? state.talismans[inheritanceTargetIndex] : null;
+  const inheritanceSacrifice = inheritanceTargetIndex > 0 ? state.talismans[inheritanceTargetIndex - 1] : null;
+  const inheritanceTargetDefinition = inheritanceTarget ? TALISMAN_BY_ID[inheritanceTarget.definitionId] : null;
+  const inheritanceSacrificeDefinition = inheritanceSacrifice ? TALISMAN_BY_ID[inheritanceSacrifice.definitionId] : null;
+  const targetUnit = targetKind === "talisman" ? "개" : "장";
+  const selectionStatus = targetKind === "none"
+    ? "대상 선택 없음 · 대가 확인 후 즉시 발동"
+    : minTargets === maxTargets
+      ? `${state.pendingTargetIds.length}/${maxTargets}${targetUnit} 선택 · 정확히 ${maxTargets}${targetUnit} 필요`
+      : `${state.pendingTargetIds.length}/${maxTargets}${targetUnit} 선택 · 최소 ${minTargets}${targetUnit}`;
+  const applyLabel = forbidden
+    ? forbidden.additionalCost
+      ? `${forbidden.additionalCost}냥 바치고 의식 집행`
+      : "금단 의식 집행"
+    : "영구 적용";
   const showingDrawPile = !definition && state.returnScreen === "play";
   const visibleCards = showingDrawPile ? state.drawPile : state.deck;
 
@@ -431,8 +517,26 @@ function DeckEditor({ state, dispatch }: {
             ? "손에 들었거나 이미 사용한 패는 빼고, 앞으로 뽑힐 패만 보여줍니다."
             : "현재 보유한 전체 덱입니다. 카드에 손을 올리면 종류와 강화가 보입니다.")}</p>
         </div>
-        <AssetPlaceholder assetTag={definition?.assetTag ?? "ui:deck-editor"} label={definition?.name ?? "열두 달 패목록"} description={definition ? `${minTargets}~${maxTargets}장 선택` : "월별로 덱의 구성과 강화 상태를 확인합니다"} tone={definition && !isPainter ? "boss" : "card"} />
+        <AssetPlaceholder
+          assetTag={definition?.assetTag ?? "ui:deck-editor"}
+          label={definition?.name ?? "열두 달 패목록"}
+          description={forbidden?.targetPrompt ?? (definition ? `${minTargets}~${maxTargets}장 선택` : "월별로 덱의 구성과 강화 상태를 확인합니다")}
+          tone={definition && !isPainter ? "boss" : "card"}
+        />
       </header>
+      {forbidden ? (
+        <section className="ritual-terms" aria-label={`${forbidden.name} 효과와 대가`}>
+          <article className="ritual-terms__benefit">
+            <span>얻는 힘</span>
+            <strong>{forbidden.benefit}</strong>
+          </article>
+          <article className="ritual-terms__cost">
+            <span>치를 대가</span>
+            <strong>{forbidden.cost}</strong>
+          </article>
+          <p><b>의식 순서</b><span>{forbidden.targetPrompt}</span></p>
+        </section>
+      ) : null}
       {optionConfig ? (
         <label className="editor-option">
           <span>{optionConfig.label}</span>
@@ -441,43 +545,95 @@ function DeckEditor({ state, dispatch }: {
           </select>
         </label>
       ) : null}
-      {/* One row per month, in calendar order. The question this screen answers
-          is "what is still in there", and the deck changes every 판 — burned
-          cards vanish, bought copies show up twice. */}
-      <div className="deck-months">
-        {MONTHS.map((month) => {
-          const cards = sortHand(visibleCards.filter((card) => card.month === month));
-          if (cards.length === 0) return null;
-          return (
-            <section className="deck-month" key={month}>
-              <h2>{month}월<span>{cards.length}장</span></h2>
-              <div className="deck-month__cards">
-                {cards.map((card) => {
-                  const selected = state.pendingTargetIds.includes(card.instanceId);
-                  return (
-                    <HwatuCard
-                      dense
-                      key={card.instanceId}
-                      card={card}
-                      selected={selected}
-                      className="deck-card"
-                      onSelect={definition
-                        ? () => dispatch({ type: "SELECT_CONSUMABLE_TARGET", cardId: card.instanceId })
-                        : undefined}
-                    />
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })}
-      </div>
+      {targetKind === "talisman" && forbidden ? (
+        <section className="ritual-talisman-targets">
+          <header><span>부적 제단</span><strong>{forbidden.targetPrompt}</strong></header>
+          <TalismanStrip
+            assetTag={`ui:ritual:${forbidden.id}`}
+            items={talismanItems}
+            slots={getEffectiveTalismanSlots(state)}
+            selectedInstanceId={state.pendingTargetIds[0] ?? null}
+            sacrificeInstanceId={inheritanceSacrifice?.instanceId ?? null}
+            onSelect={(item) => dispatch({ type: "SELECT_CONSUMABLE_TARGET", cardId: item.instance.instanceId })}
+          />
+        </section>
+      ) : targetKind === "none" && forbidden ? (
+        <section className="ritual-auto-confirm" aria-label="자동 대상 금단 의식">
+          <span aria-hidden="true">禁</span>
+          <div><strong>고를 것은 없습니다</strong><p>{forbidden.targetPrompt}</p><small>효과와 대가를 다시 읽고 아래에서 집행하세요.</small></div>
+        </section>
+      ) : (
+        /* One row per month, in calendar order. Burned cards vanish and bought
+           copies show up twice, so this is also the permanent deck codex. */
+        <div className="deck-months">
+          {MONTHS.map((month) => {
+            const cards = sortHand(visibleCards.filter((card) => card.month === month));
+            if (cards.length === 0) return null;
+            return (
+              <section className="deck-month" key={month}>
+                <h2>{month}월<span>{cards.length}장</span></h2>
+                <div className="deck-month__cards">
+                  {cards.map((card) => {
+                    const selected = state.pendingTargetIds.includes(card.instanceId);
+                    const eligible = !definition || eligibleTargetIds.has(card.instanceId);
+                    const isSacrifice = sacrificeTargetCard?.instanceId === card.instanceId;
+                    return (
+                      <HwatuCard
+                        dense
+                        key={card.instanceId}
+                        card={card}
+                        selected={selected}
+                        disabled={!eligible}
+                        className={`deck-card${isSacrifice ? " deck-card--sacrifice" : ""}`}
+                        ariaLabel={isSacrifice
+                          ? `${card.month}월 ${card.name}, 마지막 선택 제물, 영구 소각 예정`
+                          : undefined}
+                        onSelect={definition && eligible
+                          ? () => dispatch({ type: "SELECT_CONSUMABLE_TARGET", cardId: card.instanceId })
+                          : undefined}
+                      />
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
+      {sacrificeTargetCard ? (
+        <aside className="ritual-selection-preview ritual-selection-preview--sacrifice" aria-live="polite">
+          <HwatuCard dense card={sacrificeTargetCard} selected className="ritual-selection-preview__card" />
+          <div>
+            <span>마지막 선택 · 영구 소각</span>
+            <strong>{sacrificeTargetCard.month}월 {sacrificeTargetCard.name}</strong>
+            <em>이 패는 사라지고, 나머지 선택 패만 1월로 바뀝니다.</em>
+          </div>
+        </aside>
+      ) : singleTargetCard && singleTargetOutcome ? (
+        <aside className="ritual-selection-preview" aria-live="polite">
+          <HwatuCard dense card={singleTargetCard} selected className="ritual-selection-preview__card" />
+          <div><span>선택한 패</span><strong>{singleTargetCard.month}월 {singleTargetCard.name}</strong><em>{singleTargetOutcome}</em></div>
+        </aside>
+      ) : null}
+      {inheritanceTargetDefinition && inheritanceSacrificeDefinition ? (
+        <aside className="ritual-inheritance-preview" aria-live="polite">
+          <div>
+            <span>영구 파괴 · 왼쪽 제물</span>
+            <strong>{inheritanceSacrificeDefinition.name}</strong>
+          </div>
+          <b aria-hidden="true">→</b>
+          <div>
+            <span>남는 힘 · 선택 부적 복제</span>
+            <strong>{inheritanceTargetDefinition.name} ×2</strong>
+          </div>
+        </aside>
+      ) : null}
       <footer className={`sticky-editor-actions sticky-editor-actions--${definition ? "editing" : "return"}`}>
         {definition ? (
           <>
-            <span>{state.pendingTargetIds.length}/{maxTargets}장 선택</span>
+            <span>{selectionStatus}</span>
             <button type="button" onClick={() => dispatch({ type: "CANCEL_CONSUMABLE" })}>구매 취소</button>
-            <button className="primary-action" disabled={!canApply} type="button" onClick={() => dispatch({ type: "APPLY_CONSUMABLE", option })}>영구 적용</button>
+            <button className="primary-action" disabled={!canApply} type="button" onClick={() => dispatch({ type: "APPLY_CONSUMABLE", option })}>{applyLabel}</button>
           </>
         ) : (
           <button className="primary-action" type="button" onClick={() => dispatch({ type: "RETURN_TO_PLAY" })}>돌아가기</button>
@@ -549,6 +705,7 @@ export default function GameApp() {
   useEffect(() => () => {
     if (collectionLandingTimer.current !== null) window.clearTimeout(collectionLandingTimer.current);
   }, []);
+  const [suppressedScoreRevealId, setSuppressedScoreRevealId] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSavedState(loadGame()), 0);
@@ -592,7 +749,11 @@ export default function GameApp() {
   // Only a SUBMITTED hand gets played back. The preview must stay a still
   // picture of the bare 짓 × 끗패, otherwise there is nothing left to show.
   // Declared up here with the other hooks, above every early screen return.
-  const reveal = useScoreReveal(state.lastScore);
+  const scoreRevealId = `${state.runId}:${state.stage}:${state.roundSubmissionIndex}`;
+  const reveal = useScoreReveal(
+    selectScoreRevealBreakdown(state.lastScore, scoreRevealId, suppressedScoreRevealId),
+    scoreRevealId,
+  );
   const preview = useMemo(() => {
     try {
       return evaluateSelectedHand(state);
@@ -853,7 +1014,10 @@ export default function GameApp() {
           onSelectStartDeck={setSelectedStartDeckId}
           onNewGame={() => dispatch({ type: "START_RUN", startDeckId: selectedStartDeckId, tutorialMode, entropy: runEntropy() })}
           onSkipTutorial={() => dispatch({ type: "START_RUN", startDeckId: selectedStartDeckId, tutorialMode: false, entropy: runEntropy() })}
-          onContinue={savedState ? () => dispatch({ type: "CONTINUE_RUN", state: savedState }) : undefined}
+          onContinue={savedState ? () => {
+            setSuppressedScoreRevealId(`${savedState.runId}:${savedState.stage}:${savedState.roundSubmissionIndex}`);
+            dispatch({ type: "CONTINUE_RUN", state: savedState });
+          } : undefined}
         />
       </div>
     );
@@ -912,8 +1076,20 @@ export default function GameApp() {
   if (state.screen === "shop") {
     const offers = state.shopOffers.flatMap((offer) => {
       const definition = getDefinitionForOffer(offer);
-      let description = definition?.description ?? "";
+      let description: string = definition?.description ?? "";
       let comparison: { current: string; next: string } | undefined;
+      const forbiddenDefinition = offer.category === "forbidden" && definition && "benefit" in definition
+        ? definition
+        : null;
+      const additionalCost = forbiddenDefinition && "additionalCost" in forbiddenDefinition
+        ? forbiddenDefinition.additionalCost
+        : 0;
+      const requiredMoney = offer.price + additionalCost;
+      const unavailableReason = forbiddenDefinition
+        ? getForbiddenUnavailableReason(state, forbiddenDefinition)
+        : offer.category === "talisman" && state.talismans.length >= getEffectiveTalismanSlots(state)
+          ? `부적 주머니가 가득 참 · ${state.talismans.length}/${getEffectiveTalismanSlots(state)}칸`
+          : undefined;
       let detailLabel = offer.category === "pack"
         ? "개봉하면 무료 후보 3장"
         : offer.category === "talisman"
@@ -939,6 +1115,9 @@ export default function GameApp() {
           detailLabel = `치르는 대가 · ${forbidden.cost} · 구매 즉시 발동, 되돌릴 수 없음`;
         }
       }
+      if (forbiddenDefinition) {
+        detailLabel = `${detailLabel} · ${forbiddenDefinition.targetPrompt}${additionalCost ? ` · 구매 ${format(offer.price)}냥 + 의식 ${format(additionalCost)}냥` : ""}`;
+      }
       return definition
         ? [{
             offer,
@@ -947,6 +1126,11 @@ export default function GameApp() {
             assetTag: definition.assetTag,
             detailLabel,
             comparison,
+            requiredMoney,
+            priceLabel: additionalCost
+              ? `총 ${format(requiredMoney)}냥`
+              : undefined,
+            unavailableReason,
             recommended: tutorialActive && offer.definitionId === "t_first_charm" && !offer.sold,
           }]
         : [];
@@ -1052,9 +1236,12 @@ export default function GameApp() {
   );
   const goRewardFactor = getGoRewardFactor(state.chain.goCount + 1);
   const isDecision = state.screen === "decision";
-  // A live selection wins; otherwise the last scored hand stays on the rail so
-  // the reveal has somewhere to play out after the cards have left the hand.
-  const shownBreakdown = preview?.breakdown ?? state.lastScore;
+  const shownBreakdown = selectScoreRailBreakdown({
+    preview: preview?.breakdown ?? null,
+    lastScore: state.lastScore,
+    selectedCount: state.selectedCardIds.length,
+    revealVisible: reveal.visible,
+  });
   const theaterReveal = submissionPlayback && state.lastScore
     ? submissionBeatToReveal(
         submissionPlayback.beat,
@@ -1064,7 +1251,7 @@ export default function GameApp() {
       )
     : undefined;
   const activeReveal = theaterReveal
-    ?? (state.lastScore && shownBreakdown === state.lastScore ? reveal : undefined);
+    ?? (shownBreakdown === state.lastScore ? reveal : undefined);
   const discardSnapshot = cardPresentation?.kind === "discard" ? cardPresentation : null;
   const inlineHand = getInlineHandPresentation(
     discardSnapshot?.handBefore ?? state.hand,

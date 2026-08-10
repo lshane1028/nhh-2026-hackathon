@@ -205,12 +205,22 @@ export type ForbiddenEffectKey =
   | "sacrifice_copy"
   | "legendary_destroy_others";
 
+export type ForbiddenTargetKind = "card" | "talisman" | "none";
+
 export interface ForbiddenDefinition {
   id: string;
   name: string;
+  description: string;
   benefit: string;
   cost: string;
   price: number;
+  /** What the player selects before this one-shot effect resolves. */
+  targetKind: ForbiddenTargetKind;
+  minTargets: number;
+  maxTargets: number;
+  targetPrompt: string;
+  /** A ritual fee paid on use in addition to the shop price. */
+  additionalCost?: number;
   effectKey: ForbiddenEffectKey;
   assetTag: string;
 }

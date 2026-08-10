@@ -55,6 +55,7 @@ export function submissionBeatToReveal(
 ): ScoreRevealState {
   const finale = beat.kind === "finale";
   return {
+    visible: true,
     playing: !finale,
     kkeut: beat.runningJit,
     heung: beat.runningHeung,

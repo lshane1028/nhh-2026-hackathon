@@ -30,20 +30,31 @@ export function getCardArtUrl(card: AtlasCard): string {
   return `/assets/cards/hwatu/${card.assetTag}.webp`;
 }
 
+/** Lossless source kept in the build as a per-card fallback. */
+export function getCardNativeArtUrl(card: AtlasCard): string {
+  return `/assets/cards/hwatu/native/${card.assetTag}.png`;
+}
+
 /** Column offset of a card inside its month's block of four. */
-function cardOffset(card: AtlasCard): number {
+function printedMonth(card: AtlasCard): number {
+  const match = /^card-(\d{2})-/.exec(card.assetTag);
+  const month = Number(match?.[1]);
+  return Number.isInteger(month) && month >= 1 && month <= 12 ? month : card.month;
+}
+
+function cardOffset(card: AtlasCard, month: number): number {
   if (card.assetTag.endsWith("chaff-a")) return 2;
   if (card.assetTag.endsWith("chaff-b")) return 3;
-  if (card.month === 12) {
-    if (card.kind === "animal") return 1;
-    if (card.kind === "ribbon") return 2;
-    if (card.chaffValue === 2) return 3;
+  if (month === 12) {
+    if (card.assetTag.includes("animal-")) return 1;
+    if (card.assetTag.includes("ribbon-")) return 2;
+    if (card.assetTag.endsWith("double-chaff")) return 3;
     return 0;
   }
   if (
-    (card.month === 8 && card.kind === "animal")
-    || (card.month === 11 && card.chaffValue === 2)
-    || card.kind === "ribbon"
+    card.assetTag === "card-08-animal-bird"
+    || card.assetTag === "card-11-double-chaff"
+    || card.assetTag.includes("ribbon-")
   ) {
     return 1;
   }
@@ -52,8 +63,30 @@ function cardOffset(card: AtlasCard): number {
 
 /** A `background-position` value for a tile scaled to 800% 600%. */
 export function getAtlasPosition(card: AtlasCard): string {
-  const row = Math.floor((card.month - 1) / 2);
-  const monthStartColumn = ((card.month - 1) % 2) * 4;
-  const column = monthStartColumn + cardOffset(card);
+  const month = printedMonth(card);
+  const row = Math.floor((month - 1) / 2);
+  const monthStartColumn = ((month - 1) % 2) * 4;
+  const column = monthStartColumn + cardOffset(card, month);
   return `${(column / (HWATU_ATLAS_COLUMNS - 1)) * 100}% ${(row / (HWATU_ATLAS_ROWS - 1)) * 100}%`;
+}
+
+/**
+ * Three staged sources, ordered from sharpest to most defensive.
+ *
+ * CardArt requests the lossless PNG only after a WebP error, and attaches the
+ * shared atlas only if both crops fail. A failed crop therefore never remains
+ * a blank cream card without loading defensive assets on the common path.
+ */
+export function getCardArtSources(card: AtlasCard): {
+  primaryUrl: string;
+  fallbackUrl: string;
+  atlasUrl: string;
+  atlasPosition: string;
+} {
+  return {
+    primaryUrl: getCardArtUrl(card),
+    fallbackUrl: getCardNativeArtUrl(card),
+    atlasUrl: HWATU_ATLAS_URL,
+    atlasPosition: getAtlasPosition(card),
+  };
 }

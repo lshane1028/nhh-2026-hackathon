@@ -130,6 +130,30 @@ describe("complete content catalog", () => {
     expect(getBookLevelPreview("hongdan", 1).next).toContain("완성 시 버리기 +1");
     expect(getBookLevelPreview("godori", 1).next).toContain("짓 5의 배수 허용");
   });
+
+  it("declares exact, data-driven targeting for every forbidden card", () => {
+    expect(Object.fromEntries(FORBIDDEN_CARDS.map((entry) => [
+      entry.id,
+      [entry.targetKind, entry.minTargets, entry.maxTargets, "additionalCost" in entry ? entry.additionalCost : 0],
+    ]))).toEqual({
+      f_first_full_moon: ["card", 2, 5, 0],
+      f_clone_ritual: ["card", 1, 1, 0],
+      f_bright_descent: ["card", 1, 1, 6],
+      f_white_chaff: ["card", 1, 5, 0],
+      f_monthless: ["card", 1, 1, 0],
+      f_great_burn: ["none", 0, 0, 0],
+      f_talisman_possession: ["talisman", 1, 1, 0],
+      f_twelve_ritual: ["none", 0, 0, 0],
+      f_inheritance: ["talisman", 1, 1, 0],
+      f_spirit: ["none", 0, 0, 0],
+    });
+
+    for (const entry of FORBIDDEN_CARDS) {
+      expect(entry.targetPrompt.trim().length).toBeGreaterThan(0);
+      expect(entry.minTargets).toBeLessThanOrEqual(entry.maxTargets);
+      if (entry.targetKind === "none") expect([entry.minTargets, entry.maxTargets]).toEqual([0, 0]);
+    }
+  });
 });
 
 describe("card effect compatibility", () => {

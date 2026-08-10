@@ -1,3 +1,4 @@
+import { TALISMAN_BY_ID } from "../content/talismans";
 import type {
   CardInstance,
   CardKind,
@@ -122,12 +123,109 @@ export interface ForbiddenRunSlice {
   handSize: number;
   money: number;
   talismans: TalismanInstance[];
+  talismanSlots: number;
   yakuLevels: Record<string, YakuLevelState>;
 }
 
 export interface ForbiddenResult extends ForbiddenRunSlice {
   message: string;
   grantLegendaryTalisman: boolean;
+  applied: boolean;
+}
+
+function uniqueTargetIds(targetIds: readonly string[]): string[] {
+  return [...new Set(targetIds)];
+}
+
+const NON_STACKABLE_TALISMAN_EFFECTS = new Set([
+  "five_multiple_jit",
+  "month_counts_as_bright",
+  "borrow_yaku_level",
+  "all_kind_wild",
+  "copy_left_score",
+  "copy_neighbors",
+  "devour_neighbor",
+]);
+const NON_STACKABLE_TALISMAN_IDS = new Set(["t_market_rumor"]);
+
+/**
+ * One source of truth for targets the player is allowed to click. Automatic
+ * effects deliberately have no eligible player targets.
+ */
+export function isForbiddenTargetEligible(
+  state: ForbiddenRunSlice,
+  definition: ForbiddenDefinition,
+  targetId: string,
+): boolean {
+  if (definition.targetKind === "none") return false;
+
+  if (definition.targetKind === "card") {
+    const card = state.deck.find((entry) => entry.instanceId === targetId);
+    if (!card) return false;
+    if (definition.effectKey === "make_bright_pay") return card.kind !== "bright";
+    if (definition.effectKey === "wild_month_zero_base") {
+      return !(card.tags.includes("wild_month") && card.tags.includes("zero_base"));
+    }
+    return true;
+  }
+
+  const index = state.talismans.findIndex((entry) => entry.instanceId === targetId);
+  if (index < 0) return false;
+  if (definition.effectKey === "engrave_talisman_hand_penalty") {
+    return state.talismans[index].edition !== "engraved";
+  }
+  if (definition.effectKey === "sacrifice_copy") {
+    if (index === 0) return false;
+    const selectedDefinition = TALISMAN_BY_ID[state.talismans[index].definitionId];
+    if (
+      !selectedDefinition
+      || NON_STACKABLE_TALISMAN_EFFECTS.has(selectedDefinition.effectKey)
+      || NON_STACKABLE_TALISMAN_IDS.has(selectedDefinition.id)
+    ) return false;
+    const currentEngraved = state.talismans.filter((item) => item.edition === "engraved").length;
+    const sacrificedEngraved = state.talismans[index - 1].edition === "engraved" ? 1 : 0;
+    const copiedEngraved = state.talismans[index].edition === "engraved" ? 1 : 0;
+    const slotsAfter = state.talismanSlots + currentEngraved - sacrificedEngraved + copiedEngraved;
+    return state.talismans.length <= slotsAfter;
+  }
+  return true;
+}
+
+export function getEligibleForbiddenTargetIds(
+  state: ForbiddenRunSlice,
+  definition: ForbiddenDefinition,
+): string[] {
+  const candidates = definition.targetKind === "card"
+    ? state.deck.map((entry) => entry.instanceId)
+    : definition.targetKind === "talisman"
+      ? state.talismans.map((entry) => entry.instanceId)
+      : [];
+  return candidates.filter((targetId) => isForbiddenTargetEligible(state, definition, targetId));
+}
+
+export function isForbiddenTargetSelectionValid(
+  state: ForbiddenRunSlice,
+  definition: ForbiddenDefinition,
+  targetIds: readonly string[],
+): boolean {
+  const unique = uniqueTargetIds(targetIds);
+  if (unique.length !== targetIds.length) return false;
+  if (definition.targetKind === "none") return unique.length === 0;
+  if (unique.length < definition.minTargets || unique.length > definition.maxTargets) return false;
+  return unique.every((targetId) => isForbiddenTargetEligible(state, definition, targetId));
+}
+
+export function canPayForbiddenCost(
+  state: ForbiddenRunSlice,
+  definition: ForbiddenDefinition,
+): boolean {
+  if (state.money < (definition.additionalCost ?? 0)) return false;
+  if (
+    (definition.effectKey === "double_duplicate_hand_penalty"
+      || definition.effectKey === "engrave_talisman_hand_penalty")
+    && state.handSize <= 5
+  ) return false;
+  return true;
 }
 
 export function applyForbiddenEffect(
@@ -140,9 +238,39 @@ export function applyForbiddenEffect(
   let handSize = state.handSize;
   let money = state.money;
   let talismans = state.talismans.map((item) => ({ ...item }));
+  const talismanSlots = state.talismanSlots;
   let yakuLevels = { ...state.yakuLevels };
   let grantLegendaryTalisman = false;
-  const selected = targetIds.slice(0, 5);
+  const automaticBurn = definition.effectKey === "random_burn_for_money";
+  const selected = automaticBurn
+    ? uniqueTargetIds(targetIds)
+      .filter((targetId) => {
+        const card = deck.find((entry) => entry.instanceId === targetId);
+        return Boolean(card && !card.enhancement && !card.edition && !card.seal);
+      })
+      .slice(0, 5)
+    : definition.targetKind === "none"
+      ? []
+      : uniqueTargetIds(targetIds).slice(0, definition.maxTargets);
+
+  if (
+    !canPayForbiddenCost(state, definition)
+    || (definition.targetKind !== "none" && !isForbiddenTargetSelectionValid(state, definition, targetIds))
+  ) {
+    return {
+      deck,
+      handSize,
+      money,
+      talismans,
+      talismanSlots,
+      yakuLevels,
+      grantLegendaryTalisman,
+      applied: false,
+      message: `${definition.name}: 대상 또는 대가 조건을 충족하지 못했습니다.`,
+    };
+  }
+
+  money -= definition.additionalCost ?? 0;
 
   switch (definition.effectKey) {
     case "all_to_january": {
@@ -163,12 +291,9 @@ export function applyForbiddenEffect(
       break;
     }
     case "make_bright_pay":
-      if (money >= 6) {
-        money -= 6;
-        deck = deck.map((card) => selected[0] === card.instanceId
-          ? { ...card, kind: "bright", chaffValue: 0, ribbonGroup: undefined }
-          : card);
-      }
+      deck = deck.map((card) => selected[0] === card.instanceId
+        ? { ...card, kind: "bright", chaffValue: 0, ribbonGroup: undefined }
+        : card);
       break;
     case "all_hand_chaff_bonus":
       deck = deck.map((card) => selected.includes(card.instanceId)
@@ -185,7 +310,7 @@ export function applyForbiddenEffect(
       money += 18;
       break;
     case "engrave_talisman_hand_penalty":
-      talismans = talismans.map((item, index) => index === 0 ? { ...item, edition: "engraved" } : item);
+      talismans = talismans.map((item) => selected[0] === item.instanceId ? { ...item, edition: "engraved" } : item);
       handSize = Math.max(5, handSize - 1);
       break;
     case "level_all_money_zero":
@@ -193,9 +318,16 @@ export function applyForbiddenEffect(
       money = 0;
       break;
     case "sacrifice_copy":
-      if (talismans.length >= 2) {
-        const copied = talismans[1];
-        talismans = [{ ...copied, instanceId: makeId("talisman-copy") }, ...talismans.slice(1)];
+      {
+        const selectedIndex = talismans.findIndex((item) => item.instanceId === selected[0]);
+        if (selectedIndex > 0) {
+          const copied = talismans[selectedIndex];
+          talismans = [
+            ...talismans.slice(0, selectedIndex - 1),
+            { ...copied, instanceId: makeId("talisman-copy") },
+            ...talismans.slice(selectedIndex),
+          ];
+        }
       }
       break;
     case "legendary_destroy_others":
@@ -209,8 +341,10 @@ export function applyForbiddenEffect(
     handSize,
     money,
     talismans,
+    talismanSlots,
     yakuLevels,
     grantLegendaryTalisman,
+    applied: true,
     message: `${definition.name}: ${definition.benefit} / 대가: ${definition.cost}`,
   };
 }

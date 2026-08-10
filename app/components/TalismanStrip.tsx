@@ -22,6 +22,8 @@ export interface TalismanStripProps {
   items: readonly TalismanStripItem[];
   slots: number;
   selectedInstanceId?: string | null;
+  /** A neighbouring talisman that will be destroyed if the selection resolves. */
+  sacrificeInstanceId?: string | null;
   /**
    * The talisman firing right now during a score reveal. Talismans stay on
    * screen after a hand is submitted — unlike the cards, which have already
@@ -90,11 +92,12 @@ export function getTalismanHintPosition(
 interface TalismanSlotProps {
   item: TalismanStripItem;
   selected: boolean;
+  sacrifice: boolean;
   firing: boolean;
   onSelect?: (item: TalismanStripItem) => void;
 }
 
-function TalismanSlot({ item, selected, firing, onSelect }: TalismanSlotProps) {
+function TalismanSlot({ item, selected, sacrifice, firing, onSelect }: TalismanSlotProps) {
   const tooltipId = useId();
   const [hintPosition, setHintPosition] = useState<TalismanHintPosition | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
@@ -104,6 +107,7 @@ function TalismanSlot({ item, selected, firing, onSelect }: TalismanSlotProps) {
   const itemClassName = joinClassNames(
     "talisman-strip__item",
     selected && "talisman-strip__item--selected",
+    sacrifice && "talisman-strip__item--sacrifice",
     firing && "talisman-strip__item--firing",
     item.disabled && "talisman-strip__item--disabled",
   );
@@ -184,6 +188,7 @@ function TalismanSlot({ item, selected, firing, onSelect }: TalismanSlotProps) {
         )}
       </span>
       <strong className="talisman-strip__name">{item.definition.name}</strong>
+      {sacrifice ? <span className="talisman-strip__sacrifice-badge" aria-hidden="true">제물</span> : null}
     </>
   );
 
@@ -194,6 +199,7 @@ function TalismanSlot({ item, selected, firing, onSelect }: TalismanSlotProps) {
           type="button"
           {...commonProps}
           aria-pressed={selected}
+          aria-label={`${item.definition.name}${sacrifice ? ", 전승 제물로 영구 파괴 예정" : ""}`}
           disabled={item.disabled}
           onClick={() => onSelect(item)}
         >
@@ -240,6 +246,7 @@ export function TalismanStrip({
   items,
   slots,
   selectedInstanceId,
+  sacrificeInstanceId,
   firingInstanceId,
   onSelect,
   className,
@@ -278,6 +285,7 @@ export function TalismanStrip({
               key={item.instance.instanceId}
               item={item}
               selected={selectedInstanceId === item.instance.instanceId}
+              sacrifice={sacrificeInstanceId === item.instance.instanceId}
               firing={firingInstanceId === item.instance.instanceId}
               onSelect={onSelect}
             />
