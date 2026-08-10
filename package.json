@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
+    "build:pages": "node scripts/build-github-pages.mjs",
     "start": "vinext start",
     "test": "vitest run",
     "test:watch": "vitest",
