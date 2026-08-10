@@ -35,6 +35,8 @@ export interface PlayRailProps {
   seed?: string;
   onOpenRules?: () => void;
   onRestart?: () => void;
+  audioMuted?: boolean;
+  onToggleAudio?: () => void;
   className?: string;
 }
 
@@ -70,6 +72,8 @@ export function PlayRail({
   seed,
   onOpenRules,
   onRestart,
+  audioMuted = false,
+  onToggleAudio,
   className,
 }: PlayRailProps) {
   const progress = targetScore > 0
@@ -220,6 +224,16 @@ export function PlayRail({
       <nav className="play-rail__actions" aria-label="게임 메뉴">
         {onOpenRules ? <button type="button" onClick={onOpenRules}>규칙</button> : null}
         {onRestart ? <button type="button" onClick={onRestart}>재시작</button> : null}
+        {onToggleAudio ? (
+          <button
+            type="button"
+            className="audio-toggle"
+            aria-pressed={!audioMuted}
+            onClick={onToggleAudio}
+          >
+            {audioMuted ? "소리 켜기" : "소리 켜짐"}
+          </button>
+        ) : null}
       </nav>
 
       {seed ? <code className="play-rail__seed">SEED {seed}</code> : null}

@@ -79,6 +79,17 @@
   color: var(--ink);
 }
 .tutorial-toggle { padding: 0.45rem 0.65rem; border: 1px solid #746b5c; border-radius: 0.5rem; }
+.audio-toggle {
+  border-color: #8b6a32 !important;
+  background: linear-gradient(180deg, #322817, #1b1710) !important;
+  color: #f0c96a !important;
+}
+.audio-toggle::before { content: "♪"; margin-right: 0.28rem; color: #f6e4a5; }
+.audio-toggle[aria-pressed="false"] {
+  border-color: #5c5850 !important;
+  background: #1e1c18 !important;
+  color: #8e8577 !important;
+}
 .title-screen,
 .run-end-screen { background: transparent; }
 

@@ -9,7 +9,15 @@ import { TALISMAN_BY_ID } from "@/game/content/talismans";
 import { BOOK_BY_ID, FORBIDDEN_BY_ID } from "@/game/content/upgrades";
 import { ALL_IMMEDIATE_YAKU_DEFINITIONS, getYakuDisplayName } from "@/game/content/yaku";
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
-import { playCardPickSound, playCardRevealSound, playDrawSnapSound, playPackOpenSound, primeGameAudio } from "./audio/game-sfx";
+import {
+  getGameAudioMuted,
+  playCardPickSound,
+  playCardRevealSound,
+  playDrawSnapSound,
+  playPackOpenSound,
+  primeGameAudio,
+  toggleGameAudio,
+} from "./audio/game-sfx";
 import {
   calculateCollectionBonus,
   calculateCupRolePreview,
@@ -663,6 +671,7 @@ export default function GameApp() {
   const [selectedContract, setSelectedContract] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [restartOpen, setRestartOpen] = useState(false);
+  const [audioMuted, setAudioMuted] = useState(false);
   const [tutorialIndex, setTutorialIndex] = useState(0);
   const [tutorialOff, setTutorialOff] = useState(false);
   const [cardPresentation, setCardPresentation] = useState<CardPresentationSnapshot | null>(null);
@@ -673,6 +682,14 @@ export default function GameApp() {
   const [drawFeedbackIds, setDrawFeedbackIds] = useState<Set<string>>(() => new Set());
   const previousHandIds = useRef<Set<string>>(new Set());
   const collectionLandingTimer = useRef<number | null>(null);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setAudioMuted(getGameAudioMuted()), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const handleAudioToggle = useCallback(() => {
+    primeGameAudio();
+    setAudioMuted(toggleGameAudio());
+  }, []);
   const clearCardPresentation = useCallback(() => {
     if (collectionLandingTimer.current !== null) {
       window.clearTimeout(collectionLandingTimer.current);
@@ -1000,6 +1017,14 @@ export default function GameApp() {
         <section className="title-controls" aria-label="판 설정">
           <label><span>재현 시드</span><input value={state.seed} onChange={(event) => dispatch({ type: "SET_SEED", seed: event.target.value })} /></label>
           <label className="tutorial-toggle"><input type="checkbox" checked={tutorialMode} onChange={(event) => setTutorialMode(event.target.checked)} /><span>처음이라면 단계별 안내 켜기</span></label>
+          <button
+            type="button"
+            className="audio-toggle"
+            aria-pressed={!audioMuted}
+            onClick={handleAudioToggle}
+          >
+            {audioMuted ? "소리 켜기" : "소리 켜짐"}
+          </button>
         </section>
         <TitleScreen
           assetTag="ui:title:flower-board-go"
@@ -1012,9 +1037,16 @@ export default function GameApp() {
           canContinue={Boolean(savedState)}
           continueSummary={savedState ? `${savedState.stage}월 · ${format(savedState.chain.roundScore)}점` : undefined}
           onSelectStartDeck={setSelectedStartDeckId}
-          onNewGame={() => dispatch({ type: "START_RUN", startDeckId: selectedStartDeckId, tutorialMode, entropy: runEntropy() })}
-          onSkipTutorial={() => dispatch({ type: "START_RUN", startDeckId: selectedStartDeckId, tutorialMode: false, entropy: runEntropy() })}
+          onNewGame={() => {
+            primeGameAudio();
+            dispatch({ type: "START_RUN", startDeckId: selectedStartDeckId, tutorialMode, entropy: runEntropy() });
+          }}
+          onSkipTutorial={() => {
+            primeGameAudio();
+            dispatch({ type: "START_RUN", startDeckId: selectedStartDeckId, tutorialMode: false, entropy: runEntropy() });
+          }}
           onContinue={savedState ? () => {
+            primeGameAudio();
             setSuppressedScoreRevealId(`${savedState.runId}:${savedState.stage}:${savedState.roundSubmissionIndex}`);
             dispatch({ type: "CONTINUE_RUN", state: savedState });
           } : undefined}
@@ -1458,6 +1490,8 @@ export default function GameApp() {
         seed={state.seed}
         onOpenRules={() => setRulesOpen(true)}
         onRestart={() => setRestartOpen(true)}
+        audioMuted={audioMuted}
+        onToggleAudio={handleAudioToggle}
       />
 
       <CupChoiceModal

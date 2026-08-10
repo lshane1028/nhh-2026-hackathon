@@ -9,7 +9,12 @@ import type {
 
 import { getGeneratedAssetUrl } from "./generated-asset";
 import { CollectionBoard, type CollectionBoardItem } from "./CollectionBoard";
-import { playRewardFinishSound, playRewardStepSound } from "../audio/game-sfx";
+import {
+  playCashRegisterSound,
+  playRewardFinishSound,
+  playRewardStepSound,
+  primeGameAudio,
+} from "../audio/game-sfx";
 import "./screen-ui.css";
 
 export interface MarketRewardView {
@@ -402,7 +407,11 @@ export function MarketScreen(props: MarketScreenProps) {
               className="market-action market-action--primary"
               data-tutorial="reward-continue"
               disabled={!rewardComplete}
-              onClick={props.onContinue}
+              onClick={() => {
+                primeGameAudio();
+                playCashRegisterSound();
+                props.onContinue();
+              }}
             >
               <strong>{rewardComplete ? "보상 받기" : "판돈 계산 중"}</strong>
               <span>+{formatNumber(animatedReward)}냥</span>

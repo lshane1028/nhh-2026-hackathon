@@ -16,6 +16,7 @@ import {
   playDrawSnapSound,
   playJitAdditionSound,
   playKkeutHitSound,
+  playScoreOperationSound,
   playSubmissionFinaleSound,
   playYakuRevealSound,
 } from "../audio/game-sfx";
@@ -253,10 +254,11 @@ export function buildSubmissionBeats(
 function playSubmissionBeat(beat: SubmissionBeat, index: number) {
   if (beat.kind === "intro") playCardRevealSound(0);
   else if (beat.kind === "yaku") playYakuRevealSound();
-  else if (beat.kind === "kkeut-card" || beat.kind === "effect") playKkeutHitSound(index);
+  else if (beat.kind === "kkeut-card") playKkeutHitSound(index);
+  else if (beat.kind === "effect" && beat.operation) playScoreOperationSound(beat.operation, index);
   else if (beat.kind === "jit-start") playCardPickSound();
   else if (beat.kind === "jit-card") playJitAdditionSound(index);
-  else if (beat.kind === "finale") playSubmissionFinaleSound();
+  else if (beat.kind === "finale") playSubmissionFinaleSound(beat.runningJit * beat.runningHeung);
 }
 
 interface CollectionFlight {
