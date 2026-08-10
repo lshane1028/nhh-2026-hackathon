@@ -47,7 +47,11 @@ import { TalismanStrip } from "./components/TalismanStrip";
 import { TitleScreen, type ExperimentalRuleOption } from "./components/TitleScreen";
 import { TutorialSpotlight } from "./components/TutorialSpotlight";
 import { TUTORIAL_STEPS } from "./components/tutorial-steps";
-import { useScoreReveal } from "./components/useScoreReveal";
+import {
+  selectScoreRailBreakdown,
+  selectScoreRevealBreakdown,
+  useScoreReveal,
+} from "./components/useScoreReveal";
 import "./game.css";
 import "./components/art-direction.css";
 import "./components/pixel-direction.css";
@@ -386,6 +390,7 @@ export default function GameApp() {
   const [restartOpen, setRestartOpen] = useState(false);
   const [tutorialIndex, setTutorialIndex] = useState(0);
   const [tutorialOff, setTutorialOff] = useState(false);
+  const [suppressedScoreRevealId, setSuppressedScoreRevealId] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSavedState(loadGame()), 0);
@@ -403,7 +408,11 @@ export default function GameApp() {
   // Only a SUBMITTED hand gets played back. The preview must stay a still
   // picture of the bare 짓 × 끗패, otherwise there is nothing left to show.
   // Declared up here with the other hooks, above every early screen return.
-  const reveal = useScoreReveal(state.lastScore);
+  const scoreRevealId = `${state.runId}:${state.stage}:${state.roundSubmissionIndex}`;
+  const reveal = useScoreReveal(
+    selectScoreRevealBreakdown(state.lastScore, scoreRevealId, suppressedScoreRevealId),
+    scoreRevealId,
+  );
   const preview = useMemo(() => {
     try {
       return evaluateSelectedHand(state);
@@ -555,7 +564,10 @@ export default function GameApp() {
           onToggleExperimentalRule={(key: keyof ExperimentalRules) => dispatch({ type: "TOGGLE_EXPERIMENT", key })}
           onNewGame={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode, entropy: runEntropy() })}
           onSkipTutorial={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode: false, entropy: runEntropy() })}
-          onContinue={savedState ? () => dispatch({ type: "CONTINUE_RUN", state: savedState }) : undefined}
+          onContinue={savedState ? () => {
+            setSuppressedScoreRevealId(`${savedState.runId}:${savedState.stage}:${savedState.roundSubmissionIndex}`);
+            dispatch({ type: "CONTINUE_RUN", state: savedState });
+          } : undefined}
         />
       </div>
     );
@@ -722,9 +734,16 @@ export default function GameApp() {
   );
   const goRewardFactor = getGoRewardFactor(state.chain.goCount + 1);
   const isDecision = state.screen === "decision";
-  // A live selection wins; otherwise the last scored hand stays on the rail so
-  // the reveal has somewhere to play out after the cards have left the hand.
-  const shownBreakdown = preview?.breakdown ?? state.lastScore;
+  // A submitted hand only stays on the rail for its reveal. Once that short
+  // result hold ends, the formula returns to 0 × 0 instead of keeping the
+  // previous 족보 around. Starting a new (even incomplete) selection also
+  // dismisses the old result immediately.
+  const shownBreakdown = selectScoreRailBreakdown({
+    preview: preview?.breakdown ?? null,
+    lastScore: state.lastScore,
+    selectedCount: state.selectedCardIds.length,
+    revealVisible: reveal.visible,
+  });
   const drawnCount = state.drawPile.length;
   const deckTotal = state.deck.length;
 
@@ -744,7 +763,7 @@ export default function GameApp() {
             assetTag="ui:talisman-strip"
             items={talismanItems}
             slots={getEffectiveTalismanSlots(state)}
-            firingInstanceId={reveal.playing ? reveal.current?.sourceId ?? null : null}
+            firingInstanceId={shownBreakdown === state.lastScore && reveal.playing ? reveal.current?.sourceId ?? null : null}
           />
         </div>
 

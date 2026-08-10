@@ -869,6 +869,12 @@ button small,
 .market-dept:has(.market-card:focus-visible) { z-index: 40; }
 .market-card__wrap:has(.market-card:hover),
 .market-card__wrap:has(.market-card:focus-visible) { z-index: 50; }
+
+/* The talisman explanation sits below its slot. The pixel-cut frame used to
+   clip every part outside the strip, even though the tooltip itself had a
+   high z-index. Keep this panel open just like the market departments above. */
+.play-board__top { position: relative; z-index: 40; }
+.play-board__top .talisman-strip { overflow: visible !important; clip-path: none !important; }
 .market-dept:nth-child(-n + 2) .market-card__hint {
   top: calc(100% + 0.6rem) !important;
   bottom: auto !important;

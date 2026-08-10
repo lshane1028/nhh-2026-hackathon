@@ -187,7 +187,7 @@ describe("playable run reducer", () => {
     expect(open(false, "one")).not.toEqual(open(false, "two"));
   });
 
-  it("keeps only the tutorial opening sorted and shuffles ordinary hands", () => {
+  it("keeps every opening hand in calendar order", () => {
     const deck = createStandardHwatuDeck();
     const messy = [
       deck.find((card) => card.month === 9 && card.kind === "chaff")!,
@@ -202,10 +202,48 @@ describe("playable run reducer", () => {
       deck: [...messy, ...deck.filter((card) => !messy.includes(card))],
     };
     const play = gameReducer(base, { type: "START_STAGE" });
-    expect(play.hand.map((card) => card.month)).not.toEqual(sortHand(play.hand).map((card) => card.month));
+    expect(play.hand).toEqual(sortHand(play.hand));
     const tutorial = gameReducer({ ...base, tutorialMode: true }, { type: "START_STAGE" });
-    expect(tutorial.hand.map((card) => card.month)).toEqual(sortHand(tutorial.hand).map((card) => card.month));
+    expect(tutorial.hand).toEqual(sortHand(tutorial.hand));
+    const february = gameReducer({ ...base, stage: 2 }, { type: "START_STAGE" });
+    expect(february.hand).toEqual(sortHand(february.hand));
     expect(sortHand(messy).map((card) => card.kind).slice(0, 2)).toEqual(["bright", "chaff"]);
+  });
+
+  it("sorts a saved hand when a run is continued", () => {
+    const deck = createStandardHwatuDeck();
+    const hand = [deck[35], deck[2], deck[20], deck[8]];
+    const saved = {
+      ...createInitialGameState("CONTINUE-SORT"),
+      runId: "continue-sort",
+      screen: "play" as const,
+      hand,
+    };
+
+    const continued = gameReducer(createInitialGameState(), { type: "CONTINUE_RUN", state: saved });
+    expect(continued.hand).toEqual(sortHand(hand));
+  });
+
+  it("restores calendar order after refilling a hand", () => {
+    const deck = createStandardHwatuDeck();
+    const hand = [12, 10, 9, 8, 7, 6, 5, 4].map(
+      (month) => deck.find((card) => card.month === month)!,
+    );
+    const draw = deck.find((card) => card.month === 1)!;
+    const discardedCard = hand[0];
+    const base = {
+      ...createInitialGameState("REFILL-SORT"),
+      runId: "refill-sort",
+      screen: "play" as const,
+      deck,
+      hand,
+      drawPile: [draw],
+      selectedCardIds: [discardedCard.instanceId],
+    };
+
+    const refilled = gameReducer(base, { type: "DISCARD_SELECTED" });
+    expect(refilled.hand.some((card) => card.instanceId === draw.instanceId)).toBe(true);
+    expect(refilled.hand).toEqual(sortHand(refilled.hand));
   });
 
   it("refuses to discard a stubborn card even when bundled with others", () => {
@@ -226,6 +264,7 @@ describe("playable run reducer", () => {
     const discarded = gameReducer(base, { type: "DISCARD_SELECTED" });
     // The plain card goes, the stubborn one stays in hand.
     expect(discarded.hand.some((card) => card.instanceId === stubborn.instanceId)).toBe(true);
+    expect(discarded.hand).toEqual(sortHand(discarded.hand));
     expect(discarded.usedPile.map((card) => card.instanceId)).toEqual([plain.instanceId]);
 
     // Selecting only the stubborn card spends nothing at all.

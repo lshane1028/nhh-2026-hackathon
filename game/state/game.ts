@@ -279,7 +279,7 @@ function faceDownForBoss(cards: CardInstance[], boss: BossDefinition | null): Ca
 
 function refillHand(state: GameState, currentHand: CardInstance[]): GameState {
   const needed = Math.max(0, effectiveHandSize(state) - currentHand.length);
-  if (needed === 0) return { ...state, hand: currentHand };
+  if (needed === 0) return { ...state, hand: sortHand(currentHand) };
 
   let pile = state.drawPile;
   let cursor = state.rngCursor;
@@ -298,9 +298,7 @@ function refillHand(state: GameState, currentHand: CardInstance[]): GameState {
   return {
     ...state,
     rngCursor: cursor,
-    hand: state.tutorialMode && state.stage === 1
-      ? sortHand([...currentHand, ...faceDownForBoss(drawn, boss)])
-      : [...currentHand, ...faceDownForBoss(drawn, boss)],
+    hand: sortHand([...currentHand, ...faceDownForBoss(drawn, boss)]),
     drawPile: pile.slice(drawn.length),
     usedPile,
   };
@@ -392,7 +390,7 @@ function startStage(state: GameState): GameState {
   const boss = stageBossId ? BOSS_BY_ID[stageBossId] ?? null : null;
   const handSize = effectiveHandSize(state);
   const dealt = faceDownForBoss(pileAfterYard.slice(0, handSize).map(cloneCard), boss);
-  const hand = scriptedTutorial ? sortHand(dealt) : dealt;
+  const hand = sortHand(dealt);
   const next: GameState = {
     ...state,
     screen: "play",
@@ -1368,7 +1366,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "HYDRATE":
       return action.payload && typeof action.payload === "object" ? action.payload as GameState : state;
     case "CONTINUE_RUN":
-      return action.state;
+      return { ...action.state, hand: sortHand(action.state.hand) };
     case "SET_SEED":
       return state.screen === "title" || state.screen === "deck_select" ? { ...state, seed: action.seed.slice(0, 40) } : state;
     case "OPEN_DECK_SELECT":
