@@ -7,7 +7,11 @@ import type {
   Month,
   YakuCandidate,
 } from "../types";
-import { getEffectiveCardRole, type CupRole } from "./deck";
+import {
+  getCollectionKindValue,
+  hasEffectiveCardKind,
+  type CupRole,
+} from "./deck";
 
 export interface YakuMatchContext {
   cupRole?: CupRole;
@@ -45,10 +49,7 @@ function uniqueCards(cards: readonly CardInstance[]): CardInstance[] {
 }
 
 function isBright(card: CardInstance, cupRole: CupRole): boolean {
-  if (card.enhancement === "stone") return false;
-  if (card.enhancement === "wild" || card.tags.includes("all_kind_wild")) return true;
-  if (card.tags.includes("counts_as_bright")) return true;
-  return getEffectiveCardRole(card, cupRole).kind === "bright";
+  return hasEffectiveCardKind(card, "bright", cupRole);
 }
 
 /** The named 섯다 pairs, in the order a player would read them. */
@@ -78,18 +79,22 @@ export function judgeKkeutPair(
   context: YakuMatchContext = {},
 ): KkeutPairResult {
   const cupRole = context.cupRole ?? "animal";
-  const a = getEffectiveMonth(left);
-  const b = getEffectiveMonth(right);
+  // 끗패의 족보는 카드에 인쇄된 월로 읽는다. 영구 월 합 보너스와
+  // zero_base 같은 점수 효과가 12월+7월=갑오 같은 족보까지 바꾸면,
+  // 화면에 보이는 두 숫자와 판정이 서로 달라진다.
+  const a = left.month;
+  const b = right.month;
   const months = [a, b].sort((x, y) => x - y) as [number, number];
+  const hasOnlyClassicSeotdaMonths = a <= 10 && b <= 10;
 
-  if (context.includeSecretYaku !== false && isBright(left, cupRole) && isBright(right, cupRole)) {
+  if (hasOnlyClassicSeotdaMonths && context.includeSecretYaku !== false && isBright(left, cupRole) && isBright(right, cupRole)) {
     const key = `${months[0]}-${months[1]}`;
     if (key === "3-8") return { yakuId: "gwangttaeng_38", rankBonusHeung: 0, rankLabel: "" };
     if (key === "1-8") return { yakuId: "gwangttaeng_18", rankBonusHeung: 0, rankLabel: "" };
     if (key === "1-3") return { yakuId: "gwangttaeng_13", rankBonusHeung: 0, rankLabel: "" };
   }
 
-  if (a === b) {
+  if (hasOnlyClassicSeotdaMonths && a === b) {
     if (a === 10) return { yakuId: "jangttaeng", rankBonusHeung: 0, rankLabel: "" };
     // 1땡 is the floor; every month above it adds 0.6.
     return {
@@ -99,9 +104,11 @@ export function judgeKkeutPair(
     };
   }
 
-  for (const pair of SPECIAL_PAIRS) {
-    if (months[0] === pair.months[0] && months[1] === pair.months[1]) {
-      return { yakuId: pair.id, rankBonusHeung: 0, rankLabel: "" };
+  if (hasOnlyClassicSeotdaMonths) {
+    for (const pair of SPECIAL_PAIRS) {
+      if (months[0] === pair.months[0] && months[1] === pair.months[1]) {
+        return { yakuId: pair.id, rankBonusHeung: 0, rankLabel: "" };
+      }
     }
   }
 
@@ -122,21 +129,13 @@ export function isValidJit(sum: number, allowFiveMultiple = false): boolean {
   return allowFiveMultiple && sum % 5 === 0;
 }
 
-function combinationsOfTwo<T>(items: readonly T[]): Array<[number, number]> {
-  const pairs: Array<[number, number]> = [];
-  for (let i = 0; i < items.length; i += 1) {
-    for (let j = i + 1; j < items.length; j += 1) pairs.push([i, j]);
-  }
-  return pairs;
-}
-
 /**
- * Every legal way to split the submission into 짓 + 끗패.
+ * Splits the submission into 짓 + 끗패 using the player's pick order.
  *
- * The rule is uniform across hand sizes: two cards are the 끗패 and everything
- * else is the 짓, whose month sum must land on a multiple of ten. A bare pair
- * has no 짓 at all, which is why it always submits — that is the beginner's
- * escape hatch. There are no exemptions beyond that one.
+ * The first two selected cards are always the 끗패. Every later card belongs to
+ * the 짓, whose month sum must land on a multiple of ten. This makes the hand
+ * controllable: changing selection order changes the intended 족보 instead of
+ * silently replacing it with the mathematically strongest split.
  */
 export function findImmediateYakuCandidates(
   submittedCards: readonly CardInstance[],
@@ -147,31 +146,23 @@ export function findImmediateYakuCandidates(
     .slice(0, MAX_SUBMISSION);
   if (submitted.length < MIN_SUBMISSION) return [];
 
-  const candidates: YakuCandidate[] = [];
   const allIds = submitted.map((card) => card.instanceId);
+  const pair = [submitted[0], submitted[1]] as const;
+  const jit = submitted.slice(2);
+  const jitSum = jit.reduce((sum, card) => sum + getEffectiveMonth(card), 0);
+  if (jit.length > 0 && !isValidJit(jitSum, context.allowFiveMultipleJit)) return [];
 
-  for (const [i, j] of combinationsOfTwo(submitted)) {
-    const pair = [submitted[i], submitted[j]];
-    const jit = submitted.filter((_, index) => index !== i && index !== j);
-    const jitSum = jit.reduce((sum, card) => sum + getEffectiveMonth(card), 0);
-
-    // A bare pair is always legal; anything longer must make its 짓 work.
-    if (jit.length > 0 && !isValidJit(jitSum, context.allowFiveMultipleJit)) continue;
-
-    const judged = judgeKkeutPair(pair[0], pair[1], context);
-    const definition = getImmediateYakuDefinition(judged.yakuId);
-    candidates.push({
-      yakuId: judged.yakuId,
-      scoringCardIds: allIds,
-      jitCardIds: jit.map((card) => card.instanceId),
-      jitSum,
-      label: definition.name,
-      rankBonusHeung: judged.rankBonusHeung || undefined,
-      rankLabel: judged.rankLabel || undefined,
-    });
-  }
-
-  return candidates;
+  const judged = judgeKkeutPair(pair[0], pair[1], context);
+  const definition = getImmediateYakuDefinition(judged.yakuId);
+  return [{
+    yakuId: judged.yakuId,
+    scoringCardIds: allIds,
+    jitCardIds: jit.map((card) => card.instanceId),
+    jitSum,
+    label: definition.name,
+    rankBonusHeung: judged.rankBonusHeung || undefined,
+    rankLabel: judged.rankLabel || undefined,
+  }];
 }
 
 export function getScoringCards(candidateEntry: YakuCandidate, submitted: readonly CardInstance[]): CardInstance[] {
@@ -184,10 +175,7 @@ function hasKind(
   kind: "bright" | "animal" | "ribbon" | "chaff",
   cupRole: CupRole,
 ): boolean {
-  if (card.enhancement === "stone") return false;
-  if (card.enhancement === "wild" || card.tags.includes("all_kind_wild")) return true;
-  if (kind === "bright" && card.tags.includes("counts_as_bright")) return true;
-  return getEffectiveCardRole(card, cupRole).kind === kind;
+  return hasEffectiveCardKind(card, kind, cupRole);
 }
 
 function requiredMonthProgress(
@@ -215,10 +203,16 @@ export function getCollectionProgress(input: CollectionEvaluationInput): Collect
     requiredMonthProgress("godori", cards, [2, 4, 8], (card) => hasKind(card, "animal", cupRole) && card.tags.includes("bird")),
   ];
 
-  const brights = cards.filter((card) => hasKind(card, "bright", cupRole));
+  const brights = cards.flatMap((card) =>
+    Array.from({ length: getCollectionKindValue(card, "bright", cupRole) }, () => card),
+  );
   const rainBrights = brights.filter((card) => card.tags.includes("rain"));
   const dryBrights = brights.filter((card) => !card.tags.includes("rain"));
-  const rainMatched = rainBrights.length > 0 ? [rainBrights[0], ...brights.filter((card) => card !== rainBrights[0]).slice(0, 2)] : [];
+  const rainIndex = rainBrights.length > 0 ? brights.indexOf(rainBrights[0]) : -1;
+  const remainingBrights = rainIndex >= 0
+    ? brights.filter((_, index) => index !== rainIndex)
+    : brights;
+  const rainMatched = rainBrights.length > 0 ? [rainBrights[0], ...remainingBrights.slice(0, 2)] : [];
   progress.push(
     { yakuId: "rain_three_brights", matchedCardIds: rainMatched.map((card) => card.instanceId), required: 3, completed: rainMatched.length >= 3 },
     { yakuId: "three_brights", matchedCardIds: dryBrights.slice(0, 3).map((card) => card.instanceId), required: 3, completed: dryBrights.length >= 3 },

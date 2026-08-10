@@ -26,7 +26,7 @@ export const CONTENT_EXPECTED_COUNTS = {
   enhancements: 8,
   editions: 4,
   seals: 4,
-  startDecks: 10,
+  startDecks: 5,
   bosses: 12,
   packs: 2,
   contractPairs: 8,

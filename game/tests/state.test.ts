@@ -1,12 +1,34 @@
 import { describe, expect, it } from "vitest";
 
 import { TALISMANS } from "../content/talismans";
+import { FORBIDDEN_CARDS } from "../content/upgrades";
 import type { TalismanDefinition } from "../types";
 import { createStandardHwatuDeck } from "../engine/deck";
 import { createGoChainState } from "../engine/go";
-import { createInitialGameState, gameReducer, sortHand } from "../state/game";
+import { randomAt } from "../engine/rng";
+import { createInitialGameState, evaluateSelectedHand, gameReducer, sortHand } from "../state/game";
 
 describe("playable run reducer", () => {
+  it("preserves the exact two kkeut cards and the remaining jit cards for presentation", () => {
+    const deck = createStandardHwatuDeck();
+    const card = (month: number) => deck.find((entry) => entry.month === month && entry.kind === "chaff")
+      ?? deck.find((entry) => entry.month === month)!;
+    const hand = [card(12), card(7), card(4), card(6)];
+    const state = {
+      ...createInitialGameState("PRESENTATION-SPLIT"),
+      runId: "presentation-split",
+      screen: "play" as const,
+      deck,
+      hand,
+      drawPile: [],
+      selectedCardIds: hand.map((entry) => entry.instanceId),
+    };
+
+    const scored = evaluateSelectedHand(state);
+    expect(scored?.breakdown).toMatchObject({ yakuId: "gabo", jitSum: 10 });
+    expect(new Set(scored?.breakdown.jitCardIds)).toEqual(new Set([hand[2].instanceId, hand[3].instanceId]));
+  });
+
   it("starts a seeded run with the full deck, hand and four actions", () => {
     const title = createInitialGameState("STATE-SMOKE");
     const intro = gameReducer(title, { type: "START_RUN", startDeckId: "deck_standard", tutorialMode: false });
@@ -152,6 +174,12 @@ describe("playable run reducer", () => {
   it("keeps plain cards in the pack pool for deck balance", () => {
     let plainCards = 0;
     let effectCards = 0;
+    let redundantKindEffects = 0;
+    const redundantEffect = {
+      bright: "as_bright",
+      animal: "as_animal",
+      ribbon: "as_ribbon",
+    } as const;
     for (let index = 0; index < 40; index += 1) {
       const base = createInitialGameState(`PACK-BALANCE-${index}`);
       const shop = {
@@ -171,10 +199,14 @@ describe("playable run reducer", () => {
       for (const card of opened.pendingPack?.candidates ?? []) {
         if (card.effectTagId) effectCards += 1;
         else plainCards += 1;
+        if (card.effectTagId && redundantEffect[card.kind as keyof typeof redundantEffect] === card.effectTagId) {
+          redundantKindEffects += 1;
+        }
       }
     }
     expect(plainCards).toBeGreaterThan(0);
     expect(effectCards).toBeGreaterThan(plainCards);
+    expect(redundantKindEffects).toBe(0);
   });
 
   it("keeps tutorial month one fixed but uses run entropy when tutorial is skipped", () => {
@@ -235,6 +267,27 @@ describe("playable run reducer", () => {
     );
     expect(onlyStubborn.discardsRemaining).toBe(base.discardsRemaining);
     expect(onlyStubborn.hand).toHaveLength(2);
+  });
+
+  it("restores one discard when a drawn-luck card enters the hand", () => {
+    const deck = createStandardHwatuDeck();
+    const plain = deck[0];
+    const drawnLuck = { ...deck[5], tags: [...deck[5].tags], effectTagId: "drawn_luck" };
+    const hand = [plain, ...deck.slice(1, 5)];
+    const base = {
+      ...createInitialGameState("DRAWN-LUCK"),
+      runId: "drawn-luck",
+      screen: "play" as const,
+      deck: deck.map((card) => card.instanceId === drawnLuck.instanceId ? drawnLuck : card),
+      hand,
+      drawPile: [drawnLuck, ...deck.slice(6)],
+      selectedCardIds: [plain.instanceId],
+    };
+
+    const discarded = gameReducer(base, { type: "DISCARD_SELECTED" });
+    expect(discarded.hand.some((card) => card.instanceId === drawnLuck.instanceId)).toBe(true);
+    expect(discarded.discardsRemaining).toBe(base.discardsRemaining);
+    expect(discarded.usedPile.map((card) => card.instanceId)).toEqual([plain.instanceId]);
   });
 
   it("toggles only the clicked cards and preserves the five-card cap", () => {
@@ -302,8 +355,10 @@ describe("playable run reducer", () => {
       screen: "play" as const,
       deck,
       hand,
+      drawPile: deck.filter((card) => !hand.some((held) => held.instanceId === card.instanceId)).slice(0, 10),
       selectedCardIds: hand.map((card) => card.instanceId),
       yard: { cards: [], sweptCount: 0 },
+      targetScore: 1_000_000,
     };
 
     expect(base.pendingCupCardId).toBeNull();
@@ -311,6 +366,9 @@ describe("playable run reducer", () => {
     const submitted = gameReducer(base, { type: "SUBMIT_HAND" });
     expect(submitted.pendingCupCardId).toBe(cup.instanceId);
     expect(submitted.cupAssignments).toEqual({});
+    expect(submitted.screen).toBe("play");
+    expect(submitted.hand).toEqual([]);
+    expect(submitted.drawPile).toEqual(base.drawPile);
 
     const filed = gameReducer(submitted, {
       type: "ASSIGN_CUP_ROLE",
@@ -319,6 +377,11 @@ describe("playable run reducer", () => {
     });
     expect(filed.pendingCupCardId).toBeNull();
     expect(filed.cupAssignments[cup.instanceId]).toBe("double_chaff");
+    expect(filed.screen).toBe("play");
+    expect(filed.hand).toHaveLength(8);
+    expect(filed.drawPile).toHaveLength(2);
+    expect(filed.stats.handsPlayed).toBe(1);
+    expect(filed.roundSubmissionIndex).toBe(1);
 
     // A cup that already has a role never asks again.
     const resubmitted = gameReducer(
@@ -333,6 +396,283 @@ describe("playable run reducer", () => {
     );
     expect(resubmitted.pendingCupCardId).toBeNull();
     expect(resubmitted.lastScore).not.toBeNull();
+  });
+
+  it("waits for the cup role before deciding both animal and double-chaff score boundaries", () => {
+    const deck = createStandardHwatuDeck();
+    const cup = deck.find((card) => card.tags.includes("cup"));
+    const partner = deck.find((card) => card.month === 9 && card.kind === "ribbon");
+    if (!cup || !partner) throw new Error("September cup pair missing");
+
+    const scenarios = [
+      {
+        label: "animal",
+        winningRole: "animal" as const,
+        priorCards: deck.filter((card) => card.kind === "animal" && !card.tags.includes("cup") && !card.tags.includes("bird")).slice(0, 4),
+      },
+      {
+        label: "double-chaff",
+        winningRole: "double_chaff" as const,
+        priorCards: deck.filter((card) => card.kind === "chaff" && card.chaffValue === 1).slice(0, 8),
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      expect(scenario.priorCards).toHaveLength(scenario.winningRole === "animal" ? 4 : 8);
+      const hand = [cup, partner];
+      const base = {
+        ...createInitialGameState(`CUP-BOUNDARY-${scenario.label}`),
+        runId: `cup-boundary-${scenario.label}`,
+        screen: "play" as const,
+        deck,
+        hand,
+        drawPile: [],
+        selectedCardIds: hand.map((card) => card.instanceId),
+        yard: { cards: [], sweptCount: 0 },
+        handsRemaining: 1,
+        targetScore: 1_000_000,
+        chain: {
+          ...createGoChainState(),
+          collection: {
+            cardIds: scenario.priorCards.map((card) => card.instanceId),
+            completedYakuIds: [],
+          },
+        },
+      };
+
+      const pending = gameReducer(base, { type: "SUBMIT_HAND" });
+      expect(pending).toMatchObject({
+        screen: "play",
+        pendingCupCardId: cup.instanceId,
+        handsRemaining: 0,
+      });
+      expect(pending.chain.collectionScore).toBe(base.chain.collectionScore);
+      expect(pending.logs.some((entry) => entry.kind === "fail")).toBe(false);
+
+      const animalPreview = gameReducer(pending, {
+        type: "ASSIGN_CUP_ROLE",
+        cardId: cup.instanceId,
+        role: "animal",
+      });
+      const chaffPreview = gameReducer(pending, {
+        type: "ASSIGN_CUP_ROLE",
+        cardId: cup.instanceId,
+        role: "double_chaff",
+      });
+      const winningPreview = scenario.winningRole === "animal" ? animalPreview : chaffPreview;
+      const losingPreview = scenario.winningRole === "animal" ? chaffPreview : animalPreview;
+      expect(winningPreview.chain.collectionScore).toBeGreaterThan(losingPreview.chain.collectionScore);
+
+      const boundary = losingPreview.chain.roundScore + 1;
+      const winning = gameReducer({ ...pending, targetScore: boundary }, {
+        type: "ASSIGN_CUP_ROLE",
+        cardId: cup.instanceId,
+        role: scenario.winningRole,
+      });
+      const losingRole = scenario.winningRole === "animal" ? "double_chaff" as const : "animal" as const;
+      const losing = gameReducer({ ...pending, targetScore: boundary }, {
+        type: "ASSIGN_CUP_ROLE",
+        cardId: cup.instanceId,
+        role: losingRole,
+      });
+
+      expect(winning.screen).toBe("decision");
+      expect(losing.screen).toBe("run_lose");
+      expect(winning.chain.roundScore).toBe(
+        winning.chain.submissionScore + winning.chain.collectionScore,
+      );
+      expect(losing.chain.roundScore).toBe(
+        losing.chain.submissionScore + losing.chain.collectionScore,
+      );
+      expect(winning.stats.handsPlayed).toBe(1);
+      expect(winning.roundSubmissionIndex).toBe(1);
+      expect(winning.usedPile).toHaveLength(hand.length);
+      expect(gameReducer(winning, {
+        type: "ASSIGN_CUP_ROLE",
+        cardId: cup.instanceId,
+        role: scenario.winningRole,
+      })).toBe(winning);
+    }
+  });
+
+  it("does not leave a stale cup choice when a glass cup breaks in aftermath", () => {
+    const standardDeck = createStandardHwatuDeck();
+    const cup = standardDeck.find((card) => card.tags.includes("cup"));
+    const partner = standardDeck.find((card) => card.month === 9 && card.kind === "ribbon");
+    if (!cup || !partner) throw new Error("September cup pair missing");
+    const seed = Array.from({ length: 100 }, (_, index) => `GLASS-CUP-${index}`)
+      .find((candidate) => randomAt(`${candidate}:glass`, 0) < 0.25);
+    if (!seed) throw new Error("No deterministic glass seed found");
+    const glassCup = { ...cup, tags: [...cup.tags], enhancement: "glass" as const };
+    const deck = standardDeck.map((card) => card.instanceId === cup.instanceId ? glassCup : card);
+    const priorRibbons = deck.filter((card) =>
+      card.ribbonGroup === "cheong" && (card.month === 6 || card.month === 10));
+    expect(priorRibbons).toHaveLength(2);
+    const hand = [glassCup, partner];
+    const base = {
+      ...createInitialGameState(seed),
+      runId: "glass-cup-aftermath",
+      screen: "play" as const,
+      deck,
+      hand,
+      drawPile: [],
+      selectedCardIds: hand.map((card) => card.instanceId),
+      yard: { cards: [], sweptCount: 0 },
+      handsRemaining: 2,
+      discardsRemaining: 1,
+      targetScore: 1_000_000,
+      yakuLevels: {
+        ...createInitialGameState().yakuLevels,
+        cheongdan: { level: 2, mastery: 0 },
+      },
+      chain: {
+        ...createGoChainState(),
+        collection: {
+          cardIds: priorRibbons.map((card) => card.instanceId),
+          completedYakuIds: [],
+        },
+      },
+    };
+
+    const submitted = gameReducer(base, { type: "SUBMIT_HAND" });
+    expect(submitted.deck.some((card) => card.instanceId === glassCup.instanceId)).toBe(false);
+    expect(submitted.pendingCupCardId).toBeNull();
+    expect(submitted.pendingCupExtraDiscardsBefore).toBeNull();
+    expect(submitted.screen).toBe("play");
+    expect(submitted.handsRemaining).toBe(1);
+    expect(submitted.chain.collectionScore).toBeGreaterThan(0);
+    expect(submitted.discardsRemaining).toBe(2);
+    expect(submitted.stats.handsPlayed).toBe(1);
+    expect(submitted.roundSubmissionIndex).toBe(1);
+  });
+
+  it("queues multiple surviving cups and resolves the hand only after the final choice", () => {
+    const standardDeck = createStandardHwatuDeck();
+    const cup = standardDeck.find((card) => card.tags.includes("cup"));
+    if (!cup) throw new Error("September cup missing");
+    const secondCup = {
+      ...cup,
+      tags: [...cup.tags],
+      instanceId: `${cup.instanceId}:second`,
+    };
+    const deck = [...standardDeck, secondCup];
+    const hand = [cup, secondCup];
+    const drawPile = standardDeck.filter((card) => card.instanceId !== cup.instanceId).slice(0, 10);
+    const base = {
+      ...createInitialGameState("MULTIPLE-CUPS"),
+      runId: "multiple-cups",
+      screen: "play" as const,
+      deck,
+      hand,
+      drawPile,
+      selectedCardIds: hand.map((card) => card.instanceId),
+      yard: { cards: [], sweptCount: 0 },
+      handsRemaining: 2,
+      targetScore: 1_000_000,
+    };
+
+    const pendingFirst = gameReducer(base, { type: "SUBMIT_HAND" });
+    expect(pendingFirst.pendingCupCardId).toBe(cup.instanceId);
+    expect(pendingFirst.drawPile).toEqual(drawPile);
+
+    const pendingSecond = gameReducer(pendingFirst, {
+      type: "ASSIGN_CUP_ROLE",
+      cardId: cup.instanceId,
+      role: "animal",
+    });
+    expect(pendingSecond.pendingCupCardId).toBe(secondCup.instanceId);
+    expect(pendingSecond.cupAssignments).toEqual({ [cup.instanceId]: "animal" });
+    expect(pendingSecond.chain.collectionScore).toBe(base.chain.collectionScore);
+    expect(pendingSecond.drawPile).toEqual(drawPile);
+    expect(pendingSecond.hand).toEqual([]);
+    expect(pendingSecond.stats.handsPlayed).toBe(1);
+    expect(pendingSecond.roundSubmissionIndex).toBe(1);
+
+    const resolved = gameReducer(pendingSecond, {
+      type: "ASSIGN_CUP_ROLE",
+      cardId: secondCup.instanceId,
+      role: "double_chaff",
+    });
+    expect(resolved.pendingCupCardId).toBeNull();
+    expect(resolved.cupAssignments).toEqual({
+      [cup.instanceId]: "animal",
+      [secondCup.instanceId]: "double_chaff",
+    });
+    expect(resolved.screen).toBe("play");
+    expect(resolved.hand).toHaveLength(8);
+    expect(resolved.drawPile).toHaveLength(2);
+    expect(resolved.stats.handsPlayed).toBe(1);
+    expect(resolved.roundSubmissionIndex).toBe(1);
+    expect(resolved.logs.filter((entry) => entry.title === "술잔 기록")).toHaveLength(2);
+  });
+
+  it("grants a newly completed collection perk once, after the cup choice", () => {
+    const standardDeck = createStandardHwatuDeck();
+    const cup = standardDeck.find((card) => card.tags.includes("cup"));
+    const nineRibbon = standardDeck.find((card) => card.month === 9 && card.ribbonGroup === "cheong");
+    const oneChaff = standardDeck.find((card) => card.month === 1 && card.kind === "chaff");
+    const priorRibbons = standardDeck.filter((card) =>
+      card.ribbonGroup === "cheong" && (card.month === 6 || card.month === 10));
+    if (!cup || !nineRibbon || !oneChaff || priorRibbons.length !== 2) throw new Error("Cheongdan cup fixture missing");
+    const secondCup = { ...cup, tags: [...cup.tags], instanceId: `${cup.instanceId}:perk-second` };
+    const deck = [...standardDeck, secondCup];
+    // 1월 + 9월 띠가 짓 10을 만들고, 두 술잔은 9땡 끗패가 된다.
+    const hand = [cup, secondCup, oneChaff, nineRibbon];
+    const base = {
+      ...createInitialGameState("CUP-PERK-DEFER"),
+      runId: "cup-perk-defer",
+      screen: "play" as const,
+      deck,
+      hand,
+      drawPile: [],
+      selectedCardIds: hand.map((card) => card.instanceId),
+      yard: { cards: [], sweptCount: 0 },
+      handsRemaining: 1,
+      discardsRemaining: 1,
+      targetScore: 1_000_000,
+      yakuLevels: {
+        ...createInitialGameState().yakuLevels,
+        cheongdan: { level: 2, mastery: 0 },
+      },
+      chain: {
+        ...createGoChainState(),
+        collection: {
+          cardIds: priorRibbons.map((card) => card.instanceId),
+          completedYakuIds: [],
+        },
+      },
+    };
+
+    const pending = gameReducer(base, { type: "SUBMIT_HAND" });
+    expect(pending.pendingCupCardId).toBe(cup.instanceId);
+    expect(pending.pendingCupExtraDiscardsBefore).toBe(0);
+    expect(pending.discardsRemaining).toBe(1);
+
+    const pendingSecond = gameReducer(pending, {
+      type: "ASSIGN_CUP_ROLE",
+      cardId: cup.instanceId,
+      role: "animal",
+    });
+    expect(pendingSecond.pendingCupCardId).toBe(secondCup.instanceId);
+    expect(pendingSecond.discardsRemaining).toBe(1);
+    expect(pendingSecond.pendingCupExtraDiscardsBefore).toBe(0);
+
+    const filed = gameReducer(pendingSecond, {
+      type: "ASSIGN_CUP_ROLE",
+      cardId: secondCup.instanceId,
+      role: "double_chaff",
+    });
+    expect(filed.discardsRemaining).toBe(2);
+    expect(filed.pendingCupExtraDiscardsBefore).toBeNull();
+    expect(filed.stats.handsPlayed).toBe(1);
+
+    const repeated = gameReducer(filed, {
+      type: "ASSIGN_CUP_ROLE",
+      cardId: secondCup.instanceId,
+      role: "animal",
+    });
+    expect(repeated).toBe(filed);
+    expect(repeated.discardsRemaining).toBe(2);
   });
 
   it("buys and applies a painter card as a permanent deck edit", () => {
@@ -377,6 +717,43 @@ describe("playable run reducer", () => {
       .map((offer) => offer.definitionId);
     expect(offered).toHaveLength(2);
     expect([...offered].sort()).toEqual([...survivors].sort());
+  });
+
+  it("does not repeat the previous 금단패", () => {
+    const previous = FORBIDDEN_CARDS[0].id;
+    const reward = {
+      ...createInitialGameState("FORBIDDEN-ROTATION"),
+      runId: "forbidden-rotation",
+      stage: 4,
+      screen: "reward" as const,
+      lastForbiddenOfferId: previous,
+    };
+    const shop = gameReducer(reward, { type: "CONTINUE_AFTER_REWARD" });
+    const offered = shop.shopOffers.find((offer) => offer.category === "forbidden");
+
+    expect(offered?.definitionId).not.toBe(previous);
+    expect(shop.lastForbiddenOfferId).toBe(offered?.definitionId);
+  });
+
+  it("awards only 냥 after a clear and never inserts a free card", () => {
+    const base = createInitialGameState("MONEY-ONLY-REWARD");
+    const beforeIds = base.deck.map((card) => card.instanceId);
+    const decision = {
+      ...base,
+      runId: "money-only-reward",
+      screen: "decision" as const,
+      targetScore: 100,
+      chain: {
+        ...createGoChainState(),
+        submissionScore: 925,
+        roundScore: 925,
+      },
+    };
+
+    const reward = gameReducer(decision, { type: "STOP_ROUND" });
+    expect(reward.screen).toBe("reward");
+    expect(reward.money).toBeGreaterThan(decision.money);
+    expect(reward.deck.map((card) => card.instanceId)).toEqual(beforeIds);
   });
 
   it("lets 제물 단도 eat its right-hand neighbour when a stage opens", () => {

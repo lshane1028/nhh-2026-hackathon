@@ -1,17 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { BOSS_BY_ID } from "@/game/content/bosses";
-import { CONTRACTS, WEATHER_BY_ID } from "@/game/content/meta";
+import { CONTRACTS, START_DECKS, WEATHER_BY_ID } from "@/game/content/meta";
 import { getStageDefinition } from "@/game/content/stages";
 import { TALISMAN_BY_ID } from "@/game/content/talismans";
-import { ALL_IMMEDIATE_YAKU_DEFINITIONS } from "@/game/content/yaku";
+import { BOOK_BY_ID, FORBIDDEN_BY_ID } from "@/game/content/upgrades";
+import { ALL_IMMEDIATE_YAKU_DEFINITIONS, getYakuDisplayName } from "@/game/content/yaku";
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
-import { playCardPickSound, playCardRevealSound, playPackOpenSound } from "./audio/game-sfx";
-import { calculateCollectionBonus, GODORI_MONTHS } from "@/game/engine/collection-bonus";
-import { buildCollectionSlots } from "@/game/engine/collection-board";
+import { playCardPickSound, playCardRevealSound, playDrawSnapSound, playPackOpenSound, primeGameAudio } from "./audio/game-sfx";
+import {
+  calculateCollectionBonus,
+  calculateCupRolePreview,
+  GODORI_MONTHS,
+  type CupRolePreviewCounts,
+} from "@/game/engine/collection-bonus";
+import {
+  buildCollectionSlots,
+  COLLECTION_TRACK_ORDER,
+  getCollectionLandingTargets,
+  type CollectionTrack,
+  type CupRoleLookup,
+} from "@/game/engine/collection-board";
+import { getBookLevelPreview } from "@/game/engine/book-preview";
 import { createStandardHwatuDeck } from "@/game/engine/deck";
+import { getBossDiscardMoneyCost } from "@/game/engine/boss";
 import { canDeclareGo, getGoRewardFactor } from "@/game/engine/go";
 import { findImmediateYakuCandidates } from "@/game/engine/yaku";
 import {
@@ -24,33 +38,58 @@ import {
   getDefinitionForOffer,
   getEffectiveTalismanSlots,
   getPendingConsumableDefinition,
+  isUndiscardable,
   sortHand,
 } from "@/game/state/game";
 import { clearSavedGame, loadGame, saveGame } from "@/game/state/storage";
 import type {
   CardInstance,
-  ExperimentalRules,
   GameState,
   ImmediateYakuId,
 } from "@/game/types";
 
 import { AssetPlaceholder } from "./components/AssetPlaceholder";
 import { CollectionBoard, type CollectionBoardItem } from "./components/CollectionBoard";
+import {
+  DiscardTheater,
+  SubmissionTheater,
+  getInlineHandPresentation,
+  submissionBeatToReveal,
+  type DiscardBeat,
+  type SubmissionBeat,
+} from "./components/CardActionTheater";
 import { GameModal } from "./components/GameModal";
 import { getGeneratedAssetUrl } from "./components/generated-asset";
 import { HwatuCard } from "./components/HwatuCard";
-import { getAtlasPosition, getCardArtUrl } from "./components/hwatu-atlas";
+import { getAtlasPosition } from "./components/hwatu-atlas";
 import { MarketScreen } from "./components/MarketScreen";
 import { PlayRail } from "./components/PlayRail";
 import { RunEndScreen } from "./components/RunEndScreen";
 import { TalismanStrip } from "./components/TalismanStrip";
-import { TitleScreen, type ExperimentalRuleOption } from "./components/TitleScreen";
+import { TitleScreen } from "./components/TitleScreen";
 import { TutorialSpotlight } from "./components/TutorialSpotlight";
 import { TUTORIAL_STEPS } from "./components/tutorial-steps";
 import { useScoreReveal } from "./components/useScoreReveal";
 import "./game.css";
 import "./components/art-direction.css";
 import "./components/pixel-direction.css";
+
+interface CardPresentationSnapshot {
+  id: string;
+  kind: "submit" | "discard";
+  cards: CardInstance[];
+  collectionCards: CardInstance[];
+  collectionCupRoles: CupRoleLookup;
+  collectionCardIdsBefore: string[];
+  handBefore: CardInstance[];
+  keptCardIds: string[];
+}
+
+interface SubmissionPlayback {
+  beat: SubmissionBeat;
+  index: number;
+  count: number;
+}
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 
@@ -77,11 +116,11 @@ const YAKU_SAMPLES: Partial<Record<ImmediateYakuId, ReadonlyArray<[number, CardI
   mangtong: [[2, "chaff"], [8, "chaff"]],
 };
 
-const EXPERIMENT_OPTIONS: ExperimentalRuleOption[] = [
-  { id: "bakContracts", label: "광박·피박·멍박", description: "판 종료 시 완성한 수집 경로에 따라 추가 냥을 받는 계약.", assetTag: "rule:bak-contracts" },
-  { id: "weather", label: "월별 날씨", description: "비·바람·눈이 특정 카드의 월 합이나 재발동을 바꿉니다.", assetTag: "rule:weather" },
-  { id: "nagariRetry", label: "나가리 재승부", description: "12월 최종 두목에게 한 번 패하면 제출 1회를 내고 재도전.", assetTag: "rule:nagari-retry" },
-];
+const DECK_UNLOCK_STORAGE_KEY = "flower-board-go:start-decks:v1";
+
+function startDeckUnlocksForStage(stage: number): string[] {
+  return START_DECKS.filter((deck) => deck.unlockStage <= stage).map((deck) => deck.id);
+}
 
 
 interface MarketBanner {
@@ -93,6 +132,19 @@ interface MarketBanner {
 
 function format(value: number): string {
   return new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 2 }).format(value);
+}
+
+export function getCupChoiceActionLabels(preview: CupRolePreviewCounts | null): {
+  animal: string;
+  chaff: string;
+} {
+  if (!preview) {
+    return { animal: "동물로 기록 · 동물 1장", chaff: "피로 기록 · 피 2점" };
+  }
+  return {
+    animal: `동물로 기록\n동물 ${preview.current.animal}→${preview.animal.animal}장 · 피 ${preview.current.chaff}→${preview.animal.chaff}점`,
+    chaff: `피로 기록\n동물 ${preview.current.animal}→${preview.doubleChaff.animal}장 · 피 ${preview.current.chaff}→${preview.doubleChaff.chaff}점`,
+  };
 }
 
 function cardMap(state: GameState): Map<string, CardInstance> {
@@ -107,14 +159,52 @@ function cardsFor(state: GameState, ids: readonly string[]): CardInstance[] {
   });
 }
 
-function collectionItems(state: GameState): CollectionBoardItem[] {
-  const confirmedCards = cardsFor(state, state.chain.collection.cardIds);
-  const pendingCards: CardInstance[] = [];
-  const confirmed = calculateCollectionBonus(confirmedCards, state.cupAssignments, state.yakuLevels);
-  const total = calculateCollectionBonus([...confirmedCards, ...pendingCards], state.cupAssignments, state.yakuLevels);
+type CollectionCardIdsByTrack = Partial<Record<CollectionTrack, readonly string[]>>;
+
+export function getVisibleCollectionCardIdsByTrack(
+  collectionCardIdsBefore: readonly string[],
+  collectionCards: readonly CardInstance[],
+  cupRoles: CupRoleLookup,
+  landedTargets: ReadonlySet<string>,
+): Record<CollectionTrack, string[]> {
+  const visible = Object.fromEntries(
+    COLLECTION_TRACK_ORDER.map((track) => [track, new Set(collectionCardIdsBefore)]),
+  ) as Record<CollectionTrack, Set<string>>;
+
+  for (const card of collectionCards) {
+    for (const target of getCollectionLandingTargets(card, cupRoles)) {
+      if (landedTargets.has(`${target.track}:${card.instanceId}`)) {
+        visible[target.track].add(card.instanceId);
+      }
+    }
+  }
+
+  return Object.fromEntries(
+    COLLECTION_TRACK_ORDER.map((track) => [track, [...visible[track]]]),
+  ) as Record<CollectionTrack, string[]>;
+}
+
+function collectionResultForTrack(
+  state: GameState,
+  track: CollectionTrack,
+  confirmedCardIdsByTrack?: CollectionCardIdsByTrack,
+) {
+  const ids = confirmedCardIdsByTrack?.[track] ?? state.chain.collection.cardIds;
+  return calculateCollectionBonus(cardsFor(state, ids), state.cupAssignments, state.yakuLevels);
+}
+
+function collectionItems(
+  state: GameState,
+  confirmedCardIdsByTrack?: CollectionCardIdsByTrack,
+): CollectionBoardItem[] {
+  const results = {
+    bright: collectionResultForTrack(state, "bright", confirmedCardIdsByTrack),
+    animal: collectionResultForTrack(state, "animal", confirmedCardIdsByTrack),
+    godori: collectionResultForTrack(state, "godori", confirmedCardIdsByTrack),
+    ribbon: collectionResultForTrack(state, "ribbon", confirmedCardIdsByTrack),
+    chaff: collectionResultForTrack(state, "chaff", confirmedCardIdsByTrack),
+  };
   const upgraded = (id: string) => (state.yakuLevels[id]?.level ?? 1) > 1;
-  const pendingCount = (track: keyof typeof total.counts): number =>
-    Math.max(0, total.counts[track] - confirmed.counts[track]);
 
   // Picture rows come from the deck, so burning a card removes its slot and a
   // joker that turns 8월 into a 광 adds one.
@@ -123,7 +213,7 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
     collectedOnly = false,
   ) => buildCollectionSlots({
     deck: state.deck,
-    confirmedCardIds: state.chain.collection.cardIds,
+    confirmedCardIds: confirmedCardIdsByTrack?.[track] ?? state.chain.collection.cardIds,
     pendingCardIds: [],
     track,
     cupRoles: state.cupAssignments,
@@ -139,8 +229,7 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       iconUrl: "/assets/cards/hwatu/card-08-bright-moon.webp",
       description: `삼광 3점 · 비삼광 2점${["rain_three_brights", "three_brights", "four_brights", "five_brights"].some(upgraded) ? " · 비결: 고 문턱 감소" : ""}`,
       cards: slotsFor("bright"),
-      confirmedCount: confirmed.counts.bright,
-      pendingCount: pendingCount("bright"),
+      confirmedCount: results.bright.counts.bright,
       milestones: [
         { at: 3, label: "삼광", reward: "3점 · 비광 포함 2점" },
         { at: 4, label: "사광", reward: "4점" },
@@ -155,8 +244,7 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       iconUrl: "/assets/cards/hwatu/card-10-animal-deer.webp",
       description: "5장부터 1점 · 이후 장당 +1점",
       cards: slotsFor("animal"),
-      confirmedCount: confirmed.counts.animal,
-      pendingCount: pendingCount("animal"),
+      confirmedCount: results.animal.counts.animal,
       slotCount: 10,
       milestones: [
         { at: 5, label: "5장", reward: "1점" },
@@ -171,11 +259,10 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       iconUrl: "/assets/cards/hwatu/card-08-animal-bird.webp",
       description: `완성 +5점${upgraded("godori") ? " · 비결: 짓 5배수 허용" : ""}`,
       cards: slotsFor("godori"),
-      confirmedCount: confirmed.counts.godori,
-      pendingCount: pendingCount("godori"),
+      confirmedCount: results.godori.counts.godori,
       slotLabels: GODORI_MONTHS.map((month) => `${month}월`),
       milestones: [
-        { at: 3, label: "세 마리", reward: upgraded("godori") ? "+5점 · 짓 5배수" : "+5점", active: total.completedSets.godori },
+        { at: 3, label: "세 마리", reward: upgraded("godori") ? "+5점 · 짓 5배수" : "+5점", active: results.godori.completedSets.godori },
       ],
     },
     {
@@ -186,13 +273,12 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       iconUrl: "/assets/cards/hwatu/card-03-ribbon-hong.webp",
       description: "5장부터 1점 · 단마다 +3점",
       cards: slotsFor("ribbon"),
-      confirmedCount: confirmed.counts.ribbon,
-      pendingCount: pendingCount("ribbon"),
+      confirmedCount: results.ribbon.counts.ribbon,
       slotCount: 10,
       milestones: [
-        { at: 3, label: "홍단", reward: upgraded("hongdan") ? "+3점 · 버리기 +1" : "+3점", active: total.completedSets.hongdan },
-        { at: 3, label: "초단", reward: upgraded("chodan") ? "+3점 · 버리기 +1" : "+3점", active: total.completedSets.chodan },
-        { at: 3, label: "청단", reward: upgraded("cheongdan") ? "+3점 · 버리기 +1" : "+3점", active: total.completedSets.cheongdan },
+        { at: 3, label: "홍단", reward: upgraded("hongdan") ? "+3점 · 버리기 +1" : "+3점", active: results.ribbon.completedSets.hongdan },
+        { at: 3, label: "초단", reward: upgraded("chodan") ? "+3점 · 버리기 +1" : "+3점", active: results.ribbon.completedSets.chodan },
+        { at: 3, label: "청단", reward: upgraded("cheongdan") ? "+3점 · 버리기 +1" : "+3점", active: results.ribbon.completedSets.cheongdan },
         { at: 5, label: "5장", reward: "1점 · 이후 장당 +1" },
       ],
     },
@@ -207,13 +293,33 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       // 그리는 집계 줄이고, 쌍피는 값 배지로 두 칸어치임을 밝힌다.
       cards: slotsFor("chaff", true),
       description: "10피부터 1점 · 쌍피는 2피",
-      confirmedCount: confirmed.counts.chaff,
-      pendingCount: pendingCount("chaff"),
+      confirmedCount: results.chaff.counts.chaff,
       milestones: [
         { at: 10, label: "10피", reward: "1점 · 이후 피점당 +1" },
       ],
     },
   ];
+}
+
+const COLLECTION_SCORE_LINE_IDS: Record<CollectionTrack, ReadonlySet<string>> = {
+  bright: new Set(["rain_three_brights", "three_brights", "four_brights", "five_brights"]),
+  animal: new Set(["animal"]),
+  godori: new Set(["godori"]),
+  ribbon: new Set(["ribbon", "hongdan", "chodan", "cheongdan"]),
+  chaff: new Set(["chaff"]),
+};
+
+function visibleCollectionGoStopPoints(
+  state: GameState,
+  confirmedCardIdsByTrack?: CollectionCardIdsByTrack,
+): number {
+  if (!confirmedCardIdsByTrack) return state.chain.collectionScore / 20;
+  return COLLECTION_TRACK_ORDER.reduce((total, track) => {
+    const result = collectionResultForTrack(state, track, confirmedCardIdsByTrack);
+    return total + result.scoreLines
+      .filter((line) => COLLECTION_SCORE_LINE_IDS[track].has(line.id))
+      .reduce((sum, line) => sum + line.points, 0);
+  }, 0);
 }
 
 function cardEditorOption(definition: ReturnType<typeof getPendingConsumableDefinition>): {
@@ -253,8 +359,8 @@ function IntroScreen({ state, onStart, onDeck, onRules }: {
           <span>月</span>
         </div>
         <div className="intro-screen__copy">
-          <p className="eyebrow">CALENDAR {String(stage.month).padStart(2, "0")} / 12</p>
-          <span>{boss ? "두목이 기다리는 달" : "열두 달의 다음 판"}</span>
+          <p className="eyebrow">열두 달 중 {stage.month}월</p>
+          <span>{boss ? "두목 규칙이 붙는 판" : "기본 규칙으로 치르는 판"}</span>
           <h1>{stage.name}</h1>
           <p>{stage.subtitle}</p>
         </div>
@@ -265,6 +371,7 @@ function IntroScreen({ state, onStart, onDeck, onRules }: {
         </div>
       </header>
       <div className="intro-screen__rules">
+        <h2>이번 판에 적용되는 규칙</h2>
         <article data-asset-tag={weather.assetTag}>
           <span className="intro-screen__rule-mark" aria-hidden="true">天</span>
           <div><strong>날씨 · {weather.name}</strong><small>{weather.description}</small></div>
@@ -283,7 +390,7 @@ function IntroScreen({ state, onStart, onDeck, onRules }: {
       </div>
       {state.calendarStamps.length ? (
         <div className="calendar-strip" aria-label="완료한 달력 도장">
-          {state.calendarStamps.map((stamp) => <code key={`${stamp.stage}-${stamp.yakuId}`}>{stamp.month}월 · {stamp.yakuId}</code>)}
+          {state.calendarStamps.map((stamp) => <code key={`${stamp.stage}-${stamp.yakuId}`}>{stamp.month}월 · {getYakuDisplayName(stamp.yakuId)}</code>)}
         </div>
       ) : null}
       <div className="intro-screen__actions">
@@ -311,14 +418,18 @@ function DeckEditor({ state, dispatch }: {
   const minTargets = definition && "minTargets" in definition ? definition.minTargets : forbiddenMinimum;
   const maxTargets = definition && "maxTargets" in definition ? definition.maxTargets : 5;
   const canApply = Boolean(definition) && state.pendingTargetIds.length >= minTargets;
+  const showingDrawPile = !definition && state.returnScreen === "play";
+  const visibleCards = showingDrawPile ? state.drawPile : state.deck;
 
   return (
     <main className="deck-editor-screen">
       <header>
         <div>
-          <p className="eyebrow">PERMANENT DECK · {state.deck.length}장</p>
-          <h1>{definition ? definition.name : "내 화투 덱"}</h1>
-          <p>{definition?.description ?? "지금 덱에 남아 있는 카드입니다. 카드에 손을 올리면 종류와 강화가 보입니다."}</p>
+          <p className="eyebrow">{showingDrawPile ? "남은 뽑기패" : "전체 보유 덱"} · {visibleCards.length}장</p>
+          <h1>{definition ? definition.name : showingDrawPile ? "이번 판에 남은 덱" : "내 화투 덱"}</h1>
+          <p>{definition?.description ?? (showingDrawPile
+            ? "손에 들었거나 이미 사용한 패는 빼고, 앞으로 뽑힐 패만 보여줍니다."
+            : "현재 보유한 전체 덱입니다. 카드에 손을 올리면 종류와 강화가 보입니다.")}</p>
         </div>
         <AssetPlaceholder assetTag={definition?.assetTag ?? "ui:deck-editor"} label={definition?.name ?? "열두 달 패목록"} description={definition ? `${minTargets}~${maxTargets}장 선택` : "월별로 덱의 구성과 강화 상태를 확인합니다"} tone={definition && !isPainter ? "boss" : "card"} />
       </header>
@@ -335,7 +446,7 @@ function DeckEditor({ state, dispatch }: {
           cards vanish, bought copies show up twice. */}
       <div className="deck-months">
         {MONTHS.map((month) => {
-          const cards = sortHand(state.deck.filter((card) => card.month === month));
+          const cards = sortHand(visibleCards.filter((card) => card.month === month));
           if (cards.length === 0) return null;
           return (
             <section className="deck-month" key={month}>
@@ -380,23 +491,101 @@ export default function GameApp() {
   const [state, dispatch] = useReducer(gameReducer, undefined, () => createInitialGameState());
   const [savedState, setSavedState] = useState<GameState | null>(null);
   const [tutorialMode, setTutorialMode] = useState(true);
+  const [selectedStartDeckId, setSelectedStartDeckId] = useState("deck_standard");
+  const [storedStartDeckIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return ["deck_standard"];
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(DECK_UNLOCK_STORAGE_KEY) ?? "[]");
+      if (!Array.isArray(stored)) return ["deck_standard"];
+      const valid = START_DECKS.map((deck) => deck.id).filter((id) => stored.includes(id));
+      return [...new Set(["deck_standard", ...valid])];
+    } catch {
+      return ["deck_standard"];
+    }
+  });
   const runEntropy = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
   const [selectedContract, setSelectedContract] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [restartOpen, setRestartOpen] = useState(false);
   const [tutorialIndex, setTutorialIndex] = useState(0);
   const [tutorialOff, setTutorialOff] = useState(false);
+  const [cardPresentation, setCardPresentation] = useState<CardPresentationSnapshot | null>(null);
+  const [submissionPlayback, setSubmissionPlayback] = useState<SubmissionPlayback | null>(null);
+  const [discardPlayback, setDiscardPlayback] = useState<DiscardBeat | null>(null);
+  const [collectionLanding, setCollectionLanding] = useState<{ originId: string; kind: CollectionTrack } | null>(null);
+  const [landedCollectionTargets, setLandedCollectionTargets] = useState<Set<string>>(() => new Set());
+  const [drawFeedbackIds, setDrawFeedbackIds] = useState<Set<string>>(() => new Set());
+  const previousHandIds = useRef<Set<string>>(new Set());
+  const collectionLandingTimer = useRef<number | null>(null);
+  const clearCardPresentation = useCallback(() => {
+    if (collectionLandingTimer.current !== null) {
+      window.clearTimeout(collectionLandingTimer.current);
+      collectionLandingTimer.current = null;
+    }
+    setCardPresentation(null);
+    setSubmissionPlayback(null);
+    setDiscardPlayback(null);
+    setCollectionLanding(null);
+    setLandedCollectionTargets(new Set());
+  }, []);
+  const handleSubmissionBeat = useCallback((beat: SubmissionBeat, index: number, count: number) => {
+    setSubmissionPlayback({ beat, index, count });
+  }, []);
+  const handleDiscardBeat = useCallback((beat: DiscardBeat) => setDiscardPlayback(beat), []);
+  const handleCollectionLand = useCallback((card: CardInstance, _index: number, track: CollectionTrack) => {
+    setLandedCollectionTargets((current) => {
+      const next = new Set(current);
+      next.add(`${track}:${card.instanceId}`);
+      return next;
+    });
+    if (collectionLandingTimer.current !== null) window.clearTimeout(collectionLandingTimer.current);
+    setCollectionLanding({ originId: card.originId, kind: track });
+    collectionLandingTimer.current = window.setTimeout(() => {
+      setCollectionLanding(null);
+      collectionLandingTimer.current = null;
+    }, 360);
+  }, []);
+
+  useEffect(() => () => {
+    if (collectionLandingTimer.current !== null) window.clearTimeout(collectionLandingTimer.current);
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSavedState(loadGame()), 0);
     return () => window.clearTimeout(timer);
   }, []);
 
+  const highestClearedStage = Math.max(0, ...state.calendarStamps.map((stamp) => stamp.stage));
+  const unlockedStartDeckIds = useMemo(
+    () => [...new Set([...storedStartDeckIds, ...startDeckUnlocksForStage(highestClearedStage)])],
+    [highestClearedStage, storedStartDeckIds],
+  );
+  useEffect(() => {
+    window.localStorage.setItem(DECK_UNLOCK_STORAGE_KEY, JSON.stringify(unlockedStartDeckIds));
+  }, [unlockedStartDeckIds]);
+
   useEffect(() => {
     if (state.runId !== "not-started" && state.screen !== "title") {
       saveGame(state);
     }
   }, [state]);
+
+  useEffect(() => {
+    if (state.screen !== "play" && state.screen !== "decision") {
+      previousHandIds.current = new Set();
+      return;
+    }
+    if (cardPresentation?.kind === "submit") return;
+    const currentIds = new Set(state.hand.map((card) => card.instanceId));
+    const added = state.hand.filter((card) => !previousHandIds.current.has(card.instanceId));
+    previousHandIds.current = currentIds;
+    if (cardPresentation || added.length === 0) return;
+
+    setDrawFeedbackIds(new Set(added.map((card) => card.instanceId)));
+    const timers = added.map((_, index) => window.setTimeout(() => playDrawSnapSound(index), index * 75));
+    timers.push(window.setTimeout(() => setDrawFeedbackIds(new Set()), 720));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [cardPresentation, state.hand, state.screen]);
 
   const stage = getStageDefinition(state.stage, state.infiniteLap);
   const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
@@ -415,7 +604,65 @@ export default function GameApp() {
     const card = state.hand.find((entry) => entry.instanceId === id);
     return card ? [card] : [];
   });
-  // 윤달 달력 부적이든 고도리 완성이든, 둘 중 하나면 5의 배수도 짓이 된다.
+  const presentationDrawnCards = useMemo(() => {
+    if (!cardPresentation) return [];
+    const keptIds = new Set(cardPresentation.keptCardIds);
+    return state.hand.filter((card) => !keptIds.has(card.instanceId));
+  }, [cardPresentation, state.hand]);
+
+  const beginSubmitPresentation = () => {
+    if (!preview || state.screen !== "play" || state.handsRemaining <= 0 || state.pendingCupCardId) return;
+    primeGameAudio();
+    const selectedIds = new Set(state.selectedCardIds);
+    // An unfiled September cup is still an animal on the live board. Its
+    // scoring role may have been chosen automatically for the best hand, but
+    // that must not silently decide where the player files it afterward.
+    const collectionCupRoles = { ...state.cupAssignments };
+    const collectionCards = [...selectedCards, ...preview.captured]
+      .filter((card) => getCollectionLandingTargets(card, collectionCupRoles).length > 0);
+    setLandedCollectionTargets(new Set());
+    setCardPresentation({
+      id: `${state.runId}:submit:${state.stage}:${state.roundSubmissionIndex}`,
+      kind: "submit",
+      cards: selectedCards.map((card) => ({ ...card, tags: [...card.tags] })),
+      collectionCards: collectionCards.map((card) => ({ ...card, tags: [...card.tags] })),
+      collectionCupRoles,
+      collectionCardIdsBefore: [...state.chain.collection.cardIds],
+      handBefore: state.hand.map((card) => ({ ...card, tags: [...card.tags] })),
+      keptCardIds: state.hand.filter((card) => !selectedIds.has(card.instanceId)).map((card) => card.instanceId),
+    });
+    dispatch({ type: "SUBMIT_HAND" });
+  };
+
+  const beginDiscardPresentation = () => {
+    if (state.screen !== "play" || state.discardsRemaining <= 0 || state.pendingCupCardId) return;
+    primeGameAudio();
+    const discardable = selectedCards.filter((card) => !isUndiscardable(card));
+    const canPayDiscardCost = state.money >= getBossDiscardMoneyCost(boss);
+    if (discardable.length > 0 && canPayDiscardCost) {
+      const discardedIds = new Set(discardable.map((card) => card.instanceId));
+      const orderedDiscarded = state.hand.filter((card) => discardedIds.has(card.instanceId));
+      setCardPresentation({
+        id: `${state.runId}:discard:${state.stage}:${state.stats.discardsUsed}`,
+        kind: "discard",
+        cards: orderedDiscarded.map((card) => ({ ...card, tags: [...card.tags] })),
+        collectionCards: [],
+        collectionCupRoles: {},
+        collectionCardIdsBefore: [...state.chain.collection.cardIds],
+        handBefore: state.hand.map((card) => ({ ...card, tags: [...card.tags] })),
+        keptCardIds: state.hand.filter((card) => !discardedIds.has(card.instanceId)).map((card) => card.instanceId),
+      });
+      const first = orderedDiscarded[0];
+      setDiscardPlayback(first ? {
+        kind: "discard",
+        activeCardId: first.instanceId,
+        index: 0,
+        count: orderedDiscarded.length,
+      } : null);
+    }
+    dispatch({ type: "DISCARD_SELECTED" });
+  };
+  // 반짓 셈판 부적이나 고도리 완성 효과가 있으면 5의 배수도 짓이 된다.
   const fiveMultipleJit = useMemo(
     () => state.talismans.some((item) => item.definitionId === "t_leap_calendar")
       || calculateCollectionBonus(
@@ -439,22 +686,73 @@ export default function GameApp() {
   // 짓고땡: the previewed candidate splits the selection into 짓 (월 합) and
   // 끗패 (배수). Showing which card is which is the whole readability of the
   // system, so it is surfaced on the card faces and in the hand meta.
-  const jitCardIds = useMemo(
-    () => new Set(preview?.breakdown.jitCardIds ?? []),
-    [preview?.breakdown.jitCardIds],
-  );
   const splitRoleOf = (cardId: string): "jit" | "kkeut" | undefined => {
-    if (!preview?.breakdown.scoringCardIds.includes(cardId)) return undefined;
-    return jitCardIds.has(cardId) ? "jit" : "kkeut";
+    const selectedIndex = state.selectedCardIds.indexOf(cardId);
+    if (selectedIndex < 0) return undefined;
+    return selectedIndex < 2 ? "kkeut" : "jit";
   };
   const pendingCupCard = state.pendingCupCardId
     ? state.deck.find((card) => card.instanceId === state.pendingCupCardId) ?? null
     : null;
-  const collections = useMemo(() => collectionItems(state), [state]);
+  const cupRolePreview = useMemo(() => pendingCupCard
+    ? calculateCupRolePreview(
+      cardsFor(state, state.chain.collection.cardIds),
+      pendingCupCard,
+      state.cupAssignments,
+      state.yakuLevels,
+    )
+    : null, [pendingCupCard, state]);
+  const presentationCollectionCards = useMemo(() => {
+    if (cardPresentation?.kind !== "submit") return [];
+    const liveCardIds = new Set(state.deck.map((card) => card.instanceId));
+    // A glass card (or cremation effect) still appears in the scoring replay,
+    // but once it has burned it must not fly into or reappear on the collection
+    // board afterward.
+    return cardPresentation.collectionCards.filter((card) => liveCardIds.has(card.instanceId));
+  }, [cardPresentation, state.deck]);
+  const visibleCollectionCardIdsByTrack = useMemo<CollectionCardIdsByTrack | undefined>(() => {
+    if (cardPresentation?.kind !== "submit") return undefined;
+    return getVisibleCollectionCardIdsByTrack(
+      cardPresentation.collectionCardIdsBefore,
+      presentationCollectionCards,
+      cardPresentation.collectionCupRoles,
+      landedCollectionTargets,
+    );
+  }, [cardPresentation, landedCollectionTargets, presentationCollectionCards]);
+  const collections = useMemo(
+    () => collectionItems(state, visibleCollectionCardIdsByTrack),
+    [state, visibleCollectionCardIdsByTrack],
+  );
+  const visibleCollectionPoints = useMemo(
+    () => visibleCollectionGoStopPoints(state, visibleCollectionCardIdsByTrack),
+    [state, visibleCollectionCardIdsByTrack],
+  );
+  const visibleCollectionScore = visibleCollectionPoints * 20;
+  const visibleRoundScore = state.chain.submissionScore + visibleCollectionScore;
   const talismanItems = state.talismans.flatMap((instance) => {
     const definition = TALISMAN_BY_ID[instance.definitionId];
     return definition ? [{ instance, definition }] : [];
   });
+  const cardTheater = cardPresentation?.kind === "submit" && state.lastScore && !state.pendingCupCardId ? (
+    <SubmissionTheater
+      key={cardPresentation.id}
+      breakdown={state.lastScore}
+      submittedCards={cardPresentation.cards}
+      collectionCards={presentationCollectionCards}
+      cupRoles={cardPresentation.collectionCupRoles}
+      onBeatChange={handleSubmissionBeat}
+      onCollectionLand={handleCollectionLand}
+      onComplete={clearCardPresentation}
+    />
+  ) : cardPresentation?.kind === "discard" ? (
+    <DiscardTheater
+      key={cardPresentation.id}
+      discardedCards={cardPresentation.cards}
+      drawnCards={presentationDrawnCards}
+      onBeatChange={handleDiscardBeat}
+      onComplete={clearCardPresentation}
+    />
+  ) : null;
 
   const resetToTitle = () => {
     clearSavedGame();
@@ -524,7 +822,7 @@ export default function GameApp() {
         id="restart-run"
         open={restartOpen}
         assetTag="ui:warning:restart"
-        title="현재 런을 끝낼까요?"
+        title="현재 판을 끝낼까요?"
         description="저장된 달력과 덱이 초기화됩니다."
         onClose={() => setRestartOpen(false)}
         actions={[
@@ -538,7 +836,7 @@ export default function GameApp() {
   if (state.screen === "title" || state.screen === "deck_select") {
     return (
       <div className="game-root title-root">
-        <section className="title-controls" aria-label="런 설정">
+        <section className="title-controls" aria-label="판 설정">
           <label><span>재현 시드</span><input value={state.seed} onChange={(event) => dispatch({ type: "SET_SEED", seed: event.target.value })} /></label>
           <label className="tutorial-toggle"><input type="checkbox" checked={tutorialMode} onChange={(event) => setTutorialMode(event.target.checked)} /><span>처음이라면 단계별 안내 켜기</span></label>
         </section>
@@ -547,14 +845,14 @@ export default function GameApp() {
           title="꽃판: GO!"
           subtitle="열두 달, 끝까지 판을 키워라"
           description="손패에서 짓을 맞추고 남은 패로 끗을 세웁니다. 족보와 부적으로 점수를 불린 뒤, 목표를 넘기면 스톱할지 고할지 선택하세요."
-          versionLabel="NAN 2026 PROTOTYPE · v0.3"
-          experimentalRules={state.experimentalRules}
-          experimentalRuleOptions={EXPERIMENT_OPTIONS}
+          startDecks={START_DECKS}
+          selectedStartDeckId={selectedStartDeckId}
+          unlockedStartDeckIds={unlockedStartDeckIds}
           canContinue={Boolean(savedState)}
           continueSummary={savedState ? `${savedState.stage}월 · ${format(savedState.chain.roundScore)}점` : undefined}
-          onToggleExperimentalRule={(key: keyof ExperimentalRules) => dispatch({ type: "TOGGLE_EXPERIMENT", key })}
-          onNewGame={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode, entropy: runEntropy() })}
-          onSkipTutorial={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode: false, entropy: runEntropy() })}
+          onSelectStartDeck={setSelectedStartDeckId}
+          onNewGame={() => dispatch({ type: "START_RUN", startDeckId: selectedStartDeckId, tutorialMode, entropy: runEntropy() })}
+          onSkipTutorial={() => dispatch({ type: "START_RUN", startDeckId: selectedStartDeckId, tutorialMode: false, entropy: runEntropy() })}
           onContinue={savedState ? () => dispatch({ type: "CONTINUE_RUN", state: savedState }) : undefined}
         />
       </div>
@@ -564,7 +862,10 @@ export default function GameApp() {
   if (state.screen === "round_intro") {
     return (
       <div className="game-root">
-        <IntroScreen state={state} onStart={() => dispatch({ type: "START_STAGE" })} onDeck={() => dispatch({ type: "OPEN_SCREEN", screen: "deck_editor" })} onRules={() => setRulesOpen(true)} />
+        <IntroScreen state={state} onStart={() => {
+          primeGameAudio();
+          dispatch({ type: "START_STAGE" });
+        }} onDeck={() => dispatch({ type: "OPEN_SCREEN", screen: "deck_editor" })} onRules={() => setRulesOpen(true)} />
         <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />
       </div>
     );
@@ -574,11 +875,8 @@ export default function GameApp() {
     return <div className="game-root"><DeckEditor state={state} dispatch={dispatch} /></div>;
   }
 
-  if (state.screen === "reward") {
+  if (state.screen === "reward" && !cardPresentation) {
     const summary = state.lastRoundSummary;
-    const rewardArtCard = (summary ? cardsFor(state, summary.collectionCardIds) : [])[0]
-      ?? state.deck.find((card) => card.month === stage.month)
-      ?? state.deck[0];
     return marketShell(
       { assetTag: "ui:reward:ink-pouch", title: "판 승리", subtitle: "판돈을 받아 갑니다", tone: "reward" },
       "판을 넘겼습니다",
@@ -593,7 +891,6 @@ export default function GameApp() {
           amount: state.lastRoundReward,
           title: "판돈과 박 보상",
           description: `${format(state.chain.roundScore)}점으로 목표 달성`,
-          imageUrl: rewardArtCard ? getCardArtUrl(rewardArtCard) : undefined,
           reasons: summary?.rewardReasons,
           scores: summary ? {
             submission: summary.submissionScore,
@@ -615,7 +912,9 @@ export default function GameApp() {
   if (state.screen === "shop") {
     const offers = state.shopOffers.flatMap((offer) => {
       const definition = getDefinitionForOffer(offer);
-      const detailLabel = offer.category === "pack"
+      let description = definition?.description ?? "";
+      let comparison: { current: string; next: string } | undefined;
+      let detailLabel = offer.category === "pack"
         ? "개봉하면 무료 후보 3장"
         : offer.category === "talisman"
           ? "빈 부적 칸에 바로 장착"
@@ -624,13 +923,30 @@ export default function GameApp() {
             : offer.category === "painter"
               ? "구매 후 바꿀 카드를 고름"
               : "대가를 확인하고 사용";
+
+      if (offer.category === "book") {
+        const book = BOOK_BY_ID[offer.definitionId];
+        if (book) {
+          const level = state.yakuLevels[book.yakuId]?.level ?? 1;
+          comparison = getBookLevelPreview(book.yakuId, level);
+          description = `${book.description} 아래에서 현재 효과와 구매 후 효과를 비교할 수 있습니다.`;
+          detailLabel = "구매 즉시 이번 판 끝까지 적용";
+        }
+      } else if (offer.category === "forbidden") {
+        const forbidden = FORBIDDEN_BY_ID[offer.definitionId];
+        if (forbidden) {
+          description = `얻는 것 · ${forbidden.benefit}`;
+          detailLabel = `치르는 대가 · ${forbidden.cost} · 구매 즉시 발동, 되돌릴 수 없음`;
+        }
+      }
       return definition
         ? [{
             offer,
             name: definition.name,
-            description: definition.description,
+            description,
             assetTag: definition.assetTag,
             detailLabel,
+            comparison,
             recommended: tutorialActive && offer.definitionId === "t_first_charm" && !offer.sold,
           }]
         : [];
@@ -650,6 +966,15 @@ export default function GameApp() {
         openedPack={openedPack}
         rerollCost={state.rerollCost}
         canReroll={true}
+        ownedTalismans={talismanItems.map(({ instance, definition }) => ({
+          instanceId: instance.instanceId,
+          name: definition.name,
+          description: definition.description,
+          assetTag: definition.assetTag,
+          sellPrice: Math.max(1, Math.floor(definition.price / 2)),
+        }))}
+        onSellTalisman={(instanceId) => dispatch({ type: "SELL_TALISMAN", instanceId })}
+        onOpenDeck={() => dispatch({ type: "OPEN_SCREEN", screen: "deck_editor" })}
         onBuyOffer={(offerId) => dispatch({ type: "BUY_OFFER", offerId })}
         onReroll={() => dispatch({ type: "REROLL_SHOP" })}
         onLeave={() => dispatch({ type: "NEXT_STAGE" })}
@@ -663,14 +988,15 @@ export default function GameApp() {
       return definition ? [{ definition }] : [];
     });
     return marketShell(
-      { assetTag: "ui:contract:season-scroll", title: "계절 결산", subtitle: "런 끝까지 남는 계약", tone: "contract" },
+      { assetTag: "ui:contract:season-scroll", title: "계절 결산", subtitle: "열두 달 내내 남는 계약", tone: "contract" },
       `${state.stage}월 계절 결산`,
       <MarketScreen
         mode="contract"
+        className="market-panel--contract"
         assetTag="ui:contract:season-scroll"
         stageLabel={`${state.stage}월 계절 결산`}
         money={state.money}
-        description="한 번 고르면 이번 런 내내 유지됩니다."
+        description="한 번 고르면 이번 판 내내 유지됩니다."
         contracts={contracts}
         selectedContractId={selectedContract}
         onSelectContract={setSelectedContract}
@@ -684,7 +1010,11 @@ export default function GameApp() {
     );
   }
 
-  if (state.screen === "run_win" || state.screen === "run_lose") {
+  // Keep the live board mounted until the final submitted hand has finished
+  // travelling into the real collection rail. Otherwise a last-hand loss
+  // swaps the rail for the result screen before the player can see the cards
+  // land, and every collection flight falls back to an invisible target.
+  if ((state.screen === "run_win" || state.screen === "run_lose") && !cardPresentation) {
     const isWin = state.screen === "run_win";
     return (
       <div className="game-root">
@@ -725,6 +1055,29 @@ export default function GameApp() {
   // A live selection wins; otherwise the last scored hand stays on the rail so
   // the reveal has somewhere to play out after the cards have left the hand.
   const shownBreakdown = preview?.breakdown ?? state.lastScore;
+  const theaterReveal = submissionPlayback && state.lastScore
+    ? submissionBeatToReveal(
+        submissionPlayback.beat,
+        submissionPlayback.index,
+        submissionPlayback.count,
+        state.lastScore.score,
+      )
+    : undefined;
+  const activeReveal = theaterReveal
+    ?? (state.lastScore && shownBreakdown === state.lastScore ? reveal : undefined);
+  const discardSnapshot = cardPresentation?.kind === "discard" ? cardPresentation : null;
+  const inlineHand = getInlineHandPresentation(
+    discardSnapshot?.handBefore ?? state.hand,
+    state.hand,
+    discardSnapshot?.cards ?? [],
+    discardPlayback,
+  );
+  const visibleHand = inlineHand.cards;
+  const handFanClassName = [
+    "hand-fan",
+    state.selectedCardIds.length > 0 && "hand-fan--selecting",
+    discardSnapshot && "hand-fan--resolving",
+  ].filter(Boolean).join(" ");
   const drawnCount = state.drawPile.length;
   const deckTotal = state.deck.length;
 
@@ -734,7 +1087,9 @@ export default function GameApp() {
         <CollectionBoard
           assetTag="ui:collection-board"
           items={collections}
-          scoreLabel={`수집 ${format(state.chain.collectionScore)}점 · 고스톱 ${format(state.chain.collectionScore / 20)}점`}
+          scoreLabel={`수집 ${format(visibleCollectionScore)}점 · 고스톱 ${format(visibleCollectionPoints)}점`}
+          landingOriginId={collectionLanding?.originId ?? null}
+          landingKind={collectionLanding?.kind ?? null}
         />
       </aside>
 
@@ -744,7 +1099,7 @@ export default function GameApp() {
             assetTag="ui:talisman-strip"
             items={talismanItems}
             slots={getEffectiveTalismanSlots(state)}
-            firingInstanceId={reveal.playing ? reveal.current?.sourceId ?? null : null}
+            firingInstanceId={activeReveal?.playing ? activeReveal.current?.sourceId ?? null : null}
           />
         </div>
 
@@ -752,7 +1107,7 @@ export default function GameApp() {
           <aside className="go-danger-banner" role="status" data-tutorial="go-banner">
             <strong>{state.chain.goCount}고 진행 중</strong>
             <span>
-              {format(requirement)}점 문턱까지 {format(remainingToClear)}점 남음 · 못 넘기면 런이 끝납니다
+              {format(requirement)}점 문턱까지 {format(remainingToClear)}점 남음 · 못 넘기면 이번 도전이 끝납니다
             </span>
           </aside>
         ) : null}
@@ -768,25 +1123,34 @@ export default function GameApp() {
             {/* `--selecting` dims everything the player did NOT pick, which is the
                 only cue that reads at a glance across eight fanned cards. */}
             <ul
-              className={state.selectedCardIds.length > 0 ? "hand-fan hand-fan--selecting" : "hand-fan"}
+              className={handFanClassName}
               aria-label="내 손패"
+              aria-busy={Boolean(discardSnapshot)}
               data-tutorial="hand"
-              style={{ "--n": state.hand.length } as React.CSSProperties}
+              style={{ "--n": visibleHand.length } as React.CSSProperties}
             >
-              {state.hand.map((card, index) => (
-                <li key={card.instanceId} style={{ "--i": index } as React.CSSProperties}>
+              {visibleHand.map((card, index) => {
+                const cardClassName = [
+                  drawFeedbackIds.has(card.instanceId) && "hand-card--drawn",
+                  inlineHand.discardedIds.has(card.instanceId) && "hand-card--discarded",
+                  inlineHand.discardingId === card.instanceId && "hand-card--discarding",
+                  inlineHand.drawingId === card.instanceId && "hand-card--inline-drawn",
+                ].filter(Boolean).join(" ") || undefined;
+                return (
+                <li className={cardClassName} key={card.instanceId} style={{ "--i": index } as React.CSSProperties}>
                   <HwatuCard
                     dense
                     card={card}
                     selected={state.selectedCardIds.includes(card.instanceId)}
                     scoring={Boolean(preview?.breakdown.scoringCardIds.includes(card.instanceId))}
                     splitRole={splitRoleOf(card.instanceId)}
-                    disabled={isDecision}
+                    disabled={isDecision || Boolean(discardSnapshot)}
                     cupRole={card.tags.includes("cup") ? state.cupAssignments[card.instanceId] : undefined}
                     onSelect={(selected) => dispatch({ type: "SELECT_CARD", cardId: selected.instanceId })}
                   />
                 </li>
-              ))}
+                );
+              })}
             </ul>
 
 {/* The face-down pile IS the deck button. Putting it behind a "내 덱" link in
@@ -799,7 +1163,7 @@ export default function GameApp() {
               onClick={() => dispatch({ type: "OPEN_SCREEN", screen: "deck_editor" })}
             >
               <span className="deck-stack__back" data-asset-tag="ui:card-back:hanji" aria-hidden="true" />
-              <strong>{drawnCount} / {deckTotal}</strong>
+              <strong><small>남은 덱</small><span>{drawnCount} / {deckTotal}장</span></strong>
               <em>덱 보기</em>
             </button>
           </div>
@@ -829,8 +1193,8 @@ export default function GameApp() {
         {state.screen === "play" ? (
           <footer className="hand-actions">
             <button type="button" disabled={!state.selectedCardIds.length} onClick={() => dispatch({ type: "CLEAR_SELECTION" })}>선택 해제</button>
-            <button type="button" className="primary-action" disabled={!preview || state.handsRemaining <= 0} data-tutorial="submit" onClick={() => dispatch({ type: "SUBMIT_HAND" })}><strong>제출</strong><span>{`${state.handsRemaining}회 남음`}</span></button>
-            <button type="button" className="discard-action" disabled={!state.selectedCardIds.length || state.discardsRemaining <= 0} data-tutorial="discard" onClick={() => dispatch({ type: "DISCARD_SELECTED" })}><strong>버리기</strong><span>{state.discardsRemaining}회 남음</span></button>
+            <button type="button" className="primary-action" disabled={!preview || state.handsRemaining <= 0 || Boolean(cardPresentation) || Boolean(state.pendingCupCardId)} data-tutorial="submit" onClick={beginSubmitPresentation}><strong>제출</strong><span>{`${state.handsRemaining}회 남음`}</span></button>
+            <button type="button" className="discard-action" disabled={!state.selectedCardIds.length || state.discardsRemaining <= 0 || Boolean(cardPresentation) || Boolean(state.pendingCupCardId)} data-tutorial="discard" onClick={beginDiscardPresentation}><strong>버리기</strong><span>{state.discardsRemaining}회 남음</span></button>
           </footer>
         ) : (
           <footer className="decision-actions decision-actions--two">
@@ -839,7 +1203,10 @@ export default function GameApp() {
               className="stop-action"
               data-tutorial="stop"
               disabled={goRequired}
-              onClick={() => dispatch({ type: "STOP_ROUND" })}
+              onClick={() => {
+                primeGameAudio();
+                dispatch({ type: "STOP_ROUND" });
+              }}
             >
               <strong>스톱</strong>
               <span>
@@ -877,22 +1244,24 @@ export default function GameApp() {
         bossLabel={boss?.name ?? null}
         targetScore={requirement}
         rewardLabel={`${baseReward}냥`}
-        roundScore={state.chain.roundScore}
+        roundScore={visibleRoundScore}
         submissionScore={state.chain.submissionScore}
-        collectionScore={state.chain.collectionScore}
+        collectionScore={visibleCollectionScore}
         goCount={state.chain.goCount}
         breakdown={shownBreakdown}
-        reveal={state.lastScore && shownBreakdown === state.lastScore ? reveal : undefined}
+        reveal={activeReveal}
         formulaCaption={
           shownBreakdown
-            ? reveal.playing
-              ? `효과 적용 중 ${reveal.index}/${reveal.count}`
+            ? submissionPlayback
+              ? `${submissionPlayback.beat.eyebrow} · ${submissionPlayback.beat.title}`
+              : reveal.playing
+                ? `효과 적용 중 ${reveal.index}/${reveal.count}`
               : shownBreakdown === state.lastScore
                 ? "방금 낸 점수"
                 : `짓 ${shownBreakdown.startingKkeut} × 끗패 배수 · 제출하면 효과가 붙습니다`
             : state.selectedCardIds.length
               ? "짓의 월 합이 10의 배수가 되어야 합니다"
-              : "2~5장을 고르면 가장 높은 짓·끗패 갈래가 자동으로 붙습니다"
+              : "먼저 고른 두 장은 끗패, 그다음 패는 짓이 됩니다"
         }
         handsRemaining={state.handsRemaining}
         discardsRemaining={state.discardsRemaining}
@@ -906,10 +1275,21 @@ export default function GameApp() {
 
       <CupChoiceModal
         card={pendingCupCard}
+        preview={cupRolePreview}
         onChoose={(role) => {
-          if (state.pendingCupCardId) {
-            dispatch({ type: "ASSIGN_CUP_ROLE", cardId: state.pendingCupCardId, role });
-          }
+          const cardId = state.pendingCupCardId;
+          if (!cardId) return;
+          setCardPresentation((current) => {
+            if (current?.kind !== "submit") return current;
+            const assignedRoles = typeof current.collectionCupRoles === "string"
+              ? {}
+              : current.collectionCupRoles;
+            return {
+              ...current,
+              collectionCupRoles: { ...assignedRoles, [cardId]: role },
+            };
+          });
+          dispatch({ type: "ASSIGN_CUP_ROLE", cardId, role });
         }}
       />
       {tutorialStep ? (
@@ -926,7 +1306,8 @@ export default function GameApp() {
         />
       ) : null}
       <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />
-      <GameModal id="restart-run" open={restartOpen} assetTag="ui:warning:restart" title="현재 런을 끝낼까요?" description="저장된 달력과 덱이 초기화됩니다." onClose={() => setRestartOpen(false)} actions={[{ id: "cancel", label: "계속 플레이", onClick: () => setRestartOpen(false) }, { id: "reset", label: "제목으로", variant: "danger", onClick: resetToTitle }]} />
+      <GameModal id="restart-run" open={restartOpen} assetTag="ui:warning:restart" title="현재 판을 끝낼까요?" description="저장된 달력과 덱이 초기화됩니다." onClose={() => setRestartOpen(false)} actions={[{ id: "cancel", label: "계속 플레이", onClick: () => setRestartOpen(false) }, { id: "reset", label: "제목으로", variant: "danger", onClick: resetToTitle }]} />
+      {cardTheater}
     </div>
   );
 }
@@ -1037,33 +1418,45 @@ function PackPickModal({ pack, onPick, onClose }: {
   );
 }
 
-function CupChoiceModal({ card, onChoose }: {
+function CupChoiceModal({ card, preview, onChoose }: {
   card: CardInstance | null;
+  preview: CupRolePreviewCounts | null;
   onChoose: (role: "animal" | "double_chaff") => void;
 }) {
+  const labels = getCupChoiceActionLabels(preview);
   return (
     <GameModal
       id="cup-role"
       open={Boolean(card)}
       assetTag={card?.assetTag ?? "card-09-animal-cup"}
       title="술잔을 수집판 어디에 기록할까요?"
-      description="이번 손의 점수는 이미 확정됐습니다. 이 선택은 수집판 기록과 앞으로의 지속 배수에만 적용됩니다."
+      description="이번 손의 제출 점수는 이미 확정됐습니다. 이 선택은 수집판 기록과 이번 판 수집 점수에 적용됩니다."
       closeOnBackdrop={false}
-      closeLabel="나중에"
+      closeLabel="동물로 기록"
       onClose={() => onChoose("animal")}
+      className="game-modal--cup"
       actions={[
-        { id: "animal", label: "동물로 기록 · 동물 1장", variant: "primary", onClick: () => onChoose("animal") },
-        { id: "chaff", label: "피로 기록 · 피 2점", variant: "primary", onClick: () => onChoose("double_chaff") },
+        { id: "animal", label: labels.animal, variant: "primary", onClick: () => onChoose("animal") },
+        { id: "chaff", label: labels.chaff, variant: "primary", onClick: () => onChoose("double_chaff") },
       ]}
     >
-      <div className="rules-copy">
+      {preview ? (
+        <div className="cup-choice__current" aria-label={`술잔을 빼고 현재 동물 ${preview.current.animal}장, 피 ${preview.current.chaff}점`}>
+          <p>술잔을 아직 넣지 않은 현재 수집</p>
+          <div>
+            <span><small>동물</small><strong>{preview.current.animal}<i>장</i></strong></span>
+            <span><small>피</small><strong>{preview.current.chaff}<i>점</i></strong></span>
+          </div>
+        </div>
+      ) : null}
+      <div className="rules-copy cup-choice__rules">
         <section>
           <h3>동물로 기록</h3>
-          <p>동물 줄이 한 칸 채워집니다. 동물 5장 <strong>+2배수</strong>와 그 뒤 장당 <strong>+0.5배수</strong>를 노릴 때 유리합니다.</p>
+          <p>동물 줄에 기록합니다. 동물은 5장부터 <strong>1점</strong>, 이후 한 장마다 <strong>+1점</strong>입니다.</p>
         </section>
         <section>
           <h3>피로 기록</h3>
-          <p>피 줄이 두 칸 채워집니다. 피 5점 <strong>+1배수</strong>, 10점 <strong>+4배수</strong> 문턱을 앞당길 때 유리합니다.</p>
+          <p>피 줄에 2점으로 기록합니다. 피는 10점부터 <strong>1점</strong>, 이후 피 1점마다 <strong>+1점</strong>입니다.</p>
         </section>
       </div>
     </GameModal>

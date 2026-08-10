@@ -30,7 +30,7 @@ export const BOSSES = [
     name: "먹구름",
     description: "광은 족보 판정에 참여하지만 월값이 0이 됨.",
     ruleKey: "bright_zero",
-    counterplay: "월 합 추가 효과나 월쌍·연월 족보로 잃은 월값을 보완.",
+    counterplay: "광을 짓패보다 끗패로 먼저 고르거나 월 합을 더하는 부적으로 보완.",
     assetTag: "boss:dark-cloud",
   },
   {
@@ -46,7 +46,7 @@ export const BOSSES = [
     name: "짝 잃은 달",
     description: "직전 판에서 가장 많이 득점한 월 카드의 월값이 절반으로 감소.",
     ruleKey: "popular_month_weak",
-    counterplay: "두 번째로 강한 월·종류 엔진을 준비.",
+    counterplay: "자주 쓰던 월에만 기대지 말고 다른 월과 종류 조합도 준비.",
     assetTag: "boss:lost-pair-moon",
   },
   {
@@ -83,10 +83,10 @@ export const BOSSES = [
   },
   {
     id: "boss_reverse_calendar",
-    name: "역달력",
-    description: "연월 족보는 월을 내림차순으로 배치했을 때만 성립.",
-    ruleKey: "reverse_runs",
-    counterplay: "미리보기 안내에 맞춰 카드 순서를 역순으로 정렬.",
+    name: "안개 병풍",
+    description: "패를 보충할 때마다 새로 들어온 카드 두 장이 뒷면으로 놓임.",
+    ruleKey: "two_face_down",
+    counterplay: "뒷면 패를 먼저 눌러 확인한 뒤 끗패 두 장의 선택 순서를 정함.",
     assetTag: "boss:reverse-calendar",
   },
   {
@@ -94,7 +94,7 @@ export const BOSSES = [
     name: "나가리 왕",
     description: "고 성공이 없는 0고 정산은 이번 승부 점수의 80%만 확정.",
     ruleKey: "zero_go_reduced",
-    counterplay: "고 엔진을 사용하거나 손 하나의 점수를 크게 키움.",
+    counterplay: "고를 한 번 성공시키거나 한 번의 제출 점수를 크게 키움.",
     assetTag: "boss:nagari-king",
   },
 ] as const satisfies readonly BossDefinition[];

@@ -31,9 +31,15 @@ import {
   applyPainterEffect,
   applyStartDeck,
 } from "../engine/consumables";
-import { rollCardEffectTag } from "../content/card-effects";
+import { rollCardEffectTagForCard } from "../content/card-effects";
 import { calculateCollectionBonus } from "../engine/collection-bonus";
-import { createStandardHwatuDeck, isCupCard, type CupRole } from "../engine/deck";
+import {
+  createStandardHwatuDeck,
+  hasEffectiveCardKind,
+  isCupCard,
+  resolveCupRole,
+  type CupRole,
+} from "../engine/deck";
 import {
   evaluateBakContract,
   resolveYardCapture,
@@ -152,6 +158,7 @@ export function createInitialGameState(seed = DEFAULT_SEED): GameState {
     selectedCardIds: [],
     cupAssignments: {},
     pendingCupCardId: null,
+    pendingCupExtraDiscardsBefore: null,
     handsRemaining: 4,
     // 버리기는 제출보다 훨씬 값이 싸다. 그리디 시뮬레이션에서 제출 한 번은
     // 라운드 점수의 약 25%를 만들지만 버리기 한 번은 3.5%뿐이었다. 4:4로 두면
@@ -175,6 +182,7 @@ export function createInitialGameState(seed = DEFAULT_SEED): GameState {
     yakuLevels: initialYakuLevels(),
     unlockedSecretYakuIds: [],
     shopOffers: [],
+    lastForbiddenOfferId: null,
     shopType: null,
     pendingPack: null,
     rerollCost: 2,
@@ -294,10 +302,12 @@ function refillHand(state: GameState, currentHand: CardInstance[]): GameState {
     usedPile = [];
   }
   const drawn = pile.slice(0, needed).map(cloneCard);
+  const luckyDiscards = drawn.filter((card) => card.effectTagId === "drawn_luck").length;
   const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
   return {
     ...state,
     rngCursor: cursor,
+    discardsRemaining: state.discardsRemaining + luckyDiscards,
     hand: state.tutorialMode && state.stage === 1
       ? sortHand([...currentHand, ...faceDownForBoss(drawn, boss)])
       : [...currentHand, ...faceDownForBoss(drawn, boss)],
@@ -406,6 +416,7 @@ function startStage(state: GameState): GameState {
     usedPile: [],
     selectedCardIds: [],
     pendingCupCardId: null,
+    pendingCupExtraDiscardsBefore: null,
     handsRemaining: hands,
     discardsRemaining: discards,
     chain: createGoChainState(),
@@ -575,7 +586,7 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
       collection,
       yakuLevels: state.yakuLevels,
       cupRole,
-      // 윤달 달력 부적이든 고도리 완성이든, 둘 중 하나면 5의 배수도 짓이 된다.
+      // 반짓 셈판 부적이나 고도리 완성 효과가 있으면 5의 배수도 짓이 된다.
       allowFiveMultipleJit: rules.allowsFiveMultipleJit || collectionPerks(state).allowFiveMultipleJit,
       includeSecretYaku: true,
     } as const;
@@ -586,9 +597,11 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
       const candidate: YakuCandidate = {
         yakuId: base.yakuId,
         scoringCardIds: base.scoringCardIds,
-        jitCardIds: [],
-        jitSum: base.startingKkeut,
+        jitCardIds: [...base.jitCardIds],
+        jitSum: base.jitSum,
         label: base.yakuName,
+        rankLabel: base.rankLabel,
+        rankBonusHeung: base.operations.find((operation) => operation.sourceId === `${base.yakuId}:rank`)?.value,
       };
       const scoringIds = new Set(base.scoringCardIds);
       const scoringCards = evaluatedSubmission.filter((card) => scoringIds.has(card.instanceId));
@@ -675,6 +688,7 @@ function applyCardAftermath(state: GameState, scored: ScoredSelection): GameStat
   const scoringCards = scored.submitted.filter((item) => scoringIds.has(item.instanceId));
   for (const card of scoringCards) {
     if (card.seal === "yellow") money += 2;
+    if (card.effectTagId === "gilded") money += 1;
     if (card.enhancement === "fortune") {
       if (randomAt(`${state.seed}:fortune-money`, cursor++) < 0.08) money += 12;
     }
@@ -683,7 +697,9 @@ function applyCardAftermath(state: GameState, scored: ScoredSelection): GameStat
     }
   }
   // 무광 연습 — the drought only counts hands that actually scored.
-  const scoredABright = scoringCards.some((card) => card.kind === "bright");
+  const scoredABright = scoringCards.some((card) =>
+    hasEffectiveCardKind(card, "bright", resolveCupRole(state.cupAssignments, card)),
+  );
   talismans = talismans.map((item) => {
     const definition = TALISMAN_BY_ID[item.definitionId];
     if (definition?.effectKey !== "bright_drought_growth") return item;
@@ -693,7 +709,9 @@ function applyCardAftermath(state: GameState, scored: ScoredSelection): GameStat
 
   const cremation = talismans.find((item) => item.definitionId === "t_cremation_deed");
   if (cremation && !roundTalismanUses.t_cremation_deed) {
-    const firstChaff = scoringCards.find((card) => card.kind === "chaff");
+    const firstChaff = scoringCards.find((card) =>
+      hasEffectiveCardKind(card, "chaff", resolveCupRole(state.cupAssignments, card)),
+    );
     if (firstChaff) {
       burned.add(firstChaff.instanceId);
       talismans = talismans.map((item) => item.instanceId === cremation.instanceId
@@ -796,6 +814,7 @@ function finishRound(state: GameState): GameState {
     adjustment: talismanReward.moneyDelta + bak.bonusMoney + collectionPerks(state).moneyBonus,
   });
   const heldCoinMoney = state.hand.filter((card) => card.enhancement === "coin").length * 2;
+  const keeperCoinMoney = state.hand.filter((card) => card.effectTagId === "keeper_coin").length * 3;
   const blueSeals = state.hand.filter((card) => card.seal === "blue").length;
   // Going further multiplies the whole purse, and the boss/deck settlement
   // modifiers now land on the money instead of on a separate banked score.
@@ -804,7 +823,7 @@ function finishRound(state: GameState): GameState {
     * talismanRules.settlementFactor;
   const reward = Math.max(
     0,
-    Math.floor((rewardBreakdown.total + heldCoinMoney) * settlement.rewardFactor * settlementFactor),
+    Math.floor((rewardBreakdown.total + heldCoinMoney + keeperCoinMoney) * settlement.rewardFactor * settlementFactor),
   );
   const collectionResult = calculateCollectionBonus(
     cardsFromIds(state, state.chain.collection.cardIds),
@@ -818,6 +837,7 @@ function finishRound(state: GameState): GameState {
     ...(rewardBreakdown.overkill > 0 ? [{ id: "overkill", label: "목표를 크게 넘겨서", detail: `${state.chain.roundScore.toLocaleString("ko-KR")}점 달성`, amount: rewardBreakdown.overkill }] : []),
     ...(rewardBreakdown.adjustment > 0 ? [{ id: "special", label: "부적·계약 효과로", detail: "추가 판돈", amount: rewardBreakdown.adjustment }] : []),
     ...(heldCoinMoney > 0 ? [{ id: "coin", label: "금전패를 남겨서", detail: `금전패 ${heldCoinMoney / 2}장`, amount: heldCoinMoney }] : []),
+    ...(keeperCoinMoney > 0 ? [{ id: "keeper-coin", label: "곳간패를 남겨서", detail: `곳간패 ${keeperCoinMoney / 3}장`, amount: keeperCoinMoney }] : []),
     ...((settlement.rewardFactor * settlementFactor) !== 1 ? [{ id: "factor", label: "고 판돈을 불려서", detail: "최종 판돈 배율", multiplier: Number((settlement.rewardFactor * settlementFactor).toFixed(2)) }] : []),
   ];
   let yakuLevels = settlement.masteryLevels;
@@ -883,6 +903,89 @@ function loseRound(state: GameState, detail: string): GameState {
   };
 }
 
+function nextUnassignedCollectedCupId(
+  state: GameState,
+  cupAssignments: GameState["cupAssignments"] = state.cupAssignments,
+): string | null {
+  return cardsFromIds(state, state.chain.collection.cardIds)
+    .find((card) => isCupCard(card) && !cupAssignments[card.instanceId])
+    ?.instanceId ?? null;
+}
+
+/** Applies the complete board exactly once after every surviving cup is filed. */
+function finalizeDeferredCupCollection(state: GameState): GameState {
+  const collectionScore = calculateCollectionBonus(
+    cardsFromIds(state, state.chain.collection.cardIds),
+    state.cupAssignments,
+    state.yakuLevels,
+  ).goStopPoints * 20;
+  const chain = {
+    ...state.chain,
+    collectionScore,
+    roundScore: state.chain.submissionScore + collectionScore,
+  };
+  const extraDiscardsAfter = collectionPerks({ ...state, chain }).extraDiscards;
+  const grantedDiscards = state.pendingCupExtraDiscardsBefore == null
+    ? 0
+    : Math.max(0, extraDiscardsAfter - state.pendingCupExtraDiscardsBefore);
+  return {
+    ...state,
+    chain,
+    discardsRemaining: state.discardsRemaining + grantedDiscards,
+    pendingCupCardId: null,
+    pendingCupExtraDiscardsBefore: null,
+  };
+}
+
+/**
+ * Resolves the part of a successful submission that may change screens or draw
+ * cards. A newly collected cup pauses immediately before this point so its
+ * chosen collection role can update the round score first.
+ */
+function resolveSubmittedHandOutcome(state: GameState): GameState {
+  const requirement = getRoundRequirement(state);
+  const cleared = isRequirementCleared(state.chain, requirement);
+
+  // Clearing the bar opens the Go/Stop decision. Nothing else ends the round.
+  if (cleared) {
+    if (mustDeclareGo(state) && !canDeclareGo(state.chain, state.handsRemaining)) {
+      return loseRound(state, "두목이 요구한 고를 선언할 기회가 남지 않았습니다.");
+    }
+    return { ...state, screen: "decision" };
+  }
+
+  if (state.handsRemaining <= 0) {
+    // A called Go that never landed is the classic 고박: the run ends here.
+    if (state.chain.goCount > 0) {
+      const talismanFailure = calculateTalismanGoFailureAdjustment({
+        talismans: state.talismans,
+        failed: true,
+        rescueRoll: randomAt(`${state.seed}:go-rescue:${state.stage}`, state.rngCursor),
+      });
+      const failed: GameState = {
+        ...state,
+        rngCursor: state.rngCursor + 1,
+        money: Math.max(0, state.money - state.failMoneyPenalty + talismanFailure.moneyDelta),
+        stats: { ...state.stats, goFailures: state.stats.goFailures + 1 },
+      };
+      if (talismanFailure.rescued) {
+        return finishRound({
+          ...failed,
+          chain: { ...failed.chain, goCount: (failed.chain.goCount - 1) as GameState["chain"]["goCount"] },
+          logs: logEntry(failed, "system", "고 실패 구제", "부적이 고 한 단계를 물러 주었습니다."),
+        });
+      }
+      return loseRound(
+        failed,
+        `${failed.chain.goCount}고 문턱 ${requirement.toLocaleString("ko-KR")}점에 ${(requirement - failed.chain.roundScore).toLocaleString("ko-KR")}점 부족`,
+      );
+    }
+    return loseRound(state, `목표 ${requirement.toLocaleString("ko-KR")}점에 닿지 못했습니다.`);
+  }
+
+  return refillHand({ ...state, screen: "play" }, state.hand);
+}
+
 function submitHand(state: GameState): GameState {
   if (state.screen !== "play" || state.handsRemaining <= 0 || state.pendingCupCardId) return state;
   const scored = evaluateSelectedHand(state);
@@ -910,14 +1013,20 @@ function submitHand(state: GameState): GameState {
     submittedCardIds: collectedIds,
     completedCollectionYakuIds: scored.breakdown.newCollectionYakuIds,
     masteryEvents: mastery,
-    collectionScore: collectionResult.goStopPoints * 20,
+    // An unfiled cup has no collection role yet. Keep the previous collection
+    // score visible until ASSIGN_CUP_ROLE recomputes the complete board.
+    collectionScore: pendingCupCardId
+      ? state.chain.collectionScore
+      : collectionResult.goStopPoints * 20,
   });
 
   // 단은 완성되는 순간 버리기를 준다. 앞뒤 상태의 특전을 빼서 차이만 지급하므로
   // 같은 줄을 두 번 완성해도 두 번 주지 않는다.
   const perksBefore = collectionPerks(state);
   const perksAfter = collectionPerks({ ...state, chain });
-  const grantedDiscards = Math.max(0, perksAfter.extraDiscards - perksBefore.extraDiscards);
+  const grantedDiscards = pendingCupCardId
+    ? 0
+    : Math.max(0, perksAfter.extraDiscards - perksBefore.extraDiscards);
   const handsRemaining = state.handsRemaining - 1;
 
   let next: GameState = {
@@ -928,6 +1037,7 @@ function submitHand(state: GameState): GameState {
     discardsRemaining: state.discardsRemaining + grantedDiscards,
     selectedCardIds: [],
     pendingCupCardId,
+    pendingCupExtraDiscardsBefore: pendingCupCardId ? perksBefore.extraDiscards : null,
     chain,
     lastScore: scored.breakdown,
     unlockedSecretYakuIds: unlockSecret(state, scored.breakdown.yakuId),
@@ -963,47 +1073,18 @@ function submitHand(state: GameState): GameState {
   };
   next = applyCardAftermath(next, scored);
 
-  const requirement = getRoundRequirement(next);
-  const cleared = isRequirementCleared(next.chain, requirement);
+  if (pendingCupCardId) {
+    // Glass, cremation, and similar aftermath may remove a cup before the modal
+    // can open. Rebuild the queue from cards that still exist in the deck.
+    const survivingPendingCupId = nextUnassignedCollectedCupId(next);
+    next = { ...next, pendingCupCardId: survivingPendingCupId };
+    if (survivingPendingCupId) return next;
 
-  // Clearing the bar opens the Go/Stop decision. Nothing else ends the round.
-  if (cleared) {
-    if (mustDeclareGo(next) && !canDeclareGo(next.chain, handsRemaining)) {
-      return loseRound(next, "두목이 요구한 고를 선언할 기회가 남지 않았습니다.");
-    }
-    return { ...next, screen: "decision" };
+    // No choice remains, but the rest of this submission still belongs on the
+    // board and may complete score lines or one-shot collection perks.
+    next = finalizeDeferredCupCollection(next);
   }
-
-  if (handsRemaining <= 0) {
-    // A called Go that never landed is the classic 고박: the run ends here.
-    if (next.chain.goCount > 0) {
-      const talismanFailure = calculateTalismanGoFailureAdjustment({
-        talismans: next.talismans,
-        failed: true,
-        rescueRoll: randomAt(`${state.seed}:go-rescue:${state.stage}`, next.rngCursor),
-      });
-      const failed: GameState = {
-        ...next,
-        rngCursor: next.rngCursor + 1,
-        money: Math.max(0, next.money - next.failMoneyPenalty + talismanFailure.moneyDelta),
-        stats: { ...next.stats, goFailures: next.stats.goFailures + 1 },
-      };
-      if (talismanFailure.rescued) {
-        return finishRound({
-          ...failed,
-          chain: { ...failed.chain, goCount: (failed.chain.goCount - 1) as GameState["chain"]["goCount"] },
-          logs: logEntry(failed, "system", "고 실패 구제", "부적이 고 한 단계를 물러 주었습니다."),
-        });
-      }
-      return loseRound(
-        failed,
-        `${failed.chain.goCount}고 문턱 ${requirement.toLocaleString("ko-KR")}점에 ${(requirement - failed.chain.roundScore).toLocaleString("ko-KR")}점 부족`,
-      );
-    }
-    return loseRound(next, `목표 ${requirement.toLocaleString("ko-KR")}점에 닿지 못했습니다.`);
-  }
-
-  return refillHand({ ...next, screen: "play" }, remainingHand);
+  return resolveSubmittedHandOutcome(next);
 }
 
 function discardSelected(state: GameState): GameState {
@@ -1149,9 +1230,12 @@ function generateShopOffers(state: GameState): { offers: ShopOffer[]; cursor: nu
   for (const category of SHOP_CATEGORIES) {
     const size = SHOP_DEPARTMENT_SIZES[category];
     if (size <= 0) continue;
-    const pool = category === "painter"
+    const basePool = category === "painter"
       ? categoryPool(state, category).filter((entry) => WORKSHOP_PAINTER_IDS.includes(entry.id))
       : categoryPool(state, category);
+    const pool = category === "forbidden" && basePool.length > 1
+      ? basePool.filter((entry) => entry.id !== state.lastForbiddenOfferId)
+      : basePool;
     const picked = draw(pool, size, `shop:${category}`);
     if (tutorialFirstShop && category === "talisman" && TALISMAN_BY_ID.t_first_charm) {
       picked[0] = TALISMAN_BY_ID.t_first_charm;
@@ -1201,7 +1285,7 @@ function openCardPack(state: GameState, pack: { id: string; name: string; choice
     const plainChance = pack.id === "pack_hwatu_large" ? 0.2 : 0.3;
     const tag = effectRoll < plainChance
       ? undefined
-      : rollCardEffectTag((effectRoll - plainChance) / (1 - plainChance));
+      : rollCardEffectTagForCard((effectRoll - plainChance) / (1 - plainChance), template);
     candidates.push({
       ...template,
       tags: [...template.tags],
@@ -1399,20 +1483,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (state.pendingCupCardId !== action.cardId) return state;
       const card = state.deck.find((entry) => entry.instanceId === action.cardId);
       const cupAssignments = { ...state.cupAssignments, [action.cardId]: action.role };
-      const collectionScore = calculateCollectionBonus(
-        cardsFromIds(state, state.chain.collection.cardIds),
-        cupAssignments,
-        state.yakuLevels,
-      ).goStopPoints * 20;
-      return {
+      let assigned: GameState = {
         ...state,
         cupAssignments,
-        chain: {
-          ...state.chain,
-          collectionScore,
-          roundScore: state.chain.submissionScore + collectionScore,
-        },
-        pendingCupCardId: null,
         logs: logEntry(
           state,
           "system",
@@ -1420,6 +1493,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           `${card?.name ?? "9월 술잔"} → ${action.role === "animal" ? "동물 1장" : "피 2점"}`,
         ),
       };
+      const nextCupCardId = nextUnassignedCollectedCupId(assigned, cupAssignments);
+      if (nextCupCardId) {
+        return { ...assigned, pendingCupCardId: nextCupCardId };
+      }
+
+      assigned = finalizeDeferredCupCollection(assigned);
+      return resolveSubmittedHandOutcome(assigned);
     }
     case "SUBMIT_HAND":
       return submitHand(state);
@@ -1463,6 +1543,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         screen: "shop",
         shopType: null,
         shopOffers: generated.offers,
+        lastForbiddenOfferId: generated.offers.find((offer) => offer.category === "forbidden")?.definitionId
+          ?? state.lastForbiddenOfferId,
         rngCursor: generated.cursor,
         rerollCost: firstFree ? 0 : baseReroll,
       };
@@ -1482,7 +1564,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         : state.rerollCost === 0
           ? baseReroll + (marketRumor ? 2 : 1)
           : state.rerollCost + (marketRumor ? 2 : 1);
-      return { ...state, money: state.money - state.rerollCost, rngCursor: generated.cursor, shopOffers: generated.offers, rerollCost: nextCost };
+      return {
+        ...state,
+        money: state.money - state.rerollCost,
+        rngCursor: generated.cursor,
+        shopOffers: generated.offers,
+        lastForbiddenOfferId: generated.offers.find((offer) => offer.category === "forbidden")?.definitionId
+          ?? state.lastForbiddenOfferId,
+        rerollCost: nextCost,
+      };
     }
     case "PICK_PACK_CARD": {
       const pack = state.pendingPack;

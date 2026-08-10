@@ -1,5 +1,8 @@
 "use client";
 
+import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
 import type {
   TalismanDefinition,
   TalismanInstance,
@@ -41,6 +44,197 @@ const RARITY_LABELS: Record<TalismanDefinition["rarity"], string> = {
   legendary: "전설",
 };
 
+export interface TalismanHintPosition {
+  left: number;
+  top: number;
+  placement: "above" | "below";
+}
+
+interface TalismanAnchorRect {
+  left: number;
+  top: number;
+  bottom: number;
+  width: number;
+}
+
+export function getTalismanHintPosition(
+  rect: TalismanAnchorRect,
+  viewportWidth: number,
+  viewportHeight: number,
+  tooltipWidth = 320,
+  tooltipHeight = 180,
+): TalismanHintPosition {
+  const margin = 12;
+  const gap = 10;
+  const width = Math.min(tooltipWidth, Math.max(0, viewportWidth - margin * 2));
+  const height = Math.min(tooltipHeight, Math.max(0, viewportHeight - margin * 2));
+  const minimumLeft = margin + width / 2;
+  const maximumLeft = Math.max(minimumLeft, viewportWidth - margin - width / 2);
+  const availableBelow = viewportHeight - margin - rect.bottom - gap;
+  const availableAbove = rect.top - gap - margin;
+  const placement = availableBelow >= height || availableBelow >= availableAbove
+    ? "below"
+    : "above";
+  const preferredTop = placement === "below"
+    ? rect.bottom + gap
+    : rect.top - gap - height;
+  const maximumTop = Math.max(margin, viewportHeight - margin - height);
+
+  return {
+    left: Math.min(maximumLeft, Math.max(minimumLeft, rect.left + rect.width / 2)),
+    top: Math.min(maximumTop, Math.max(margin, preferredTop)),
+    placement,
+  };
+}
+
+interface TalismanSlotProps {
+  item: TalismanStripItem;
+  selected: boolean;
+  firing: boolean;
+  onSelect?: (item: TalismanStripItem) => void;
+}
+
+function TalismanSlot({ item, selected, firing, onSelect }: TalismanSlotProps) {
+  const tooltipId = useId();
+  const [hintPosition, setHintPosition] = useState<TalismanHintPosition | null>(null);
+  const anchorRef = useRef<HTMLElement | null>(null);
+  const hintRef = useRef<HTMLElement | null>(null);
+  const hintVisible = hintPosition !== null;
+  const artUrl = getGeneratedAssetUrl(item.definition.assetTag);
+  const itemClassName = joinClassNames(
+    "talisman-strip__item",
+    selected && "talisman-strip__item--selected",
+    firing && "talisman-strip__item--firing",
+    item.disabled && "talisman-strip__item--disabled",
+  );
+
+  const updateHintPosition = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+
+    const hint = hintRef.current;
+    const next = getTalismanHintPosition(
+      anchor.getBoundingClientRect(),
+      window.innerWidth,
+      window.innerHeight,
+      hint?.offsetWidth ?? 320,
+      hint?.offsetHeight ?? 180,
+    );
+    setHintPosition((current) => (
+      current
+      && current.left === next.left
+      && current.top === next.top
+      && current.placement === next.placement
+        ? current
+        : next
+    ));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!hintVisible) return;
+
+    updateHintPosition();
+    window.addEventListener("resize", updateHintPosition);
+    window.addEventListener("scroll", updateHintPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateHintPosition);
+      window.removeEventListener("scroll", updateHintPosition, true);
+    };
+  }, [hintVisible, updateHintPosition]);
+
+  const showHint = (target: HTMLElement) => {
+    anchorRef.current = target;
+    setHintPosition(getTalismanHintPosition(
+      target.getBoundingClientRect(),
+      window.innerWidth,
+      window.innerHeight,
+    ));
+  };
+  const hideHint = () => {
+    anchorRef.current = null;
+    setHintPosition(null);
+  };
+  const commonProps = {
+    className: itemClassName,
+    "data-asset-tag": item.definition.assetTag,
+    "aria-describedby": hintPosition ? tooltipId : undefined,
+    onPointerEnter: (event: React.PointerEvent<HTMLElement>) => showHint(event.currentTarget),
+    onPointerLeave: hideHint,
+    onFocus: (event: React.FocusEvent<HTMLElement>) => showHint(event.currentTarget),
+    onBlur: hideHint,
+  };
+  const content = (
+    <>
+      <span
+        className={joinClassNames(
+          "talisman-strip__art",
+          Boolean(artUrl) && "talisman-strip__art--generated",
+        )}
+        data-asset-tag={item.definition.assetTag}
+      >
+        {artUrl ? (
+          // Native img avoids optimizer resampling and cover-cropping the pixel art.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={artUrl} alt="" draggable={false} aria-hidden="true" />
+        ) : (
+          <>
+            <span aria-hidden="true">IMG</span>
+            <code>{item.definition.assetTag}</code>
+          </>
+        )}
+      </span>
+      <strong className="talisman-strip__name">{item.definition.name}</strong>
+    </>
+  );
+
+  return (
+    <>
+      {onSelect ? (
+        <button
+          type="button"
+          {...commonProps}
+          aria-pressed={selected}
+          disabled={item.disabled}
+          onClick={() => onSelect(item)}
+        >
+          {content}
+        </button>
+      ) : (
+        <article {...commonProps}>{content}</article>
+      )}
+      {hintPosition && typeof document !== "undefined"
+        ? createPortal(
+          <aside
+            ref={hintRef}
+            id={tooltipId}
+            className="talisman-strip__hint talisman-strip__hint--portal"
+            data-placement={hintPosition.placement}
+            role="tooltip"
+            style={{ left: hintPosition.left, top: hintPosition.top }}
+          >
+            {artUrl ? (
+              // Keep the complete generated art visible inside the measured portal.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                className="talisman-strip__hint-art"
+                src={artUrl}
+                alt={`${item.definition.name} 부적 그림`}
+                draggable={false}
+              />
+            ) : null}
+            <b>{item.definition.name}</b>
+            <em>{RARITY_LABELS[item.definition.rarity]} · {item.definition.price}냥</em>
+            <p>{item.definition.description}</p>
+            {item.instance.growth !== 0 ? <i>성장 +{item.instance.growth}</i> : null}
+            {item.contributionLabel ? <u>{item.contributionLabel}</u> : null}
+          </aside>,
+          document.body,
+        )
+        : null}
+    </>
+  );
+}
+
 export function TalismanStrip({
   assetTag,
   items,
@@ -79,63 +273,14 @@ export function TalismanStrip({
             );
           }
 
-          const isSelected = selectedInstanceId === item.instance.instanceId;
-          const artUrl = getGeneratedAssetUrl(item.definition.assetTag);
-          const itemContent = (
-            <>
-              <span
-                className={joinClassNames(
-                  "talisman-strip__art",
-                  Boolean(artUrl) && "talisman-strip__art--generated",
-                )}
-                data-asset-tag={item.definition.assetTag}
-                style={artUrl ? { backgroundImage: `url("${artUrl}")` } : undefined}
-              >
-                <span aria-hidden="true">IMG</span>
-                <code>{item.definition.assetTag}</code>
-              </span>
-              <strong className="talisman-strip__name">{item.definition.name}</strong>
-
-              <span className="talisman-strip__hint" role="tooltip">
-                <b>{item.definition.name}</b>
-                <em>{RARITY_LABELS[item.definition.rarity]} · {item.definition.price}냥</em>
-                <p>{item.definition.description}</p>
-                {item.instance.growth !== 0 ? <i>성장 +{item.instance.growth}</i> : null}
-                {item.contributionLabel ? <u>{item.contributionLabel}</u> : null}
-              </span>
-            </>
-          );
-          const itemClassName = joinClassNames(
-            "talisman-strip__item",
-            isSelected && "talisman-strip__item--selected",
-            firingInstanceId === item.instance.instanceId && "talisman-strip__item--firing",
-            item.disabled && "talisman-strip__item--disabled",
-          );
-
-          if (!onSelect) {
-            return (
-              <article
-                className={itemClassName}
-                data-asset-tag={item.definition.assetTag}
-                key={item.instance.instanceId}
-              >
-                {itemContent}
-              </article>
-            );
-          }
-
           return (
-            <button
-              type="button"
-              className={itemClassName}
+            <TalismanSlot
               key={item.instance.instanceId}
-              aria-pressed={isSelected}
-              disabled={item.disabled}
-              onClick={() => onSelect(item)}
-              data-asset-tag={item.definition.assetTag}
-            >
-              {itemContent}
-            </button>
+              item={item}
+              selected={selectedInstanceId === item.instance.instanceId}
+              firing={firingInstanceId === item.instance.instanceId}
+              onSelect={onSelect}
+            />
           );
         })}
       </div>

@@ -20,7 +20,14 @@ import {
   assertContentCatalogComplete,
 } from "../content";
 import { createStandardHwatuDeck } from "../engine/deck";
+import { getBookLevelPreview } from "../engine/book-preview";
 import { findImmediateYakuCandidates } from "../engine/yaku";
+import { getYakuDisplayName } from "../content/yaku";
+import {
+  CARD_EFFECT_TAGS,
+  isCardEffectCompatible,
+  rollCardEffectTagForCard,
+} from "../content/card-effects";
 import {
   calculateContractModifiers,
   calculateDiscountedPrice,
@@ -79,15 +86,21 @@ function januaryPair(): { cards: CardInstance[]; candidate: YakuCandidate } {
 }
 
 describe("complete content catalog", () => {
+  it("never exposes internal English ids as 끗패 names", () => {
+    expect(getYakuDisplayName("ttaeng")).toBe("땡");
+    expect(getYakuDisplayName("jangttaeng")).toBe("장땡");
+    expect(getYakuDisplayName("unknown-id")).toBe("기록된 끗패");
+  });
+
   it("matches every required catalog count", () => {
     expect(CONTENT_ACTUAL_COUNTS).toEqual(CONTENT_EXPECTED_COUNTS);
-    expect(CONTENT_CATALOG_VALIDATION.totalEntries).toBe(157);
+    expect(CONTENT_CATALOG_VALIDATION.totalEntries).toBe(152);
     expect(CONTENT_CATALOG_COMPLETE).toBe(true);
     expect(assertContentCatalogComplete()).toBe(true);
   });
 
   it("has globally unique IDs and asset tags with usable descriptions", () => {
-    expect(catalogEntries).toHaveLength(157);
+    expect(catalogEntries).toHaveLength(152);
     expect(new Set(catalogEntries.map((entry) => entry.id)).size).toBe(catalogEntries.length);
     expect(new Set(ALL_CONTENT_ASSET_TAGS).size).toBe(ALL_CONTENT_ASSET_TAGS.length);
     for (const entry of catalogEntries) {
@@ -103,6 +116,49 @@ describe("complete content catalog", () => {
       missingAssetTags: [],
       missingBasicBookYakuIds: [],
     });
+  });
+
+  it("explains the exact before and after values of every kind of book", () => {
+    expect(getBookLevelPreview("gabo", 1)).toEqual({
+      current: "Lv.1 · 기본 배수 4",
+      next: "Lv.2 · 기본 배수 4.3",
+    });
+    expect(getBookLevelPreview("four_brights", 1)).toEqual({
+      current: "Lv.1 · 완성 4점 · 고 목표 추가 -0%",
+      next: "Lv.2 · 완성 5점 · 고 목표 추가 -5%",
+    });
+    expect(getBookLevelPreview("hongdan", 1).next).toContain("완성 시 버리기 +1");
+    expect(getBookLevelPreview("godori", 1).next).toContain("짓 5의 배수 허용");
+  });
+});
+
+describe("card effect compatibility", () => {
+  it("never rolls a kind treatment onto a card already printed with that kind", () => {
+    const redundantEffect = {
+      bright: "as_bright",
+      animal: "as_animal",
+      ribbon: "as_ribbon",
+    } as const;
+
+    for (const [kind, forbiddenId] of Object.entries(redundantEffect)) {
+      const card = { kind: kind as keyof typeof redundantEffect };
+      expect(isCardEffectCompatible(forbiddenId, card)).toBe(false);
+
+      const rolledIds = Array.from({ length: 1_000 }, (_, index) =>
+        rollCardEffectTagForCard(index / 1_000, card).id,
+      );
+      expect(rolledIds, `${kind} received ${forbiddenId}`).not.toContain(forbiddenId);
+      expect(rolledIds).toContain("keeper_coin");
+    }
+  });
+
+  it("keeps every treatment available when it adds a genuinely new kind", () => {
+    const chaff = { kind: "chaff" as const };
+    const allowedKindEffects = CARD_EFFECT_TAGS
+      .filter((effect) => effect.id.startsWith("as_"))
+      .map((effect) => effect.id);
+
+    expect(allowedKindEffects.every((id) => isCardEffectCompatible(id, chaff))).toBe(true);
   });
 });
 
@@ -132,10 +188,10 @@ describe("talisman engine", () => {
     const deck = createStandardHwatuDeck();
     // 짓 4월+6월 = 10, 끗패 1월광+3월광.
     const cards = [
-      deck.find((card) => card.month === 4 && card.kind === "chaff")!,
-      deck.find((card) => card.month === 6 && card.kind === "chaff")!,
       deck.find((card) => card.month === 1 && card.kind === "bright")!,
       deck.find((card) => card.month === 3 && card.kind === "bright")!,
+      deck.find((card) => card.month === 4 && card.kind === "chaff")!,
+      deck.find((card) => card.month === 6 && card.kind === "chaff")!,
     ];
     const candidate = findImmediateYakuCandidates(cards)[0];
     expect(candidate.jitCardIds).toHaveLength(2);

@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type {
   ContractDefinition,
   ShopOffer,
@@ -7,6 +9,7 @@ import type {
 
 import { getGeneratedAssetUrl } from "./generated-asset";
 import { CollectionBoard, type CollectionBoardItem } from "./CollectionBoard";
+import { playRewardFinishSound, playRewardStepSound } from "../audio/game-sfx";
 import "./screen-ui.css";
 
 export interface MarketRewardView {
@@ -15,7 +18,6 @@ export interface MarketRewardView {
   title?: string;
   description?: string;
   lines?: readonly string[];
-  imageUrl?: string;
   reasons?: readonly { id: string; label: string; detail: string; amount?: number; multiplier?: number }[];
   scores?: { submission: number; collection: number; goStopPoints: number; total: number; goCount: number; highestHand: number; highestSubmissionCards: number };
   collectionItems?: readonly CollectionBoardItem[];
@@ -28,12 +30,21 @@ export interface MarketOfferView {
   assetTag: string;
   rarityLabel?: string;
   detailLabel?: string;
+  comparison?: { current: string; next: string };
   recommended?: boolean;
 }
 
 export interface MarketContractView {
   definition: ContractDefinition;
   disabled?: boolean;
+}
+
+export interface OwnedTalismanView {
+  instanceId: string;
+  name: string;
+  description: string;
+  assetTag: string;
+  sellPrice: number;
 }
 
 interface MarketScreenBaseProps {
@@ -61,6 +72,9 @@ export type MarketScreenProps =
       canReroll: boolean;
       onBuyOffer: (offerId: string) => void;
       onReroll?: () => void;
+      ownedTalismans: readonly OwnedTalismanView[];
+      onSellTalisman: (instanceId: string) => void;
+      onOpenDeck: () => void;
     })
   | (MarketScreenBaseProps & {
       mode: "contract";
@@ -134,17 +148,6 @@ const DEPARTMENTS: readonly Department[] = [
   },
 ];
 
-/** Text stand-in for a picture. Swap by styling [data-asset-tag]. */
-function ArtSlot({ assetTag, className, imageUrl }: { assetTag: string; className?: string; imageUrl?: string }) {
-  const generatedUrl = imageUrl ?? getGeneratedAssetUrl(assetTag);
-  return (
-    <span className={joinClassNames("market-art", className, Boolean(generatedUrl) && "market-art--generated")} data-asset-tag={assetTag} style={generatedUrl ? { backgroundImage: `url("${generatedUrl}")` } : undefined}>
-      {!generatedUrl ? <span className="market-art__mark" aria-hidden="true">IMG</span> : null}
-      {!generatedUrl ? <code>{assetTag}</code> : null}
-    </span>
-  );
-}
-
 interface MarketCardProps {
   assetTag: string;
   name: string;
@@ -154,12 +157,26 @@ interface MarketCardProps {
   priceLabel?: string;
   ctaLabel: string;
   detailLabel?: string;
+  comparison?: { current: string; next: string };
   selected?: boolean;
   recommended?: boolean;
   disabled?: boolean;
   sold?: boolean;
   tutorialId?: string;
   onClick: () => void;
+}
+
+const EMPTY_REWARD_REASONS: NonNullable<MarketRewardView["reasons"]> = [];
+
+export function getMarketHintPosition(
+  rect: Pick<DOMRect, "left" | "top" | "right" | "bottom" | "width">,
+  viewportWidth: number,
+  viewportHeight: number,
+) {
+  const halfWidth = Math.min(160, viewportWidth * 0.41);
+  const x = Math.max(halfWidth + 12, Math.min(viewportWidth - halfWidth - 12, rect.left + rect.width / 2));
+  const placement = rect.top >= 250 || viewportHeight - rect.bottom < 250 ? "above" as const : "below" as const;
+  return { x, y: placement === "above" ? rect.top - 10 : rect.bottom + 10, placement };
 }
 
 function MarketCard({
@@ -171,6 +188,7 @@ function MarketCard({
   priceLabel,
   ctaLabel,
   detailLabel,
+  comparison,
   selected,
   recommended,
   disabled,
@@ -179,10 +197,21 @@ function MarketCard({
   onClick,
 }: MarketCardProps) {
   const artUrl = getGeneratedAssetUrl(assetTag);
+  const [hintPosition, setHintPosition] = useState<{
+    x: number;
+    y: number;
+    placement: "above" | "below";
+  } | null>(null);
+
+  const showHint = (node: HTMLElement) => {
+    const rect = node.getBoundingClientRect();
+    setHintPosition(getMarketHintPosition(rect, window.innerWidth, window.innerHeight));
+  };
 
   /* The picture is the whole tile; everything else lives in the hover panel,
      so a department reads as two or three pictures rather than a wall of text. */
   return (
+    <>
     <div className="market-card__wrap" data-tutorial={tutorialId}>
       {priceLabel ? <span className="market-card__price" aria-hidden="true">{priceLabel}</span> : null}
       <button
@@ -197,6 +226,10 @@ function MarketCard({
         aria-pressed={selected}
         disabled={disabled}
         onClick={onClick}
+        onPointerEnter={(event) => showHint(event.currentTarget)}
+        onPointerLeave={() => setHintPosition(null)}
+        onFocus={(event) => showHint(event.currentTarget)}
+        onBlur={() => setHintPosition(null)}
       >
         <span
           className={joinClassNames(
@@ -214,16 +247,33 @@ function MarketCard({
         {recommended ? <span className="market-card__flag">추천</span> : null}
         <span className="market-card__label">{name}</span>
 
-        <span className="market-card__hint" role="tooltip">
-          <b>{name}</b>
-          <em>{kindLabel}{priceLabel ? ` · ${priceLabel}` : ""}</em>
-          <p>{description}</p>
-          <i>{guide}</i>
-          {detailLabel ? <u>{detailLabel}</u> : null}
-          <s>{ctaLabel}</s>
-        </span>
       </button>
     </div>
+    {hintPosition && typeof document !== "undefined"
+      ? createPortal(
+          <span
+            className="market-card__hint market-card__hint--portal"
+            data-placement={hintPosition.placement}
+            role="tooltip"
+            style={{ left: hintPosition.x, top: hintPosition.y }}
+          >
+            <b>{name}</b>
+            <em>{kindLabel}{priceLabel ? ` · ${priceLabel}` : ""}</em>
+            <p>{description}</p>
+            <i>{guide}</i>
+            {comparison ? (
+              <span className="market-card__comparison" aria-label="레벨업 전후 비교">
+                <span><small>현재</small><b>{comparison.current}</b></span>
+                <span><small>구매 후</small><b>{comparison.next}</b></span>
+              </span>
+            ) : null}
+            {detailLabel ? <u>{detailLabel}</u> : null}
+            <s>{ctaLabel}</s>
+          </span>,
+          document.body,
+        )
+      : null}
+    </>
   );
 }
 
@@ -256,6 +306,7 @@ function offerCard(item: MarketOfferView, money: number, onBuy: (id: string) => 
       guide={item.rarityLabel ?? CATEGORY_GUIDES[item.offer.category]}
       description={item.description}
       detailLabel={item.detailLabel}
+      comparison={item.comparison}
       priceLabel={item.offer.price === 0 ? "무료" : `${formatNumber(item.offer.price)}냥`}
       ctaLabel={item.offer.sold
         ? (isPack ? "개봉 완료" : "구매 완료")
@@ -272,6 +323,53 @@ function offerCard(item: MarketOfferView, money: number, onBuy: (id: string) => 
 export function MarketScreen(props: MarketScreenProps) {
   const shopOffers = props.mode === "shop" ? props.offers : [];
   const recommended = shopOffers.find((item) => item.recommended);
+  const reward = props.mode === "reward" ? props.reward : null;
+  const rewardReasons = reward?.reasons ?? EMPTY_REWARD_REASONS;
+  const [revealedReasonCount, setRevealedReasonCount] = useState(0);
+  const [animatedReward, setAnimatedReward] = useState(() => reward ? 0 : 0);
+  const [animatedMoney, setAnimatedMoney] = useState(() => reward ? props.money - reward.amount : props.money);
+  const rewardComplete = !reward || (rewardReasons.length > 0
+    ? revealedReasonCount >= rewardReasons.length
+    : animatedReward >= reward.amount);
+  const walletMoney = reward ? animatedMoney : props.money;
+
+  useEffect(() => {
+    if (!reward) return;
+    const timers: number[] = [];
+    const startMoney = props.money - reward.amount;
+    timers.push(window.setTimeout(() => {
+      setRevealedReasonCount(0);
+      setAnimatedReward(0);
+      setAnimatedMoney(startMoney);
+    }, 0));
+
+    if (rewardReasons.length === 0) {
+      timers.push(window.setTimeout(() => {
+        setAnimatedReward(reward.amount);
+        setAnimatedMoney(props.money);
+        playRewardFinishSound();
+      }, 320));
+    } else {
+      rewardReasons.forEach((reason, index) => {
+        timers.push(window.setTimeout(() => {
+          const isLast = index === rewardReasons.length - 1;
+          const partial = rewardReasons.slice(0, index + 1).reduce((value, entry) => {
+            if (entry.amount !== undefined) return value + entry.amount;
+            if (entry.multiplier !== undefined) return value * entry.multiplier;
+            return value;
+          }, 0);
+          const shown = isLast ? reward.amount : Math.min(reward.amount, Math.max(0, Math.floor(partial)));
+          setRevealedReasonCount(index + 1);
+          setAnimatedReward(shown);
+          setAnimatedMoney(startMoney + shown);
+          playRewardStepSound(index);
+          if (isLast) playRewardFinishSound();
+        }, 380 + index * 520));
+      });
+    }
+
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [props.money, reward, rewardReasons]);
 
   return (
     <section className={joinClassNames("market-panel", props.className)} aria-label={props.title}>
@@ -279,7 +377,7 @@ export function MarketScreen(props: MarketScreenProps) {
         <aside className="market-panel__actions" aria-label="장터 조작">
           <div className="market-panel__wallet" data-tutorial="wallet">
             <span>보유</span>
-            <strong>{formatNumber(props.money)}</strong>
+            <strong className={reward && !rewardComplete ? "market-panel__money--counting" : undefined}>{formatNumber(walletMoney)}</strong>
             <small>냥</small>
           </div>
 
@@ -288,10 +386,11 @@ export function MarketScreen(props: MarketScreenProps) {
               type="button"
               className="market-action market-action--primary"
               data-tutorial="reward-continue"
+              disabled={!rewardComplete}
               onClick={props.onContinue}
             >
-              <strong>보상 받기</strong>
-              <span>+{formatNumber(props.reward.amount)}냥</span>
+              <strong>{rewardComplete ? "보상 받기" : "판돈 계산 중"}</strong>
+              <span>+{formatNumber(animatedReward)}냥</span>
             </button>
           ) : null}
 
@@ -320,6 +419,10 @@ export function MarketScreen(props: MarketScreenProps) {
                   <span>{formatNumber(props.rerollCost)}냥</span>
                 </button>
               ) : null}
+              <button type="button" className="market-action" onClick={props.onOpenDeck}>
+                <strong>덱 보기</strong>
+                <span>현재 구성 확인</span>
+              </button>
             </>
           ) : null}
 
@@ -342,9 +445,9 @@ export function MarketScreen(props: MarketScreenProps) {
           {props.mode === "reward" ? (
             <Rack label="이번 판 보상" hint={`+${formatNumber(props.reward.amount)}냥`}>
               <div className="market-reward">
-                <ArtSlot assetTag={props.reward.assetTag} imageUrl={props.reward.imageUrl} className="market-art--wide" />
                 <div className="market-reward__copy">
-                  <strong>+{formatNumber(props.reward.amount)}냥</strong>
+                  <span>판돈 합계</span>
+                  <strong aria-live="polite">+{formatNumber(animatedReward)}냥</strong>
                   {props.reward.description ? <p>{props.reward.description}</p> : null}
                   {props.reward.lines?.length ? (
                     <ul>
@@ -355,7 +458,10 @@ export function MarketScreen(props: MarketScreenProps) {
                 {props.reward.reasons?.length ? (
                   <ol className="market-reward__reasons">
                     {props.reward.reasons.map((reason, index) => (
-                      <li key={reason.id} style={{ "--reward-delay": `${index * 180}ms` } as React.CSSProperties}>
+                      <li
+                        className={index < revealedReasonCount ? "market-reward__reason--revealed" : undefined}
+                        key={reason.id}
+                      >
                         <span>{reason.label}</span>
                         <small>{reason.detail}</small>
                         <strong>{reason.amount !== undefined ? `+${formatNumber(reason.amount)}냥` : `×${reason.multiplier}`}</strong>
@@ -384,6 +490,22 @@ export function MarketScreen(props: MarketScreenProps) {
                 {shopOffers.map((item) => offerCard(item, props.money, props.onBuyOffer))}
               </Rack>
             ) : (
+              <>
+              <section className="market-owned" aria-label="보유 부적">
+                <header><strong>보유 부적</strong><span>누르면 판매됩니다</span></header>
+                <div>
+                  {props.ownedTalismans.length ? props.ownedTalismans.map((item) => {
+                    const artUrl = getGeneratedAssetUrl(item.assetTag);
+                    return (
+                      <button type="button" key={item.instanceId} title={item.description} onClick={() => props.onSellTalisman(item.instanceId)}>
+                        <span style={artUrl ? { backgroundImage: `url("${artUrl}")` } : undefined} />
+                        <b>{item.name}</b>
+                        <small>판매 +{item.sellPrice}냥</small>
+                      </button>
+                    );
+                  }) : <p>아직 가진 부적이 없습니다.</p>}
+                </div>
+              </section>
               <div className="market-floor">
                 {DEPARTMENTS.map((dept) => {
                   const items = shopOffers.filter((item) => dept.categories.includes(item.offer.category));
@@ -413,11 +535,12 @@ export function MarketScreen(props: MarketScreenProps) {
                   );
                 })}
               </div>
+              </>
             )
           ) : null}
 
           {props.mode === "contract" ? (
-            <Rack label="런 동안 유지할 계약" hint="하나 선택">
+            <Rack label="이번 판 동안 유지할 계약" hint="하나 선택">
               {props.contracts.map(({ definition, disabled }) => (
                 <MarketCard
                   key={definition.id}

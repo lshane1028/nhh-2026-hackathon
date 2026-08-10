@@ -245,14 +245,25 @@
 .play-rail__multiplier { border: 1px solid #9b3c31; background: linear-gradient(160deg, #a43a2f, #642018); }
 .play-rail__actions button { border-radius: 0.18rem; }
 .play-board { gap: 0.55rem; }
+.play-board__top,
+.play-board__top .talisman-strip { width: 100%; overflow: visible; }
 .play-board__top .talisman-strip { padding: 0.48rem 0.58rem; }
-.play-board__top .talisman-strip__slots { grid-template-columns: repeat(auto-fit, minmax(3.25rem, 4.4rem)); justify-content: center; }
+.play-board__top .talisman-strip__slots {
+  width: 100%;
+  max-width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(min(3.25rem, 100%), 4.4rem));
+  grid-auto-flow: row;
+  justify-content: center;
+  overflow: visible;
+}
+.play-board__top .talisman-strip__item,
+.play-board__top .talisman-strip__empty { width: 100%; max-width: 4.4rem; justify-self: stretch; }
 .play-board__top .talisman-strip__header > span { color: #eadcbd; }
 .play-board__top .talisman-strip__header > em { color: #998c76; }
 .talisman-strip__item,
 .talisman-strip__empty { border-color: #57452e; border-radius: 0.18rem; background: #211914; color: #e8d8b5; }
 .talisman-strip__art { border-color: #72552f; border-radius: 0.12rem; background: linear-gradient(145deg, #d8bd83, #9c743b); }
-.talisman-strip__art--generated { padding: 0; border-color: #6d2a20; background-color: #17110d; background-position: center; background-size: cover; image-rendering: pixelated; }
+.talisman-strip__art--generated { padding: 0; border-color: #6d2a20; background-color: #17110d; image-rendering: pixelated; }
 .talisman-strip__art--generated > span,
 .talisman-strip__art--generated > code { visibility: hidden; }
 .talisman-strip__name { color: #decba5; }
@@ -275,7 +286,7 @@
    crops the artwork by exactly its own width. */
 .hwatu-card { border-radius: 0.5rem; box-shadow: 0 0.5rem 1rem rgb(0 0 0 / 42%); }
 .hwatu-card::before { display: none; }
-.hwatu-card__art { border-radius: 0.5rem; }
+.hwatu-card__art { border-radius: 0.5rem; object-fit: contain; object-position: center; }
 .hwatu-card--selected { box-shadow: 0 0 0 3px #f1c85d, 0 0 1.5rem rgb(241 200 93 / 55%), 0 1.2rem 2rem rgb(0 0 0 / 55%); }
 .deck-stack { border-color: #8e6b38 !important; border-radius: 0.22rem !important; background: rgb(10 9 7 / 45%) !important; }
 .deck-stack__back { aspect-ratio: 2 / 3; border-radius: 0.35rem; background: repeating-linear-gradient(45deg, #7f201b 0 5px, #47130f 5px 10px); }

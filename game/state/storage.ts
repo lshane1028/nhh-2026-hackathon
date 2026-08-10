@@ -1,4 +1,5 @@
 import type { GameState } from "../types";
+import { removeRedundantKindEffect } from "../content/card-effects";
 
 // v2 = 짓고땡. A v1 save holds the old poker-style yaku ids, which no longer
 // resolve, so bumping the key is the cheapest way to drop them.
@@ -37,12 +38,19 @@ export function loadGame(): GameState | null {
   }
 }
 
-function normalizeGameState(game: GameState): GameState {
+export function normalizeGameState(game: GameState): GameState {
   const legacyRoundScore = game.chain.roundScore ?? 0;
   const submissionScore = game.chain.submissionScore ?? legacyRoundScore;
   const collectionScore = game.chain.collectionScore ?? 0;
   return {
     ...game,
+    deck: game.deck.map(removeRedundantKindEffect),
+    drawPile: game.drawPile.map(removeRedundantKindEffect),
+    hand: game.hand.map(removeRedundantKindEffect),
+    usedPile: game.usedPile.map(removeRedundantKindEffect),
+    pendingPack: game.pendingPack
+      ? { ...game.pendingPack, candidates: game.pendingPack.candidates.map(removeRedundantKindEffect) }
+      : null,
     experimentalRules: { ...game.experimentalRules, yardMatching: false },
     yard: { cards: [], sweptCount: 0 },
     baseHands: game.baseHands ?? 4,
@@ -58,6 +66,8 @@ function normalizeGameState(game: GameState): GameState {
     returnScreen: game.returnScreen ?? null,
     cupAssignments: game.cupAssignments ?? {},
     pendingCupCardId: game.pendingCupCardId ?? null,
+    pendingCupExtraDiscardsBefore: game.pendingCupExtraDiscardsBefore ?? null,
+    lastForbiddenOfferId: game.lastForbiddenOfferId ?? null,
     chain: {
       ...game.chain,
       submissionScore,

@@ -1,5 +1,11 @@
 import type { CardInstance, ScoreOperation, YakuLevelState } from "../types";
-import { getEffectiveCardRole, resolveCupRole, type CupRoleSource } from "./deck";
+import {
+  getCollectionKindValue,
+  hasEffectiveCardKind,
+  resolveCupRole,
+  type CupRole,
+  type CupRoleSource,
+} from "./deck";
 
 export type CollectionTrackId = "bright" | "animal" | "godori" | "ribbon" | "chaff";
 export const GODORI_MONTHS = [2, 4, 8] as const;
@@ -42,6 +48,39 @@ export interface CollectionBonusResult {
   milestones: CollectionMilestone[];
 }
 
+export interface CupRolePreviewCounts {
+  current: { animal: number; chaff: number };
+  animal: { animal: number; chaff: number };
+  doubleChaff: { animal: number; chaff: number };
+}
+
+/**
+ * Compares the September cup choices against the board before that cup is
+ * filed. The submitted cup is already present in `collection.cardIds` while
+ * the modal is open, so it must be removed before calculating "현재".
+ */
+export function calculateCupRolePreview(
+  collectedCards: readonly CardInstance[],
+  cupCard: CardInstance,
+  cupRoles: Readonly<Record<string, CupRole>> = {},
+  yakuLevels: Record<string, YakuLevelState> = {},
+): CupRolePreviewCounts {
+  const withoutCup = collectedCards.filter((card) => card.instanceId !== cupCard.instanceId);
+  const current = calculateCollectionBonus(withoutCup, cupRoles, yakuLevels).counts;
+  const withRole = (role: CupRole) => calculateCollectionBonus(
+    [...withoutCup, cupCard],
+    { ...cupRoles, [cupCard.instanceId]: role },
+    yakuLevels,
+  ).counts;
+  const asAnimal = withRole("animal");
+  const asDoubleChaff = withRole("double_chaff");
+  return {
+    current: { animal: current.animal, chaff: current.chaff },
+    animal: { animal: asAnimal.animal, chaff: asAnimal.chaff },
+    doubleChaff: { animal: asDoubleChaff.animal, chaff: asDoubleChaff.chaff },
+  };
+}
+
 function uniqueActiveCards(cards: readonly CardInstance[]): CardInstance[] {
   const seen = new Set<string>();
   return cards.filter((card) => {
@@ -52,10 +91,7 @@ function uniqueActiveCards(cards: readonly CardInstance[]): CardInstance[] {
 }
 
 function matchesKind(card: CardInstance, kind: "bright" | "animal" | "ribbon" | "chaff", cupRoles?: CupRoleSource): boolean {
-  if (card.enhancement === "stone") return false;
-  if (card.enhancement === "wild" || card.tags.includes("all_kind_wild")) return true;
-  if (kind === "bright" && card.tags.includes("counts_as_bright")) return true;
-  return getEffectiveCardRole(card, resolveCupRole(cupRoles, card)).kind === kind;
+  return hasEffectiveCardKind(card, kind, resolveCupRole(cupRoles, card));
 }
 
 function matchedMonths(cards: readonly CardInstance[], months: readonly number[], predicate: (card: CardInstance) => boolean): number[] {
@@ -78,14 +114,11 @@ export function calculateCollectionBonus(
 
   const matchedGodoriMonths = matchedMonths(uniqueCards, GODORI_MONTHS, isGodori);
   const counts = {
-    bright: brightCards.length,
-    animal: animalCards.length,
+    bright: brightCards.reduce((sum, card) => sum + getCollectionKindValue(card, "bright", resolveCupRole(cupRoles, card)), 0),
+    animal: animalCards.reduce((sum, card) => sum + getCollectionKindValue(card, "animal", resolveCupRole(cupRoles, card)), 0),
     godori: matchedGodoriMonths.length,
-    ribbon: ribbonCards.length,
-    chaff: chaffCards.reduce((sum, card) => {
-      const role = getEffectiveCardRole(card, resolveCupRole(cupRoles, card));
-      return sum + (role.kind === "chaff" ? role.chaffValue : 0);
-    }, 0),
+    ribbon: ribbonCards.reduce((sum, card) => sum + getCollectionKindValue(card, "ribbon", resolveCupRole(cupRoles, card)), 0),
+    chaff: chaffCards.reduce((sum, card) => sum + getCollectionKindValue(card, "chaff", resolveCupRole(cupRoles, card)), 0),
   };
   const completedSets = {
     godori: counts.godori === 3,

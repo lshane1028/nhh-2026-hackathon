@@ -76,6 +76,11 @@ export function PlayRail({
     ? Math.min(100, Math.round((roundScore / targetScore) * 100))
     : 0;
   const remaining = Math.max(0, targetScore - roundScore);
+  const revealLane = reveal?.current
+    ? reveal.current.operation === "add_kkeut" || reveal.current.operation === "set_kkeut"
+      ? "kkeut"
+      : "heung"
+    : null;
 
   return (
     <aside
@@ -135,7 +140,12 @@ export function PlayRail({
         the hand is played, so the reveal has something left to reveal.
       */}
       <section
-        className={joinClassNames("play-rail__formula", reveal?.playing && "play-rail__formula--revealing")}
+        className={joinClassNames(
+          "play-rail__formula",
+          reveal?.playing && "play-rail__formula--revealing",
+          revealLane === "kkeut" && "play-rail__formula--hit-kkeut",
+          revealLane === "heung" && "play-rail__formula--hit-heung",
+        )}
         aria-label="점수 계산"
         aria-live="polite"
         data-tutorial="rail-formula"
@@ -158,11 +168,18 @@ export function PlayRail({
         </div>
 
         {reveal?.current ? (
-          <div className="play-rail__pop" key={`p${reveal.index}`}>
+          <div
+            className={joinClassNames(
+              "play-rail__pop",
+              revealLane === "kkeut" && "play-rail__pop--kkeut",
+              revealLane === "heung" && "play-rail__pop--heung",
+            )}
+            key={`p${reveal.index}`}
+          >
             <span>{reveal.current.label}</span>
             <b>
               {reveal.current.operation === "multiply_heung"
-                ? `x${formatNumber(reveal.current.value)}`
+                ? `×${formatNumber(reveal.current.value)}`
                 : `+${formatNumber(reveal.current.value)}`}
             </b>
           </div>

@@ -10,6 +10,8 @@ import {
 import { CARD_EFFECT_TAGS } from "../content/card-effects";
 import { createStandardHwatuDeck } from "../engine/deck";
 import type { CardInstance } from "../types";
+import { getGeneratedAssetUrl } from "../../app/components/generated-asset";
+import { getMarketHintPosition } from "../../app/components/MarketScreen";
 
 /**
  * A card can carry four modifiers at once and packs roll doubles on purpose.
@@ -24,6 +26,32 @@ const base = createStandardHwatuDeck()[0];
 const withMods = (patch: Partial<CardInstance>): CardInstance => ({ ...base, tags: [...base.tags], ...patch });
 
 describe("card visuals", () => {
+  it("gives every collection book a meaningful picture", () => {
+    for (const slug of [
+      "hongdan", "chodan", "cheongdan", "godori",
+      "rain-three-brights", "three-brights", "four-brights", "five-brights",
+    ]) {
+      expect(getGeneratedAssetUrl(`book:${slug}`), slug).toBe(`/assets/generated/books/${slug}.webp`);
+    }
+  });
+
+  it("keeps market explanations inside the viewport", () => {
+    const leftEdge = getMarketHintPosition(
+      { left: 0, right: 80, top: 300, bottom: 420, width: 80 },
+      1_000,
+      700,
+    );
+    const bottomEdge = getMarketHintPosition(
+      { left: 450, right: 550, top: 570, bottom: 690, width: 100 },
+      1_000,
+      700,
+    );
+
+    expect(leftEdge.x).toBeGreaterThanOrEqual(172);
+    expect(bottomEdge.placement).toBe("above");
+    expect(bottomEdge.y).toBe(560);
+  });
+
   it("gives a plain card nothing to show", () => {
     expect(getCardMarks(base)).toEqual([]);
     expect(getCardMaterial(base)).toBeNull();

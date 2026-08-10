@@ -10,6 +10,7 @@ import type {
   TalismanInstance,
   YakuLevelState,
 } from "../types";
+import { removeRedundantKindEffect } from "../content/card-effects";
 
 export interface DeckEditResult {
   deck: CardInstance[];
@@ -102,7 +103,7 @@ export function applyPainterEffect(
   }
 
   return {
-    deck: next,
+    deck: next.map(removeRedundantKindEffect),
     message: `${definition.name} 적용 · ${limitedTargets.length}장`,
     changedCardIds: limitedTargets,
   };
@@ -176,7 +177,7 @@ export function applyForbiddenEffect(
       break;
     case "wild_month_zero_base":
       deck = deck.map((card) => selected[0] === card.instanceId
-        ? { ...card, tags: unique([...card.tags, "wild_month", "zero_base"]) }
+        ? { ...card, enhancement: "wild", tags: unique([...card.tags, "zero_base"]) }
         : card);
       break;
     case "random_burn_for_money":
@@ -204,7 +205,7 @@ export function applyForbiddenEffect(
   }
 
   return {
-    deck,
+    deck: deck.map(removeRedundantKindEffect),
     handSize,
     money,
     talismans,

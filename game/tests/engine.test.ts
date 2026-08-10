@@ -102,7 +102,7 @@ describe("standard content registries", () => {
     expect(ALL_IMMEDIATE_YAKU_DEFINITIONS.every((entry) => entry.baseKkeut === 0 && entry.growthKkeut === 0)).toBe(true);
     expect(COLLECTION_YAKU_DEFINITIONS.every((entry) => entry.completionKkeut === 0 && entry.growthKkeut === 0)).toBe(true);
     expect(STAGES.map((stage) => stage.target)).toEqual([
-      150, 280, 500, 850, 1_450, 2_450, 4_100, 6_800, 11_200, 18_500, 30_500, 50_000,
+      150, 280, 450, 850, 1_450, 2_450, 4_100, 6_800, 11_200, 18_500, 30_500, 50_000,
     ]);
   });
 
@@ -143,6 +143,22 @@ describe("끗패 판정", () => {
     expect(pairId(chaff(4), chaff(5))).toBe("gabo"); // 9
     expect(pairId(chaff(2), chaff(8))).toBe("mangtong"); // 10
     expect(pairId(chaff(3), chaff(5))).toBe("kkeut"); // 8끗
+  });
+
+  it("counts 11월 and 12월 in the numeric ladder without inventing new named hands", () => {
+    const decemberSeven = judgeKkeutPair(chaff(12), chaff(7));
+    expect(decemberSeven).toMatchObject({ yakuId: "gabo", rankLabel: "" });
+
+    const novemberPair = judgeKkeutPair(chaff(11), cloneCard(chaff(11)));
+    expect(novemberPair).toMatchObject({ yakuId: "kkeut", rankLabel: "2끗" });
+
+    const decemberBright = takeKind(12, "bright");
+    expect(judgeKkeutPair(decemberBright, takeKind(3, "bright")).yakuId).toBe("kkeut");
+  });
+
+  it("keeps printed months authoritative when a card has a month-sum modifier", () => {
+    const modifiedSeven = cloneCard(chaff(7), { permanentKkeutBonus: 4, tags: [...chaff(7).tags, "zero_base"] });
+    expect(judgeKkeutPair(chaff(12), modifiedSeven).yakuId).toBe("gabo");
   });
 
   it("ranks inside 땡 and 끗 instead of flattening them", () => {
@@ -189,22 +205,22 @@ describe("짓 splitting", () => {
     expect(isValidJit(15, true)).toBe(true);
 
     // 3장: the single leftover card has to be 10월 by itself.
-    expect(findImmediateYakuCandidates([chaff(10), chaff(1), chaff(2)])).toHaveLength(1);
-    expect(findImmediateYakuCandidates([chaff(7), chaff(1), chaff(2)])).toEqual([]);
+    expect(findImmediateYakuCandidates([chaff(1), chaff(2), chaff(10)])).toHaveLength(1);
+    expect(findImmediateYakuCandidates([chaff(1), chaff(2), chaff(7)])).toEqual([]);
   });
 
   it("builds 짓 of two and three cards for longer submissions", () => {
-    const four = findImmediateYakuCandidates([chaff(4), chaff(6), takeKind(1, "bright"), takeKind(3, "bright")]);
+    const four = findImmediateYakuCandidates([takeKind(1, "bright"), takeKind(3, "bright"), chaff(4), chaff(6)]);
     expect(four).toHaveLength(1);
     expect(four[0]).toMatchObject({ yakuId: "gwangttaeng_13", jitSum: 10 });
 
-    const five = findImmediateYakuCandidates([chaff(4), chaff(6), chaff(10), chaff(1), chaff(2)]);
+    const five = findImmediateYakuCandidates([chaff(1), chaff(2), chaff(4), chaff(6), chaff(10)]);
     expect(five.map((entry) => entry.jitSum)).toContain(20);
     expect(ids(five)).toContain("ali");
   });
 
   it("opens up five-multiple 짓 only with the leap-calendar talisman", () => {
-    const cards = [chaff(5), chaff(1), chaff(2)];
+    const cards = [chaff(1), chaff(2), chaff(5)];
     expect(findImmediateYakuCandidates(cards)).toEqual([]);
     expect(ids(findImmediateYakuCandidates(cards, { allowFiveMultipleJit: true }))).toContain("ali");
   });
@@ -248,7 +264,7 @@ describe("collection board and score evaluation", () => {
 
   it("scores 월 합 from the 짓 and 배수 from the 끗패", () => {
     // 짓 4월+6월 = 10, 끗패 1월광+3월광 = 13광땡 (배수 16).
-    const cards = [chaff(4), chaff(6), takeKind(1, "bright"), takeKind(3, "bright")];
+    const cards = [takeKind(1, "bright"), takeKind(3, "bright"), chaff(4), chaff(6)];
     const best = calculateBestHandScore({ submittedCards: cards });
     expect(best.yakuId).toBe("gwangttaeng_13");
     expect(best.startingKkeut).toBe(10);
@@ -256,16 +272,17 @@ describe("collection board and score evaluation", () => {
     expect(best.score).toBe(160);
   });
 
-  it("picks the better of two legal splits of the same five cards", () => {
-    // 10월 두 장을 끗패로 쓰면 장땡(배수 14) × 짓 10, 4·6을 끗패로 쓰면
-    // 세륙(배수 4.5) × 짓 20. 앞쪽이 더 크다.
+  it("uses the first two selected cards as the kkeut pair", () => {
     const cards = [takeKind(10, "animal"), takeKind(10, "ribbon"), chaff(4), chaff(6)];
     const candidates = findImmediateYakuCandidates(cards);
-    expect(ids(candidates)).toEqual(new Set(["jangttaeng", "seryuk"]));
+    expect(ids(candidates)).toEqual(new Set(["jangttaeng"]));
 
     const best = calculateBestHandScore({ submittedCards: cards });
     expect(best.yakuId).toBe("jangttaeng");
     expect(best.score).toBe(140);
+
+    const reordered = [chaff(4), chaff(6), takeKind(10, "animal"), takeKind(10, "ribbon")];
+    expect(ids(findImmediateYakuCandidates(reordered))).toEqual(new Set(["seryuk"]));
   });
 
   it("applies ordered effects after the 짓 total and the collection multiplier", () => {
@@ -305,6 +322,25 @@ describe("collection board and score evaluation", () => {
     // 짓이 없으니 월 합은 1에서 시작하고, 카드는 각인 값만 얹는다.
     expect(modified.finalKkeut).toBe(1 + INKED_MONTH_BONUS + GOLD_LEAF_MONTH_BONUS);
     expect(modified.finalHeung).toBeCloseTo(8 + (9 - 1) * 0.6, 5);
+  });
+
+  it("replays an echo card's own month and printed modifiers exactly once", () => {
+    const echo = cloneCard(takeKind(7, "ribbon"), {
+      effectTagId: "echo",
+      enhancement: "inked",
+    });
+    const submitted = [echo, takeKind(12, "chaff")];
+    const candidate = findImmediateYakuCandidates(submitted)[0];
+    const score = calculateHandScore({ candidate, submittedCards: submitted });
+    const echoOperations = score.operations.filter((operation) => operation.sourceId === echo.instanceId);
+
+    expect(echoOperations.map((operation) => operation.value)).toEqual([
+      INKED_MONTH_BONUS,
+      7,
+      INKED_MONTH_BONUS,
+    ]);
+    expect(echoOperations.map((operation) => operation.label)).toEqual(["먹칠", "메아리패", "먹칠 메아리"]);
+    expect(score.finalKkeut).toBe(score.startingKkeut + INKED_MONTH_BONUS * 2 + 7);
   });
 
   it("uses the same scaled values for bosses and talisman retriggers", () => {

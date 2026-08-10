@@ -1,18 +1,8 @@
 "use client";
 
-import type { ExperimentalRules } from "@/game/types";
+import type { StartDeckDefinition } from "@/game/types";
 
 import "./screen-ui.css";
-
-export type ExperimentalRuleKey = keyof ExperimentalRules;
-
-export interface ExperimentalRuleOption {
-  id: ExperimentalRuleKey;
-  label: string;
-  description: string;
-  assetTag: string;
-  disabled?: boolean;
-}
 
 export interface TitleScreenProps {
   assetTag: string;
@@ -20,17 +10,15 @@ export interface TitleScreenProps {
   subtitle?: string;
   description: string;
   versionLabel?: string;
-  experimentalRules: ExperimentalRules;
-  experimentalRuleOptions: readonly ExperimentalRuleOption[];
+  startDecks: readonly StartDeckDefinition[];
+  selectedStartDeckId: string;
+  unlockedStartDeckIds: readonly string[];
   canContinue: boolean;
   continueSummary?: string;
   newGameLabel?: string;
   continueLabel?: string;
   skipTutorialLabel?: string;
-  onToggleExperimentalRule: (
-    rule: ExperimentalRuleKey,
-    enabled: boolean,
-  ) => void;
+  onSelectStartDeck: (deckId: string) => void;
   onNewGame: () => void;
   onSkipTutorial: () => void;
   onContinue?: () => void;
@@ -47,14 +35,15 @@ export function TitleScreen({
   subtitle = "열두 달, 끝까지 판을 키워라",
   description,
   versionLabel,
-  experimentalRules,
-  experimentalRuleOptions,
+  startDecks,
+  selectedStartDeckId,
+  unlockedStartDeckIds,
   canContinue,
   continueSummary,
   newGameLabel = "새 게임",
   continueLabel = "이어하기",
   skipTutorialLabel = "튜토리얼 없이 시작",
-  onToggleExperimentalRule,
+  onSelectStartDeck,
   onNewGame,
   onSkipTutorial,
   onContinue,
@@ -74,7 +63,7 @@ export function TitleScreen({
           <p>패를 고르고 짓을 맞춰<br />열두 달을 버텨라</p>
         </div>
         <div className="title-screen__intro">
-          <p className="title-screen__eyebrow">TWELVE MONTHS · ONE LAST BET</p>
+          <p className="title-screen__eyebrow">열두 달 화투 덱빌딩</p>
           <h1>{title}</h1>
           <p className="title-screen__subtitle">{subtitle}</p>
           <p className="title-screen__description">{description}</p>
@@ -84,53 +73,39 @@ export function TitleScreen({
         </div>
       </header>
 
-      <fieldset className="title-screen__panel title-screen__experiments">
-        <legend>
-          <span>HOUSE RULES</span>
-          선택 규칙
-        </legend>
-        <p className="title-screen__hint">
-          기본 규칙을 익힌 뒤 켜는 선택 기능입니다. 각 설정은 새 런에만 반영됩니다.
-        </p>
-        <div className="title-screen__rule-grid">
-          {experimentalRuleOptions.map((option, index) => {
-            const enabled = experimentalRules[option.id];
-
+      <section className="title-screen__panel title-screen__decks" aria-label="시작 덱 선택">
+        <header>
+          <strong>시작 덱</strong>
+          <span>3·6·9·12월을 처음 넘길 때 새 덱이 열립니다.</span>
+        </header>
+        <div className="title-screen__deck-grid">
+          {startDecks.map((deck) => {
+            const unlocked = unlockedStartDeckIds.includes(deck.id);
+            const selected = selectedStartDeckId === deck.id;
             return (
               <button
                 type="button"
-                role="switch"
-                key={option.id}
-                className={joinClassNames(
-                  "title-screen__rule",
-                  enabled && "title-screen__rule--enabled",
-                )}
-                aria-checked={enabled}
-                disabled={option.disabled}
-                onClick={() =>
-                  onToggleExperimentalRule(option.id, !enabled)
-                }
+                key={deck.id}
+                disabled={!unlocked}
+                aria-pressed={selected}
+                className={joinClassNames("title-screen__deck", selected && "title-screen__deck--selected")}
+                data-deck-id={deck.id}
+                onClick={() => onSelectStartDeck(deck.id)}
               >
-                <span className="title-screen__rule-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
-                <span className="title-screen__rule-copy">
-                  <b>{option.label}</b>
-                  <small>{option.description}</small>
-                </span>
-                <span className="title-screen__rule-switch" aria-hidden="true">
-                  <i />
-                  <em>{enabled ? "사용" : "해제"}</em>
-                </span>
+                <span className="title-screen__deck-back" aria-hidden="true" />
+                <b>{deck.name}</b>
+                <small>{unlocked ? deck.description : `${deck.unlockStage}월 클리어 시 해금`}</small>
               </button>
             );
           })}
         </div>
-      </fieldset>
+      </section>
 
       <section className="title-screen__launch" aria-label="게임 시작">
         <div className="title-screen__selection-summary" aria-live="polite">
           <span>시작 구성</span>
-          <strong>기본 화투 48장</strong>
-          <small>열두 달 · 월마다 네 장</small>
+          <strong>{startDecks.find((deck) => deck.id === selectedStartDeckId)?.name ?? "정석패"}</strong>
+          <small>{startDecks.find((deck) => deck.id === selectedStartDeckId)?.description ?? "기본 화투 48장"}</small>
         </div>
         <div className="title-screen__launch-actions">
           <button

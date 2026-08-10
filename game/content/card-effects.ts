@@ -1,25 +1,23 @@
+import type { CardInstance } from "../types";
+
 /**
  * Effect tags that can ride on a single card.
  *
- * These are LABELS ONLY for now. Nothing in the scoring engine reads them yet —
- * a card carrying `keeper_coin` behaves exactly like a plain card. The plan is
- * to wire each tag to real behaviour later; until then the tag is displayed on
- * the card and in its hover panel so the vocabulary can be play-tested first.
+ * Every tag is a live mechanic. Score effects emit ordered operations so the
+ * submission theater can replay the same arithmetic the engine used.
  *
  * When wiring one up, read `card.effectTagId` and branch in the relevant
  * engine module. Do NOT reuse `card.tags` — that array already drives kind and
  * yaku matching (`bird`, `rain`, `cup`), and a collision there is a scoring bug.
  *
- * Where each family will eventually hook in:
- *   as_bright / as_animal / as_ribbon  → `getEffectiveCardRole` in engine/deck,
- *     plus `matchesKind` in engine/collection-bonus and `hasKind` in engine/yaku.
- *     A card counting as two kinds means those helpers must return a SET, not a
- *     single kind — that refactor is the real cost of this family.
- *   extra_pi                           → `chaffValue` in `getEffectiveCardRole`.
- *   twin_kind                          → the counters in collection-bonus, which
- *     currently do `cards.length`; they would need a per-card weight instead.
+ * Where each family is resolved:
+ *   as_bright / as_animal / as_ribbon  → the multi-kind helpers in engine/deck,
+ *     shared by yaku, collections, and kind-reading talismans.
+ *   extra_pi / twin_kind               → effective 피 value and per-track
+ *     collection contribution in engine/deck.
  *   keeper_coin / gilded               → `finishRound` and `applyCardAftermath`.
- *   partner_boost / heavy_month / echo → ordered score effects in engine/scoring.
+ *   partner_boost / heavy_month / echo → per-card operations in engine/scoring.
+ *   drawn_luck                         → draw/refill handling in state/game.
  */
 export interface CardEffectTag {
   id: string;
@@ -153,13 +151,54 @@ export const CARD_EFFECT_TAG_BY_ID = Object.fromEntries(
   CARD_EFFECT_TAGS.map((entry) => [entry.id, entry]),
 ) as Record<string, (typeof CARD_EFFECT_TAGS)[number]>;
 
-/** Weighted pick, so the strong tags stay rare. */
-export function rollCardEffectTag(roll: number): CardEffectTag {
-  const total = CARD_EFFECT_TAGS.reduce((sum, entry) => sum + entry.weight, 0);
+const SAME_KIND_EFFECT_BY_KIND = {
+  bright: "as_bright",
+  animal: "as_animal",
+  ribbon: "as_ribbon",
+} as const;
+
+type EffectBearingCard = {
+  kind: "bright" | "animal" | "ribbon" | "chaff";
+};
+
+/**
+ * A kind-bending effect must add a second kind, never restate the kind already
+ * printed on the card. Keeping this rule beside the effect catalogue gives
+ * every pack generator the same compatibility check.
+ */
+export function isCardEffectCompatible(
+  effectTagId: string,
+  card: EffectBearingCard,
+): boolean {
+  return SAME_KIND_EFFECT_BY_KIND[card.kind as keyof typeof SAME_KIND_EFFECT_BY_KIND] !== effectTagId;
+}
+
+/**
+ * Cleans cards created by an older build (or changed to a new kind later).
+ * Returning the original object for the common path keeps state normalization
+ * cheap and preserves referential equality when nothing needs fixing.
+ */
+export function removeRedundantKindEffect(card: CardInstance): CardInstance {
+  if (!card.effectTagId || isCardEffectCompatible(card.effectTagId, card)) return card;
+  return { ...card, effectTagId: undefined };
+}
+
+function rollFromPool(roll: number, pool: readonly CardEffectTag[]): CardEffectTag {
+  const total = pool.reduce((sum, entry) => sum + entry.weight, 0);
   let cursor = Math.min(Math.max(roll, 0), 0.999_999) * total;
-  for (const entry of CARD_EFFECT_TAGS) {
+  for (const entry of pool) {
     cursor -= entry.weight;
     if (cursor < 0) return entry;
   }
-  return CARD_EFFECT_TAGS[CARD_EFFECT_TAGS.length - 1];
+  return pool[pool.length - 1];
+}
+
+/** Weighted pick, so the strong tags stay rare. */
+export function rollCardEffectTag(roll: number): CardEffectTag {
+  return rollFromPool(roll, CARD_EFFECT_TAGS);
+}
+
+/** Weighted pick that cannot roll a redundant same-kind treatment. */
+export function rollCardEffectTagForCard(roll: number, card: EffectBearingCard): CardEffectTag {
+  return rollFromPool(roll, CARD_EFFECT_TAGS.filter((entry) => isCardEffectCompatible(entry.id, card)));
 }

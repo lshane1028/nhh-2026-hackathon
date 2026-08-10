@@ -9,7 +9,13 @@ import type {
   TalismanInstance,
   YakuCandidate,
 } from "../types";
-import { getEffectiveCardRole, type CupRole } from "./deck";
+import {
+  getCollectionKindValue,
+  getEffectiveCardRole,
+  getEffectiveChaffValue,
+  getEffectiveKindMultiplicity,
+  type CupRole,
+} from "./deck";
 import {
   GOLD_LEAF_MONTH_BONUS,
   INKED_MONTH_BONUS,
@@ -174,7 +180,6 @@ function effectsForDefinition(
   const amount = finiteOr(definition.amount);
   const params = definition.params ?? {};
   const cupRole = context.cupRole ?? "animal";
-  const roles = context.scoringCards.map((card) => ({ card, role: getEffectiveCardRole(card, cupRole) }));
   const key = definition.effectKey;
 
   switch (key) {
@@ -187,13 +192,16 @@ function effectsForDefinition(
     }
     case "kind_cards_add_kkeut": {
       const kind = params.kind as CardKind | undefined;
-      const count = roles.filter((entry) => entry.role.kind === kind).length;
+      const count = context.scoringCards.reduce(
+        (sum, card) => sum + (kind ? getCollectionKindValue(card, kind, cupRole) : 0),
+        0,
+      );
       addEffect(effects, makeEffect(talisman, definition, "add_kkeut", count * amount));
       break;
     }
     case "chaff_value_add_kkeut": {
-      const totalChaffValue = roles.reduce(
-        (sum, entry) => sum + (entry.role.kind === "chaff" ? entry.role.chaffValue : 0),
+      const totalChaffValue = context.scoringCards.reduce(
+        (sum, card) => sum + getCollectionKindValue(card, "chaff", cupRole),
         0,
       );
       addEffect(effects, makeEffect(talisman, definition, "add_kkeut", totalChaffValue * amount));
@@ -248,10 +256,15 @@ function effectsForDefinition(
     }
     case "double_chaff_boost": {
       const chaffValueBonus = finiteOr(params.chaffValueBonus);
-      const chaffCount = roles.filter((entry) => entry.role.kind === "chaff").length;
-      const doubleChaffCount = roles.filter(
-        (entry) => entry.role.kind === "chaff" && entry.role.chaffValue >= 2,
-      ).length;
+      const chaffCount = context.scoringCards.reduce(
+        (sum, card) => sum + getEffectiveKindMultiplicity(card, "chaff", cupRole),
+        0,
+      );
+      const doubleChaffCount = context.scoringCards.reduce(
+        (sum, card) => sum + Number(getEffectiveChaffValue(card, cupRole) >= 2)
+          * getEffectiveKindMultiplicity(card, "chaff", cupRole),
+        0,
+      );
       addEffect(
         effects,
         makeEffect(talisman, definition, "add_kkeut", chaffCount * chaffValueBonus, "피값"),
@@ -317,11 +330,14 @@ function effectsForDefinition(
     }
     case "held_kind_multiply_heung": {
       const kind = typeof params.kind === "string" ? params.kind as CardKind : "bright";
-      const matching = (context.heldCards ?? []).filter((card) => getEffectiveCardRole(card, cupRole).kind === kind);
+      const matching = (context.heldCards ?? []).reduce(
+        (sum, card) => sum + getCollectionKindValue(card, kind, cupRole),
+        0,
+      );
       const perCard = finiteOr(definition.factor, 1);
-      const factor = perCard ** matching.length;
-      if (matching.length > 0 && factor !== 1) {
-        addEffect(effects, makeEffect(talisman, definition, "multiply_heung", factor, `손에 ${matching.length}장`));
+      const factor = perCard ** matching;
+      if (matching > 0 && factor !== 1) {
+        addEffect(effects, makeEffect(talisman, definition, "multiply_heung", factor, `손에 ${matching}장`));
       }
       break;
     }

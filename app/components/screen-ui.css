@@ -127,6 +127,25 @@
   gap: 0.65rem;
 }
 
+.title-screen__decks > header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.6rem; }
+.title-screen__decks > header strong { font-size: 1rem; }
+.title-screen__decks > header span { color: var(--screen-muted); font-size: 0.72rem; }
+.title-screen__deck-back {
+  display: block;
+  width: min(100%, 4.8rem);
+  aspect-ratio: 2 / 3;
+  margin-inline: auto;
+  border: 3px double #e4c98a;
+  background: repeating-linear-gradient(45deg, #7d201b 0 6px, #45110e 6px 12px);
+  box-shadow: 0.18rem 0.22rem 0 rgb(0 0 0 / 35%);
+}
+.title-screen__deck[data-deck-id="deck_red"] .title-screen__deck-back { background: radial-gradient(circle, #f0c36a 0 8%, transparent 9%), repeating-conic-gradient(#9d2b21 0 10deg, #54140f 10deg 20deg); }
+.title-screen__deck[data-deck-id="deck_blue"] .title-screen__deck-back { background: linear-gradient(135deg, transparent 35%, #d5dfcc 36% 42%, transparent 43%), repeating-linear-gradient(90deg, #1e6171 0 7px, #103740 7px 14px); }
+.title-screen__deck[data-deck-id="deck_black"] .title-screen__deck-back { background: radial-gradient(circle at 50% 50%, #c39a3f 0 10%, #17120e 11% 31%, #805f24 32% 34%, #0b0907 35%); }
+.title-screen__deck[data-deck-id="deck_money"] .title-screen__deck-back { background: repeating-radial-gradient(circle at 50% 50%, #f0c85f 0 6px, #8f5d18 7px 12px, #3d2810 13px 18px); }
+.title-screen__deck > b { text-align: center; }
+.title-screen__deck > small { min-height: 3.2em; color: var(--screen-muted); font-size: 0.7rem; line-height: 1.45; text-align: center; }
+
 .title-screen__deck,
 .title-screen__rule {
   position: relative;

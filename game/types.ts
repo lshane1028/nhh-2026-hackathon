@@ -120,7 +120,7 @@ export type ScoreEffectKey =
   | "all_distinct_months_add"
   | "jit_size_add"
   // 짓고땡용 조커 키. 대부분 "다른 카드가 있어야 값이 생기는" 종류라,
-  // 손에 남긴 패·남은 버리기·이미 가진 부적·이번 런 기록을 읽는다.
+  // 손에 남긴 패·남은 버리기·이미 가진 부적·이번 판 기록을 읽는다.
   | "held_cards_add_heung"
   | "held_kind_multiply_heung"
   | "discards_left_add_kkeut"
@@ -259,6 +259,7 @@ export interface StartDeckDefinition {
   description: string;
   effectKey: string;
   assetTag: string;
+  unlockStage: 0 | 3 | 6 | 9 | 12;
 }
 
 export interface PackDefinition {
@@ -498,6 +499,8 @@ export interface GameState {
   cupAssignments: Record<string, "animal" | "double_chaff">;
   /** Set while a submitted cup card is waiting for its collection choice. */
   pendingCupCardId: string | null;
+  /** Collection-perk baseline used to grant completion rewards after filing. */
+  pendingCupExtraDiscardsBefore: number | null;
   handsRemaining: number;
   discardsRemaining: number;
   handSize: number;
@@ -518,6 +521,8 @@ export interface GameState {
   yakuLevels: Record<string, YakuLevelState>;
   unlockedSecretYakuIds: ImmediateYakuId[];
   shopOffers: ShopOffer[];
+  /** Prevents the one-card 금단장 from showing the same card in succession. */
+  lastForbiddenOfferId: string | null;
   shopType: "talisman" | "painter" | "book" | "forbidden" | null;
   /** A bought card pack waiting for the player to take their picks. */
   pendingPack: PendingPack | null;

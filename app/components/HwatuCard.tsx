@@ -139,10 +139,14 @@ export function HwatuCard({
      the bottom of the screen for the hand, which is the only place it matters. */
   const content = (
     <>
-      <span
+      {/* Native img keeps the source pixels and its full 2:3 crop intact. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
         className="hwatu-card__art"
         data-asset-tag={card.assetTag}
-        style={{ backgroundImage: `url("${cardArtUrl}")` }}
+        src={cardArtUrl}
+        alt=""
+        draggable={false}
         aria-hidden="true"
       />
       {/* Material first: it is the card stock, so everything else sits on top. */}

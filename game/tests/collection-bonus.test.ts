@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createStandardHwatuDeck } from "../engine/deck";
-import { calculateCollectionBonus } from "../engine/collection-bonus";
+import { calculateCollectionBonus, calculateCupRolePreview } from "../engine/collection-bonus";
 
 const deck = createStandardHwatuDeck();
 const pick = (predicate: (card: (typeof deck)[number]) => boolean) => deck.filter(predicate);
@@ -51,5 +51,17 @@ describe("Go-Stop collection scoring", () => {
     expect(calculateCollectionBonus([cup], "animal").counts).toMatchObject({ animal: 1, chaff: 0 });
     expect(calculateCollectionBonus([cup], "double_chaff").counts).toMatchObject({ animal: 0, chaff: 2 });
     expect(calculateCollectionBonus([cup, cup], "animal").counts.animal).toBe(1);
+  });
+
+  it("previews the cup against counts that do not already include it", () => {
+    const cup = deck.find((card) => card.tags.includes("cup"))!;
+    const animals = pick((card) => card.kind === "animal" && card.instanceId !== cup.instanceId).slice(0, 3);
+    const chaff = pick((card) => card.kind === "chaff" && card.chaffValue === 1).slice(0, 7);
+    // The live chain already contains the submitted cup while the role modal is open.
+    const preview = calculateCupRolePreview([...animals, ...chaff, cup], cup);
+
+    expect(preview.current).toEqual({ animal: 3, chaff: 7 });
+    expect(preview.animal).toEqual({ animal: 4, chaff: 7 });
+    expect(preview.doubleChaff).toEqual({ animal: 3, chaff: 9 });
   });
 });

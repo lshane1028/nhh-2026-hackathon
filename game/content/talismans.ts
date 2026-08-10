@@ -293,8 +293,8 @@ export const TALISMANS = [
   },
   {
     id: "t_leap_calendar",
-    name: "윤달 달력",
-    description: "짓의 월 합이 5의 배수여도 짓으로 인정됨.",
+    name: "반짓 셈판",
+    description: "짓패의 월 합이 5의 배수여도 유효한 짓으로 인정됨.",
     rarity: "uncommon",
     price: 7,
     weight: 10,
@@ -364,7 +364,7 @@ export const TALISMANS = [
   {
     id: "t_market_rumor",
     name: "장터 소문",
-    description: "상점 첫 리롤은 무료지만 이후 리롤 비용 증가량이 +1 커짐.",
+    description: "장터의 첫 물건 교체는 무료지만 이후 교체 비용이 1냥씩 더 빠르게 오름.",
     rarity: "uncommon",
     price: 7,
     weight: 10,
@@ -580,7 +580,7 @@ export const TALISMANS = [
   {
     id: "t_first_taste",
     name: "첫맛",
-    description: "이번 런에서 두 번 미만 낸 끗패로 득점하면 배수 ×1.9.",
+    description: "이번 판에서 두 번 미만 낸 끗패로 득점하면 배수 ×1.9.",
     rarity: "rare",
     price: 10,
     weight: 7,

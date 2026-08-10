@@ -183,7 +183,7 @@ export const PAINTER_CARDS = [
   {
     id: "p_reprise",
     name: "되새김",
-    description: "이번 런에서 마지막으로 사용한 화공패 또는 비결서를 복사.",
+    description: "이번 판에서 마지막으로 사용한 화공패 또는 비결서를 복사.",
     rarity: "rare",
     price: 8,
     weight: 5,
@@ -208,9 +208,9 @@ export const FORBIDDEN_CARDS = [
   {
     id: "f_clone_ritual",
     name: "복제굿",
-    description: "완벽한 복사본 둘을 얻는 대신 이번 런의 손패를 줄이는 의식.",
+    description: "완벽한 복사본 둘을 얻는 대신 이번 판의 손패를 줄이는 의식.",
     benefit: "선택 카드의 정확한 복사본 2장을 덱에 추가.",
-    cost: "이번 런의 손패 크기 -1.",
+    cost: "이번 판의 손패 크기 -1.",
     price: 11,
     effectKey: "double_duplicate_hand_penalty",
     assetTag: "forbidden:clone-ritual",
@@ -237,13 +237,13 @@ export const FORBIDDEN_CARDS = [
   },
   {
     id: "f_monthless",
-    name: "무월",
-    description: "모든 월을 잇는 대신 자신의 월값은 0이 되는 공백의 카드.",
-    benefit: "선택 카드 1장을 모든 월로 취급.",
+    name: "팔방패",
+    description: "광·동물·띠·피 어느 수집줄에도 들어가지만 짓의 월 합에는 보탬이 되지 않는 패.",
+    benefit: "선택 카드 1장을 모든 종류로 취급.",
     cost: "그 카드의 월값을 0으로 설정.",
     price: 12,
     effectKey: "wild_month_zero_base",
-    assetTag: "forbidden:monthless",
+    assetTag: "forbidden:eight-directions",
   },
   {
     id: "f_great_burn",
@@ -260,7 +260,7 @@ export const FORBIDDEN_CARDS = [
     name: "부적 빙의",
     description: "부적에 음각의 힘을 들이는 대신 손패 한 칸을 내주는 의식.",
     benefit: "선택 부적 1개에 음각 판본 부여.",
-    cost: "이번 런의 손패 크기 -1.",
+    cost: "이번 판의 손패 크기 -1.",
     price: 13,
     effectKey: "engrave_talisman_hand_penalty",
     assetTag: "forbidden:talisman-possession",
@@ -302,7 +302,7 @@ export const BOOKS = [
   {
     id: "b_mangtong",
     name: "망통 비결",
-    description: "이번 런 동안 망통 레벨 +1.",
+    description: "이번 판 동안 망통 레벨 +1.",
     yakuId: "mangtong",
     price: 3,
     rarity: "common",
@@ -312,7 +312,7 @@ export const BOOKS = [
   {
     id: "b_kkeut",
     name: "끗 비결",
-    description: "이번 런 동안 끗 레벨 +1.",
+    description: "이번 판 동안 끗 레벨 +1.",
     yakuId: "kkeut",
     price: 3,
     rarity: "common",
@@ -322,7 +322,7 @@ export const BOOKS = [
   {
     id: "b_gabo",
     name: "갑오 비결",
-    description: "이번 런 동안 갑오 레벨 +1.",
+    description: "이번 판 동안 갑오 레벨 +1.",
     yakuId: "gabo",
     price: 4,
     rarity: "common",
@@ -332,7 +332,7 @@ export const BOOKS = [
   {
     id: "b_seryuk",
     name: "세륙 비결",
-    description: "이번 런 동안 세륙 레벨 +1.",
+    description: "이번 판 동안 세륙 레벨 +1.",
     yakuId: "seryuk",
     price: 4,
     rarity: "common",
@@ -342,7 +342,7 @@ export const BOOKS = [
   {
     id: "b_jangsa",
     name: "장사 비결",
-    description: "이번 런 동안 장사 레벨 +1.",
+    description: "이번 판 동안 장사 레벨 +1.",
     yakuId: "jangsa",
     price: 5,
     rarity: "common",
@@ -352,7 +352,7 @@ export const BOOKS = [
   {
     id: "b_jangpping",
     name: "장삥 비결",
-    description: "이번 런 동안 장삥 레벨 +1.",
+    description: "이번 판 동안 장삥 레벨 +1.",
     yakuId: "jangpping",
     price: 5,
     rarity: "common",
@@ -362,7 +362,7 @@ export const BOOKS = [
   {
     id: "b_gupping",
     name: "구삥 비결",
-    description: "이번 런 동안 구삥 레벨 +1.",
+    description: "이번 판 동안 구삥 레벨 +1.",
     yakuId: "gupping",
     price: 5,
     rarity: "uncommon",
@@ -372,7 +372,7 @@ export const BOOKS = [
   {
     id: "b_doksa",
     name: "독사 비결",
-    description: "이번 런 동안 독사 레벨 +1.",
+    description: "이번 판 동안 독사 레벨 +1.",
     yakuId: "doksa",
     price: 6,
     rarity: "uncommon",
@@ -382,7 +382,7 @@ export const BOOKS = [
   {
     id: "b_ali",
     name: "알리 비결",
-    description: "이번 런 동안 알리 레벨 +1.",
+    description: "이번 판 동안 알리 레벨 +1.",
     yakuId: "ali",
     price: 6,
     rarity: "uncommon",
@@ -392,7 +392,7 @@ export const BOOKS = [
   {
     id: "b_ttaeng",
     name: "땡 비결",
-    description: "이번 런 동안 땡 레벨 +1.",
+    description: "이번 판 동안 땡 레벨 +1.",
     yakuId: "ttaeng",
     price: 7,
     rarity: "uncommon",
@@ -402,7 +402,7 @@ export const BOOKS = [
   {
     id: "b_jangttaeng",
     name: "장땡 비결",
-    description: "이번 런 동안 장땡 레벨 +1.",
+    description: "이번 판 동안 장땡 레벨 +1.",
     yakuId: "jangttaeng",
     price: 8,
     rarity: "rare",
@@ -412,7 +412,7 @@ export const BOOKS = [
   {
     id: "b_gwangttaeng_13",
     name: "13광땡 비결",
-    description: "이번 런 동안 13광땡 레벨 +1.",
+    description: "이번 판 동안 13광땡 레벨 +1.",
     yakuId: "gwangttaeng_13",
     price: 9,
     rarity: "rare",
@@ -422,7 +422,7 @@ export const BOOKS = [
   {
     id: "b_gwangttaeng_18",
     name: "18광땡 비결",
-    description: "이번 런 동안 18광땡 레벨 +1.",
+    description: "이번 판 동안 18광땡 레벨 +1.",
     yakuId: "gwangttaeng_18",
     price: 9,
     rarity: "rare",
@@ -432,7 +432,7 @@ export const BOOKS = [
   {
     id: "b_gwangttaeng_38",
     name: "38광땡 비결",
-    description: "이번 런 동안 38광땡 레벨 +1.",
+    description: "이번 판 동안 38광땡 레벨 +1.",
     yakuId: "gwangttaeng_38",
     price: 10,
     rarity: "legendary",

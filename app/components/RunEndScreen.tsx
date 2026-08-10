@@ -1,6 +1,7 @@
 "use client";
 
 import type { RunStats, YakuId } from "@/game/types";
+import { getYakuAssetTag, getYakuDisplayName } from "@/game/content/yaku";
 
 import { AssetPlaceholder } from "./AssetPlaceholder";
 import "./screen-ui.css";
@@ -71,9 +72,9 @@ export function RunEndScreen({
       .slice(0, 5)
       .map(([yakuId, count]) => ({
         yakuId,
-        name: yakuId,
+        name: getYakuDisplayName(yakuId),
         count,
-        assetTag: `${assetTag}:yaku:${yakuId}`,
+        assetTag: getYakuAssetTag(yakuId) ?? `${assetTag}:yaku:${yakuId}`,
       }));
 
   return (
@@ -92,7 +93,7 @@ export function RunEndScreen({
           description={stageLabel}
           tone={won ? "score" : "boss"}
         />
-        <p>{won ? "RUN COMPLETE" : "RUN OVER"}</p>
+        <p>{won ? "열두 달 완주" : "도전 종료"}</p>
         <h1>{heading}</h1>
         {summary ? <span>{summary}</span> : null}
         {!won && failureReason ? (
@@ -114,8 +115,8 @@ export function RunEndScreen({
       <section className="run-end-screen__stats" aria-labelledby="run-stats-title">
         <div className="screen-section-heading">
           <div>
-            <p>RUN STATS</p>
-            <h2 id="run-stats-title">이번 런 기록</h2>
+            <p>판 기록</p>
+            <h2 id="run-stats-title">이번 판 기록</h2>
           </div>
           <span>{formatNumber(money)}냥 보유</span>
         </div>
@@ -134,7 +135,7 @@ export function RunEndScreen({
       <section className="run-end-screen__yakus" aria-labelledby="run-yaku-title">
         <div className="screen-section-heading">
           <div>
-            <p>YAKU RECORD</p>
+            <p>끗패 기록</p>
             <h2 id="run-yaku-title">자주 낸 끗패</h2>
           </div>
           <span>{displayedYakus.length}종</span>

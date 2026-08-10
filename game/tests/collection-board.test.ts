@@ -3,6 +3,7 @@ import { buildCollectionSlots, isSlotComplete } from "../engine/collection-board
 import { calculateCollectionBonus } from "../engine/collection-bonus";
 import { createStandardHwatuDeck } from "../engine/deck";
 import type { CardInstance } from "../types";
+import { COLLECTION_TRACK_MARKS } from "../../app/components/CollectionBoard";
 
 const deck = createStandardHwatuDeck();
 
@@ -15,6 +16,17 @@ function copyOf(card: CardInstance, patch: Partial<CardInstance> = {}): CardInst
 const brights = deck.filter((card) => card.kind === "bright");
 
 describe("collection board slots", () => {
+  it("uses a distinct seal mark for every collection track", () => {
+    expect(COLLECTION_TRACK_MARKS).toEqual({
+      bright: "광",
+      animal: "동",
+      godori: "새",
+      ribbon: "띠",
+      chaff: "피",
+    });
+    expect(new Set(Object.values(COLLECTION_TRACK_MARKS))).toHaveLength(5);
+  });
+
   it("draws one slot per distinct card in the deck", () => {
     const slots = buildCollectionSlots({ deck, track: "bright" });
     expect(slots).toHaveLength(5);

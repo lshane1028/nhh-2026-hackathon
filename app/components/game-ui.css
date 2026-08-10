@@ -200,14 +200,15 @@ button.hwatu-card:active:not(:disabled) { --lift: 0.08rem; --pop: 0.97; }
 /* The picture, edge to edge. Nothing is drawn on top of it. */
 .hwatu-card__art {
   display: block;
+  width: 100%;
+  height: 100%;
   border-radius: 0.5rem;
   background-color: var(--game-paper);
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 100% 100%;
   image-rendering: pixelated;
   inset: 0;
-  transform: translateZ(2px) scale(1.006);
+  object-fit: contain;
+  object-position: center;
+  transform: translateZ(2px);
 }
 
 /* Pack abilities are printed into the whole card face. No text plaque. */
@@ -1445,6 +1446,47 @@ button.hwatu-card:active:not(:disabled) { --lift: 0.08rem; --pop: 0.97; }
   font: 700 0.4rem/1 var(--font-geist-mono, monospace);
 }
 
+.collection-board__mark {
+  position: relative;
+  overflow: visible;
+  border: 2px solid color-mix(in srgb, var(--track-color) 78%, #fff4ce);
+  border-radius: 50%;
+  background: #261d15;
+  box-shadow:
+    inset 0 0 0 2px rgb(255 244 206 / 28%),
+    0 0.18rem 0.42rem rgb(20 12 7 / 28%);
+  isolation: isolate;
+}
+.collection-board__mark::before {
+  position: absolute;
+  z-index: 0;
+  border-radius: inherit;
+  content: "";
+  inset: 0.18rem;
+}
+.collection-board__mark > b {
+  position: relative;
+  z-index: 1;
+  color: #fff6df;
+  font-family: var(--font-serif, serif);
+  font-size: 0.88rem;
+  font-weight: 950;
+  line-height: 1;
+  text-shadow: 0 1px 0 #2a160d, 0 0 0.35rem rgb(255 238 178 / 55%);
+}
+.collection-board__mark--bright {
+  background: repeating-conic-gradient(from -8deg, #edbe48 0 8deg, #7a3a19 8deg 17deg);
+}
+.collection-board__mark--bright::before { background: radial-gradient(circle, #d8492d 0 45%, #4d1d15 48% 100%); }
+.collection-board__mark--animal { background: linear-gradient(145deg, #173e2d, #4f7d42); }
+.collection-board__mark--animal::before { background: radial-gradient(circle at 35% 28%, #dfca83 0 12%, transparent 13%), radial-gradient(circle at 65% 28%, #dfca83 0 12%, transparent 13%), #28533a; }
+.collection-board__mark--godori { background: linear-gradient(150deg, #182c47, #507994); }
+.collection-board__mark--godori::before { background: conic-gradient(from 20deg, #d9ebdf, #6aa0a5, #d9ebdf); clip-path: polygon(50% 0, 64% 35%, 100% 50%, 64% 65%, 50% 100%, 36% 65%, 0 50%, 36% 35%); }
+.collection-board__mark--ribbon { background: repeating-linear-gradient(135deg, #8e241e 0 0.3rem, #d24a35 0.3rem 0.6rem); }
+.collection-board__mark--ribbon::before { border: 1px solid #f0c489; border-radius: 0.18rem; background: #a72520; transform: rotate(-8deg); }
+.collection-board__mark--chaff { background: radial-gradient(circle at 22% 24%, #d6b96e 0 6%, transparent 7%), radial-gradient(circle at 74% 70%, #d6b96e 0 7%, transparent 8%), #24231f; }
+.collection-board__mark--chaff::before { border: 1px dotted #d6b96e; background: radial-gradient(circle, #605844 0 8%, transparent 9%); background-size: 0.35rem 0.35rem; }
+
 .collection-board__track-heading > div {
   display: flex;
   min-width: 0;
@@ -1518,14 +1560,15 @@ button.hwatu-card:active:not(:disabled) { --lift: 0.08rem; --pop: 0.97; }
 .collection-card__art {
   position: absolute;
   display: block;
+  width: 100%;
+  height: 100%;
   border: 1px solid rgb(23 17 12 / 55%);
   border-radius: 0.2rem;
   background-color: var(--game-paper);
-  background-image: url("/assets/cards/hwatu-basic-atlas-generated-v4-aligned.png");
-  background-repeat: no-repeat;
-  background-size: 800% 600%;
   image-rendering: pixelated;
   inset: 0;
+  object-fit: contain;
+  object-position: center;
 }
 
 /* Not collected: clearly not yours yet, but the picture still has to be
@@ -1746,6 +1789,7 @@ button.talisman-strip__item { cursor: pointer; }
 
 .talisman-strip__art {
   display: grid;
+  width: 100%;
   aspect-ratio: 2 / 3;
   place-content: center;
   gap: 0.06rem;
@@ -1756,6 +1800,14 @@ button.talisman-strip__item { cursor: pointer; }
   background-color: #fffdf6;
   background-position: center;
   background-size: cover;
+}
+.talisman-strip__art > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  object-fit: contain;
+  object-position: center;
 }
 .talisman-strip__art > span { color: var(--game-muted); font: 700 0.42rem/1.3 var(--font-geist-mono, monospace); }
 .talisman-strip__art > code {
@@ -1804,6 +1856,68 @@ button.talisman-strip__item { cursor: pointer; }
 .talisman-strip__hint p { margin: 0.1rem 0 0; color: #c9c0b2; font-size: 0.66rem; line-height: 1.5; }
 .talisman-strip__hint i { color: #7fc08f; font-size: 0.6rem; font-style: normal; }
 .talisman-strip__hint u { color: #e8b34f; font-size: 0.6rem; text-decoration: none; }
+.talisman-strip__hint--portal {
+  position: fixed;
+  z-index: 1200;
+  top: auto;
+  width: min(20rem, calc(100vw - 1.5rem));
+  max-width: none;
+  max-height: calc(100dvh - 1.5rem);
+  gap: 0.22rem;
+  padding: 0.7rem 0.8rem;
+  overflow-y: auto;
+  border-color: #9c7740;
+  background: linear-gradient(155deg, #2c2319, #17130f);
+  box-shadow: 0 0.8rem 2rem rgb(0 0 0 / 62%), inset 0 0 0 1px rgb(240 201 118 / 12%);
+  opacity: 1;
+  transform: translateX(-50%);
+}
+
+.collection-board__track--landing {
+  animation: collection-track-land 360ms steps(2, jump-none) both;
+}
+
+.collection-card--landing {
+  z-index: 8;
+  animation: collection-card-land 420ms cubic-bezier(.14,.82,.2,1.25) both;
+}
+
+.collection-card--landing .collection-card__art {
+  box-shadow:
+    0 0 0 2px #ffe099,
+    0 0 1.25rem var(--track-glow),
+    0.18rem 0.28rem 0 rgb(25 13 8 / 55%);
+}
+
+@keyframes collection-track-land {
+  0% { transform: translateX(-0.22rem); }
+  45% { transform: translateX(0.18rem); box-shadow: 0 0 1.15rem var(--track-glow); }
+  100% { transform: none; }
+}
+
+@keyframes collection-card-land {
+  0% { opacity: 0.2; transform: translateY(-0.7rem) rotate(-4deg) scale(1.38); filter: brightness(1.8); }
+  62% { opacity: 1; transform: translateY(0.1rem) rotate(1deg) scale(0.93); filter: brightness(1.18); }
+  100% { transform: none; filter: none; }
+}
+.talisman-strip__hint--portal[data-placement="above"],
+.talisman-strip__hint--portal[data-placement="below"] { transform: translateX(-50%); }
+.talisman-strip__hint--portal b { font-size: 0.92rem; }
+.talisman-strip__hint--portal em,
+.talisman-strip__hint--portal i,
+.talisman-strip__hint--portal u { font-size: 0.72rem; }
+.talisman-strip__hint--portal p { margin: 0.16rem 0; font-size: 0.78rem; line-height: 1.55; }
+.talisman-strip__hint-art {
+  display: block;
+  width: min(6rem, 28vw);
+  aspect-ratio: 2 / 3;
+  justify-self: center;
+  border: 2px solid #8b6337;
+  background: #17110d;
+  image-rendering: pixelated;
+  object-fit: contain;
+  object-position: center;
+}
 
 .game-modal__backdrop {
   position: fixed;

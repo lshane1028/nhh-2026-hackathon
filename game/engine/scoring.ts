@@ -14,7 +14,11 @@ import type {
   YakuId,
   YakuLevelState,
 } from "../types";
-import { getEffectiveCardRole, type CupRole } from "./deck";
+import {
+  getCollectionKindValue,
+  getEffectiveCardRole,
+  type CupRole,
+} from "./deck";
 import {
   detectNewCollectionCompletions,
   findImmediateYakuCandidates,
@@ -90,6 +94,7 @@ function scoreCardOnce(
   card: CardInstance,
   operations: ScoreOperation[],
   state: { kkeut: number; heung: number },
+  scoringCardCount: number,
   suffix = "",
 ): void {
   // The card's own month is NOT added here any more. Under 짓고땡 the 월 합 is
@@ -109,6 +114,14 @@ function scoreCardOnce(
   } else if (card.edition === "five_color") {
     appendOperation(operations, state, { sourceId: card.instanceId, label: `오색${suffix}`, operation: "multiply_heung", value: 1.35 });
   }
+
+  if (card.effectTagId === "partner_boost" && scoringCardCount > 1) {
+    appendOperation(operations, state, { sourceId: card.instanceId, label: `짝패${suffix}`, operation: "add_heung", value: 2 });
+  } else if (card.effectTagId === "heavy_month") {
+    appendOperation(operations, state, { sourceId: card.instanceId, label: `무거운 달${suffix}`, operation: "add_kkeut", value: 50 });
+  } else if (card.effectTagId === "stubborn") {
+    appendOperation(operations, state, { sourceId: card.instanceId, label: `고집패${suffix}`, operation: "add_heung", value: 3 });
+  }
 }
 
 function scoreP0Talisman(
@@ -117,23 +130,22 @@ function scoreP0Talisman(
   scoringCards: readonly CardInstance[],
   cupRole: CupRole,
 ): OrderedScoreEffect | null {
-  const roles = scoringCards.map((card) => ({ card, role: getEffectiveCardRole(card, cupRole) }));
   if (talisman.definitionId === "t_chaff_bind") {
     return {
       sourceId: talisman.instanceId,
       label: "피붙이",
       operation: "add_kkeut",
-      value: roles.reduce((sum, entry) => sum + (entry.role.kind === "chaff" ? entry.role.chaffValue * 9 : 0), 0),
+      value: scoringCards.reduce((sum, card) => sum + getCollectionKindValue(card, "chaff", cupRole) * 9, 0),
     };
   }
   if (talisman.definitionId === "t_ribbon_maker") {
-    return { sourceId: talisman.instanceId, label: "띠장이", operation: "add_kkeut", value: roles.filter((entry) => entry.role.kind === "ribbon").length * 15 };
+    return { sourceId: talisman.instanceId, label: "띠장이", operation: "add_kkeut", value: scoringCards.reduce((sum, card) => sum + getCollectionKindValue(card, "ribbon", cupRole), 0) * 15 };
   }
   if (talisman.definitionId === "t_animal_tracks") {
-    return { sourceId: talisman.instanceId, label: "산짐승 발자국", operation: "add_kkeut", value: roles.filter((entry) => entry.role.kind === "animal").length * 18 };
+    return { sourceId: talisman.instanceId, label: "산짐승 발자국", operation: "add_kkeut", value: scoringCards.reduce((sum, card) => sum + getCollectionKindValue(card, "animal", cupRole), 0) * 18 };
   }
   if (talisman.definitionId === "t_bright_polish") {
-    return { sourceId: talisman.instanceId, label: "광약", operation: "add_kkeut", value: roles.filter((entry) => entry.role.kind === "bright").length * 30 };
+    return { sourceId: talisman.instanceId, label: "광약", operation: "add_kkeut", value: scoringCards.reduce((sum, card) => sum + getCollectionKindValue(card, "bright", cupRole), 0) * 30 };
   }
   if (talisman.definitionId === "t_pair_knot" && ["ttaeng", "jangttaeng"].includes(candidate.yakuId)) {
     return { sourceId: talisman.instanceId, label: "짝패 매듭", operation: "add_heung", value: 2 };
@@ -185,8 +197,20 @@ export function calculateHandScore(input: ScoreInput): ScoreBreakdown {
     (card) => scoringIds.has(card.instanceId) || stoneCards.some((stone) => stone.instanceId === card.instanceId),
   );
   for (const card of scoringCards) {
-    scoreCardOnce(card, operations, state);
-    if (card.seal === "red") scoreCardOnce(card, operations, state, " 재발동");
+    scoreCardOnce(card, operations, state, scoringCards.length);
+    if (card.seal === "red") scoreCardOnce(card, operations, state, scoringCards.length, " 재발동");
+    if (card.effectTagId === "echo") {
+      const echoedKkeut = card.enhancement === "stone"
+        ? STONE_MONTH_VALUE
+        : getEffectiveCardRole(card, cupRole).baseKkeut + card.permanentKkeutBonus;
+      appendOperation(operations, state, {
+        sourceId: card.instanceId,
+        label: "메아리패",
+        operation: "add_kkeut",
+        value: echoedKkeut,
+      });
+      scoreCardOnce(card, operations, state, scoringCards.length, " 메아리");
+    }
   }
 
   for (const card of input.heldCards ?? []) {

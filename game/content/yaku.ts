@@ -58,6 +58,19 @@ export const COLLECTION_YAKU_DEFINITIONS: readonly CollectionYakuDefinition[] = 
 const immediateById = new Map(ALL_IMMEDIATE_YAKU_DEFINITIONS.map((definition) => [definition.id, definition]));
 const collectionById = new Map(COLLECTION_YAKU_DEFINITIONS.map((definition) => [definition.id, definition]));
 
+/** User-facing labels must never leak ids such as `ttaeng` into the result UI. */
+export function getYakuDisplayName(id: string): string {
+  return immediateById.get(id as ImmediateYakuId)?.name
+    ?? collectionById.get(id as CollectionYakuId)?.name
+    ?? "기록된 끗패";
+}
+
+export function getYakuAssetTag(id: string): string | null {
+  return immediateById.get(id as ImmediateYakuId)?.assetTag
+    ?? collectionById.get(id as CollectionYakuId)?.assetTag
+    ?? null;
+}
+
 export function getImmediateYakuDefinition(id: ImmediateYakuId): ImmediateYakuDefinition {
   const definition = immediateById.get(id);
   if (!definition) throw new Error(`Unknown immediate yaku: ${id}`);

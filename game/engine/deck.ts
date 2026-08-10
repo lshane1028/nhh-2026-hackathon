@@ -77,6 +77,78 @@ export function getEffectiveCardRole(card: CardInstance, cupRole: CupRole = "ani
   };
 }
 
+const ALL_CARD_KINDS: readonly CardKind[] = ["bright", "animal", "ribbon", "chaff"];
+
+const ADDED_KIND_BY_EFFECT = {
+  as_bright: "bright",
+  as_animal: "animal",
+  as_ribbon: "ribbon",
+} as const satisfies Partial<Record<string, CardKind>>;
+
+/**
+ * Every kind the card counts as while scoring and filing collections.
+ * `getEffectiveCardRole` remains the primary printed/cup role; 취급 effects add
+ * a role instead of replacing it. 돌패 deliberately has no kind, while 만능패
+ * keeps the existing all-kind behaviour.
+ */
+export function getEffectiveCardKinds(card: CardInstance, cupRole: CupRole = "animal"): readonly CardKind[] {
+  if (card.enhancement === "stone") return [];
+  if (card.enhancement === "wild" || card.tags.includes("all_kind_wild")) return ALL_CARD_KINDS;
+
+  const kinds = new Set<CardKind>([getEffectiveCardRole(card, cupRole).kind]);
+  if (card.tags.includes("counts_as_bright")) kinds.add("bright");
+  const addedKind = card.effectTagId
+    ? ADDED_KIND_BY_EFFECT[card.effectTagId as keyof typeof ADDED_KIND_BY_EFFECT]
+    : undefined;
+  if (addedKind) kinds.add(addedKind);
+  // 덧피 gives even a non-피 card one 피 point, so it must be fileable on the
+  // 피 track as well as on its printed track.
+  if (card.effectTagId === "extra_pi") kinds.add("chaff");
+  return [...kinds];
+}
+
+export function hasEffectiveCardKind(
+  card: CardInstance,
+  kind: CardKind,
+  cupRole: CupRole = "animal",
+): boolean {
+  return getEffectiveCardKinds(card, cupRole).includes(kind);
+}
+
+/** 피 points after the card's filed cup role and 덧피 are applied. */
+export function getEffectiveChaffValue(card: CardInstance, cupRole: CupRole = "animal"): number {
+  if (card.enhancement === "stone") return 0;
+  const role = getEffectiveCardRole(card, cupRole);
+  const printedValue = role.kind === "chaff" ? role.chaffValue : 0;
+  return printedValue + Number(card.effectTagId === "extra_pi");
+}
+
+/**
+ * Number of copies the card represents on one collection track. 쌍패 doubles
+ * only its primary printed/cup role; kinds added by 취급 still count once.
+ */
+export function getEffectiveKindMultiplicity(
+  card: CardInstance,
+  kind: CardKind,
+  cupRole: CupRole = "animal",
+): number {
+  if (!hasEffectiveCardKind(card, kind, cupRole)) return 0;
+  const primaryKind = getEffectiveCardRole(card, cupRole).kind;
+  return card.effectTagId === "twin_kind" && primaryKind === kind ? 2 : 1;
+}
+
+/** Numeric contribution to the ordinary Go-Stop collection counter. */
+export function getCollectionKindValue(
+  card: CardInstance,
+  kind: CardKind,
+  cupRole: CupRole = "animal",
+): number {
+  const multiplicity = getEffectiveKindMultiplicity(card, kind, cupRole);
+  if (multiplicity === 0) return 0;
+  if (kind === "chaff") return getEffectiveChaffValue(card, cupRole) * multiplicity;
+  return multiplicity;
+}
+
 export function createStandardHwatuDeck(): CardInstance[] {
   return STANDARD_CARD_TEMPLATES.map((template) => ({
     ...template,

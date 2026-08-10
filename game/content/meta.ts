@@ -12,6 +12,7 @@ export const START_DECKS = [
     description: "아무 변형 없는 기본 화투 48장으로 시작.",
     effectKey: "standard_48",
     assetTag: "start-deck:standard",
+    unlockStage: 0,
   },
   {
     id: "deck_red",
@@ -19,6 +20,7 @@ export const START_DECKS = [
     description: "매 판 버리기 +1. 원하는 패를 더 쉽게 찾는 입문 덱.",
     effectKey: "extra_discard",
     assetTag: "start-deck:red",
+    unlockStage: 3,
   },
   {
     id: "deck_blue",
@@ -26,13 +28,15 @@ export const START_DECKS = [
     description: "매 판 제출 +1. 더 많은 손으로 안전하게 점수를 쌓는 덱.",
     effectKey: "extra_hand",
     assetTag: "start-deck:blue",
+    unlockStage: 6,
   },
   {
     id: "deck_black",
     name: "검은 상",
-    description: "부적 슬롯 +1, 제출 -1. 짧은 판에 강한 엔진을 완성하는 고난도 덱.",
+    description: "부적 슬롯 +1, 제출 -1. 적은 기회에 부적 조합을 완성하는 고난도 덱.",
     effectKey: "talisman_slot_up_hand_down",
     assetTag: "start-deck:black",
+    unlockStage: 9,
   },
   {
     id: "deck_money",
@@ -40,41 +44,7 @@ export const START_DECKS = [
     description: "12냥을 추가로 가지고 시작해 장터 선택을 앞당기는 덱.",
     effectKey: "start_with_12_money",
     assetTag: "start-deck:money",
-  },
-  {
-    id: "deck_plain",
-    name: "민패",
-    description: "광 5장을 제거하고 손패 크기 +2. 얇은 덱으로 월 조합을 찾기 쉬움.",
-    effectKey: "remove_brights_hand_size_up",
-    assetTag: "start-deck:plain",
-  },
-  {
-    id: "deck_pairs",
-    name: "짝패",
-    description: "각 월에서 무작위 2장만 남긴 24장 덱. 두목 목표 +25%.",
-    effectKey: "two_per_month_boss_target_up",
-    assetTag: "start-deck:pairs",
-  },
-  {
-    id: "deck_seasons",
-    name: "계절패",
-    description: "봄·가을 24장을 한 장씩 복제해 48장으로 시작하는 계절 집중 덱.",
-    effectKey: "duplicate_spring_autumn",
-    assetTag: "start-deck:seasons",
-  },
-  {
-    id: "deck_painter",
-    name: "화공패",
-    description: "종류 수는 유지하지만 모든 카드의 월이 무작위인 즉흥 적응 덱.",
-    effectKey: "randomize_all_months",
-    assetTag: "start-deck:painter",
-  },
-  {
-    id: "deck_master",
-    name: "고수패",
-    description: "고 정산 보너스 +10%p, 고 실패 때 2냥을 추가로 잃는 위험 특화 덱.",
-    effectKey: "go_bonus_up_fail_money_down",
-    assetTag: "start-deck:master",
+    unlockStage: 12,
   },
 ] as const satisfies readonly StartDeckDefinition[];
 
@@ -151,9 +121,9 @@ export const CONTRACTS = [
   {
     id: "contract_bargaining_sheet",
     name: "흥정표",
-    description: "장터 리롤 기본 비용 -1냥.",
+    description: "장터에서 물건을 바꾸는 기본 비용 -1냥.",
     upgradedName: "도매 장부",
-    upgradedDescription: "같은 장터에서 리롤해도 비용 증가량이 0으로 고정.",
+    upgradedDescription: "같은 장터에서 물건을 여러 번 바꿔도 비용이 오르지 않음.",
     effectKey: "reroll_cost",
     assetTag: "contract:bargaining-sheet",
   },

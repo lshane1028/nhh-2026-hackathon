@@ -34,10 +34,15 @@ function bestSubmission(hand: readonly CardInstance[]): number {
   let best = 0;
   for (let size = 2; size <= 5; size += 1) {
     for (const pick of combinations(hand, size)) {
-      // Most picks have no legal 짓 at all, which is the point of the search.
-      if (findImmediateYakuCandidates(pick).length === 0) continue;
-      const evaluated = calculateBestHandScore({ submittedCards: pick });
-      if (evaluated.score > best) best = evaluated.score;
+      // 실제 플레이어처럼 끗패로 삼을 두 장을 먼저 고르는 모든 경우를 탐색한다.
+      for (let left = 0; left < pick.length - 1; left += 1) {
+        for (let right = left + 1; right < pick.length; right += 1) {
+          const ordered = [pick[left], pick[right], ...pick.filter((_, index) => index !== left && index !== right)];
+          if (findImmediateYakuCandidates(ordered).length === 0) continue;
+          const evaluated = calculateBestHandScore({ submittedCards: ordered });
+          if (evaluated.score > best) best = evaluated.score;
+        }
+      }
     }
   }
   return best;

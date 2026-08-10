@@ -10,6 +10,14 @@ export type CollectionTrackKind =
   | "ribbon"
   | "chaff";
 
+export const COLLECTION_TRACK_MARKS: Record<CollectionTrackKind, string> = {
+  bright: "광",
+  animal: "동",
+  godori: "새",
+  ribbon: "띠",
+  chaff: "피",
+};
+
 export interface CollectionMilestone {
   at: number;
   label: string;
@@ -56,6 +64,8 @@ export interface CollectionBoardProps {
   items: readonly CollectionBoardItem[];
   className?: string;
   scoreLabel?: string;
+  landingOriginId?: string | null;
+  landingKind?: CollectionTrackKind | null;
 }
 
 function joinClassNames(...values: Array<string | false | undefined>): string {
@@ -78,7 +88,7 @@ function normalizedSlotCount(item: CollectionBoardItem): number {
  * a single picture reads as a score multiplier — the stack is what makes the
  * "two of these" reading the obvious one.
  */
-function CollectionCard({ slot }: { slot: CollectionSlot }) {
+function CollectionCard({ slot, landing = false }: { slot: CollectionSlot; landing?: boolean }) {
   const held = slot.collectedCount + slot.pendingCount;
   const state = slot.collectedCount >= slot.deckCount
     ? "confirmed"
@@ -105,14 +115,20 @@ function CollectionCard({ slot }: { slot: CollectionSlot }) {
         "collection-card",
         `collection-card--${state}`,
         duplicated && "collection-card--stacked",
+        landing && "collection-card--landing",
       )}
       title={title}
       aria-label={title}
       data-asset-tag={slot.assetTag}
+      data-collection-origin={slot.originId}
     >
-      <span
+      {/* Native img preserves the exact pixel-art crop at thumbnail size. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
         className="collection-card__art"
-        style={{ backgroundImage: `url("${getCardArtUrl(slot)}")` }}
+        src={getCardArtUrl(slot)}
+        alt=""
+        draggable={false}
         aria-hidden="true"
       />
       <span className="collection-card__month" aria-hidden="true">{slot.month}</span>
@@ -129,6 +145,8 @@ export function CollectionBoard({
   items,
   className,
   scoreLabel,
+  landingOriginId,
+  landingKind,
 }: CollectionBoardProps) {
   return (
     <section
@@ -138,7 +156,7 @@ export function CollectionBoard({
     >
       <header className="collection-board__header">
         <div>
-          <span>COLLECTION</span>
+          <span>수집 족보</span>
           <strong>수집판</strong>
         </div>
         <p>{scoreLabel ?? "고스톱 기본 점수 · 비결서를 사면 추가 특전이 열립니다."}</p>
@@ -160,18 +178,24 @@ export function CollectionBoard({
                 className={joinClassNames(
                   "collection-board__track",
                   `collection-board__track--${item.kind}`,
+                  landingKind === item.kind && "collection-board__track--landing",
                 )}
                 data-asset-tag={item.assetTag}
+                data-collection-track={item.kind}
                 key={item.id}
               >
                 <div className="collection-board__track-heading">
-                  {/* Image slot for the track's own picture. */}
                   <span
-                    className="collection-board__icon collection-board__icon--art"
+                    className={joinClassNames(
+                      "collection-board__icon",
+                      "collection-board__mark",
+                      `collection-board__mark--${item.kind}`,
+                    )}
                     data-asset-tag={item.assetTag}
-                    style={item.iconUrl ? { backgroundImage: `url("${item.iconUrl}")` } : undefined}
+                    role="img"
+                    aria-label={`${item.name} 대표 인장`}
                   >
-                    {!item.iconUrl ? <span aria-hidden="true">IMG</span> : null}
+                    <b aria-hidden="true">{COLLECTION_TRACK_MARKS[item.kind]}</b>
                   </span>
                   <div>
                     <strong>{item.name}</strong>
@@ -187,7 +211,11 @@ export function CollectionBoard({
                   {item.cards && item.cards.length > 0 ? (
                     <div className="collection-board__cards" aria-label={`${item.name} 수집 카드`}>
                       {item.cards.map((slot) => (
-                        <CollectionCard key={slot.originId} slot={slot} />
+                        <CollectionCard
+                          key={slot.originId}
+                          slot={slot}
+                          landing={landingKind === item.kind && landingOriginId === slot.originId}
+                        />
                       ))}
                     </div>
                   ) : (
