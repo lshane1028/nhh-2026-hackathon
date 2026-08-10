@@ -26,6 +26,12 @@ export interface MarketOfferView {
   name: string;
   description: string;
   assetTag: string;
+  /** Money that must be on hand, including any ritual fee paid on use. */
+  requiredMoney?: number;
+  /** Exact price copy when the sticker price is not the whole cost. */
+  priceLabel?: string;
+  /** A permanent run-state constraint that money alone cannot solve. */
+  unavailableReason?: string;
   rarityLabel?: string;
   detailLabel?: string;
   recommended?: boolean;
@@ -156,6 +162,7 @@ interface MarketCardProps {
   detailLabel?: string;
   selected?: boolean;
   recommended?: boolean;
+  unavailable?: boolean;
   disabled?: boolean;
   sold?: boolean;
   tutorialId?: string;
@@ -173,6 +180,7 @@ function MarketCard({
   detailLabel,
   selected,
   recommended,
+  unavailable,
   disabled,
   sold,
   tutorialId,
@@ -191,9 +199,10 @@ function MarketCard({
           "market-card",
           selected && "market-card--selected",
           recommended && "market-card--recommended",
+          unavailable && "market-card--unavailable",
           sold && "market-card--sold",
         )}
-        aria-label={`${name}, ${kindLabel}, ${description}`}
+        aria-label={`${name}, ${kindLabel}, ${description}${unavailable ? `, 사용 불가: ${ctaLabel}` : ""}`}
         aria-pressed={selected}
         disabled={disabled}
         onClick={onClick}
@@ -211,7 +220,9 @@ function MarketCard({
         </span>
 
         <span className="market-card__kind">{kindLabel}</span>
-        {recommended ? <span className="market-card__flag">추천</span> : null}
+        {unavailable
+          ? <span className="market-card__flag market-card__flag--blocked">사용 불가</span>
+          : recommended ? <span className="market-card__flag">추천</span> : null}
         <span className="market-card__label">{name}</span>
 
         <span className="market-card__hint" role="tooltip">
@@ -245,7 +256,8 @@ function Rack({ label, hint, children, tutorialId }: {
 }
 
 function offerCard(item: MarketOfferView, money: number, onBuy: (id: string) => void, tutorialId?: string) {
-  const cannotAfford = money < item.offer.price;
+  const cannotAfford = money < (item.requiredMoney ?? item.offer.price);
+  const unavailable = Boolean(item.unavailableReason);
   const isPack = item.offer.category === "pack";
   return (
     <MarketCard
@@ -255,14 +267,17 @@ function offerCard(item: MarketOfferView, money: number, onBuy: (id: string) => 
       kindLabel={CATEGORY_NAMES[item.offer.category]}
       guide={item.rarityLabel ?? CATEGORY_GUIDES[item.offer.category]}
       description={item.description}
-      detailLabel={item.detailLabel}
-      priceLabel={item.offer.price === 0 ? "무료" : `${formatNumber(item.offer.price)}냥`}
+      detailLabel={item.unavailableReason
+        ? `${item.detailLabel ? `${item.detailLabel} · ` : ""}사용 불가: ${item.unavailableReason}`
+        : item.detailLabel}
+      priceLabel={item.priceLabel ?? (item.offer.price === 0 ? "무료" : `${formatNumber(item.offer.price)}냥`)}
       ctaLabel={item.offer.sold
         ? (isPack ? "개봉 완료" : "구매 완료")
-        : cannotAfford ? "냥 부족" : isPack ? "개봉" : "구매"}
+        : unavailable ? item.unavailableReason! : cannotAfford ? "총액 부족" : isPack ? "개봉" : "구매"}
       recommended={item.recommended}
+      unavailable={unavailable}
       sold={item.offer.sold}
-      disabled={item.offer.sold || cannotAfford}
+      disabled={item.offer.sold || unavailable || cannotAfford}
       tutorialId={tutorialId}
       onClick={() => onBuy(item.offer.offerId)}
     />
