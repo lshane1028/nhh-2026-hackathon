@@ -218,7 +218,7 @@ export interface ForbiddenDefinition {
 export interface BookDefinition {
   id: string;
   name: string;
-  yakuId: ImmediateYakuId;
+  yakuId: YakuId;
   price: number;
   rarity: Rarity;
   weight: number;
@@ -356,7 +356,11 @@ export interface MasteryEvent {
  * so there is no pending/confirmed split and nothing is ever rolled back.
  */
 export interface GoChainState {
-  /** Total score from every hand played this round. */
+  /** Submission score from Dori-jit-go-ttaeng hands. */
+  submissionScore: number;
+  /** Converted Go-Stop collection score. */
+  collectionScore: number;
+  /** submissionScore + collectionScore. */
   roundScore: number;
   /** How many times Go has been called this round, 0 to 3. */
   goCount: 0 | 1 | 2 | 3;
@@ -436,8 +440,30 @@ export interface RunStats {
   goSuccesses: number;
   goFailures: number;
   highestHand: number;
+  highestSubmissionCards: number;
   moneyEarned: number;
   yakusPlayed: Record<string, number>;
+}
+
+export interface RoundRewardReason {
+  id: string;
+  label: string;
+  detail: string;
+  amount?: number;
+  multiplier?: number;
+}
+
+export interface RoundSummary {
+  submissionScore: number;
+  collectionScore: number;
+  goStopPoints: number;
+  totalScore: number;
+  goCount: number;
+  highestHand: number;
+  highestSubmissionCards: number;
+  collectionCardIds: string[];
+  completedCollectionYakuIds: CollectionYakuId[];
+  rewardReasons: RoundRewardReason[];
 }
 
 export interface CalendarStamp {
@@ -481,6 +507,8 @@ export interface GameState {
   roundSettlementBonus: number;
   failMoneyPenalty: number;
   roundSubmissionIndex: number;
+  roundHighestHand: number;
+  roundHighestSubmissionCards: number;
   roundTalismanUses: Record<string, number>;
   scoredMonthsThisRound: Month[];
   chain: GoChainState;
@@ -508,6 +536,7 @@ export interface GameState {
   calendarStamps: CalendarStamp[];
   lastScore: ScoreBreakdown | null;
   lastRoundReward: number;
+  lastRoundSummary: RoundSummary | null;
   returnScreen: ScreenId | null;
   logs: RoundLogEntry[];
   stats: RunStats;

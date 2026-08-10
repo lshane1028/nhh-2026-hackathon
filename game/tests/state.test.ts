@@ -110,7 +110,7 @@ describe("playable run reducer", () => {
     expect(bust.stats.goFailures).toBe(1);
   });
 
-  it("opens a card pack into picks that land in the deck with an effect tag", () => {
+  it("opens a card pack into picks that land in the deck with optional effects", () => {
     const base = createInitialGameState("PACK-SMOKE");
     const shop = {
       ...base,
@@ -130,8 +130,9 @@ describe("playable run reducer", () => {
     const opened = gameReducer(shop, { type: "BUY_OFFER", offerId: "offer-pack" });
     expect(opened.pendingPack?.picksLeft).toBe(2);
     expect(opened.pendingPack?.candidates).toHaveLength(5);
-    // Every candidate carries a label-only effect tag.
-    expect(opened.pendingPack?.candidates.every((card) => Boolean(card.effectTagId))).toBe(true);
+    // A candidate may deliberately be plain; tagged and plain cards use the
+    // same pick flow and both land in the deck intact.
+    expect(opened.pendingPack?.candidates.every((card) => card.effectTagId === undefined || typeof card.effectTagId === "string")).toBe(true);
     expect(opened.deck).toHaveLength(deckBefore);
     expect(opened.money).toBe(92);
 
@@ -148,9 +149,45 @@ describe("playable run reducer", () => {
     expect(afterSecond.pendingPack).toBeNull();
   });
 
-  it("always keeps the hand in calendar order", () => {
-    // The 광·동물·띠·피 toggle is gone. 짓 is built from month sums, so month
-    // order is the only arrangement that helps with the actual task.
+  it("keeps plain cards in the pack pool for deck balance", () => {
+    let plainCards = 0;
+    let effectCards = 0;
+    for (let index = 0; index < 40; index += 1) {
+      const base = createInitialGameState(`PACK-BALANCE-${index}`);
+      const shop = {
+        ...base,
+        runId: `pack-balance-${index}`,
+        screen: "shop" as const,
+        money: 99,
+        shopOffers: [{
+          offerId: "offer-pack",
+          category: "pack" as const,
+          definitionId: "pack_hwatu_large",
+          price: 7,
+          sold: false,
+        }],
+      };
+      const opened = gameReducer(shop, { type: "BUY_OFFER", offerId: "offer-pack" });
+      for (const card of opened.pendingPack?.candidates ?? []) {
+        if (card.effectTagId) effectCards += 1;
+        else plainCards += 1;
+      }
+    }
+    expect(plainCards).toBeGreaterThan(0);
+    expect(effectCards).toBeGreaterThan(plainCards);
+  });
+
+  it("keeps tutorial month one fixed but uses run entropy when tutorial is skipped", () => {
+    const initial = createInitialGameState("SHUFFLE");
+    const open = (tutorialMode: boolean, entropy: string) => gameReducer(
+      gameReducer(initial, { type: "START_RUN", startDeckId: "deck_standard", tutorialMode, entropy }),
+      { type: "START_STAGE" },
+    ).hand.map((card) => card.instanceId);
+    expect(open(true, "one")).toEqual(open(true, "two"));
+    expect(open(false, "one")).not.toEqual(open(false, "two"));
+  });
+
+  it("keeps only the tutorial opening sorted and shuffles ordinary hands", () => {
     const deck = createStandardHwatuDeck();
     const messy = [
       deck.find((card) => card.month === 9 && card.kind === "chaff")!,
@@ -165,9 +202,9 @@ describe("playable run reducer", () => {
       deck: [...messy, ...deck.filter((card) => !messy.includes(card))],
     };
     const play = gameReducer(base, { type: "START_STAGE" });
-    const months = play.hand.map((card) => card.month);
-    expect(months).toEqual([...months].sort((left, right) => left - right));
-    // Ties inside a month still fall back to 광 → 동물 → 띠 → 피.
+    expect(play.hand.map((card) => card.month)).not.toEqual(sortHand(play.hand).map((card) => card.month));
+    const tutorial = gameReducer({ ...base, tutorialMode: true }, { type: "START_STAGE" });
+    expect(tutorial.hand.map((card) => card.month)).toEqual(sortHand(tutorial.hand).map((card) => card.month));
     expect(sortHand(messy).map((card) => card.kind).slice(0, 2)).toEqual(["bright", "chaff"]);
   });
 
@@ -395,7 +432,7 @@ describe("playable run reducer", () => {
     expect(reset.talismans[0].growth).toBe(0);
   });
 
-  it("hands out the collection perks the moment a row completes", () => {
+  it("hands out a collection perk only after its book is purchased", () => {
     const deck = createStandardHwatuDeck();
     // 홍단 1·2월을 이미 모아 둔 상태에서 3월 홍단을 내면 그 순간 단이 완성된다.
     const hong = (month: number) =>
@@ -414,6 +451,7 @@ describe("playable run reducer", () => {
       drawPile: deck.filter((card) => !hand.some((entry) => entry.instanceId === card.instanceId)),
       selectedCardIds: hand.map((card) => card.instanceId),
       targetScore: 10_000,
+      yakuLevels: { ...createInitialGameState("PERK").yakuLevels, hongdan: { level: 2, mastery: 0 } },
       chain: {
         ...createGoChainState(),
         collection: {

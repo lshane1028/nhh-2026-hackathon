@@ -5,6 +5,7 @@ import {
   getCardModifierLines,
   getCardShine,
   getCardSurface,
+  SEAL_VISUALS,
 } from "../../app/components/card-visuals";
 import { CARD_EFFECT_TAGS } from "../content/card-effects";
 import { createStandardHwatuDeck } from "../engine/deck";
@@ -42,8 +43,8 @@ describe("card visuals", () => {
     expect(getCardMaterial(loaded)).toBe("glass");
     expect(getCardSurface(loaded)).toBe("gold_leaf");
 
-    // The effect tag is the only token drawn today — 낙관 is unbuilt and
-    // waiting on docs/HANDOFF-SEALS.md.
+    // The effect mark stays independent. The seal is rendered by its own
+    // lacquer-stamp layer instead of competing for this mark slot.
     expect(getCardMarks(loaded).map((mark) => mark.id)).toEqual(["effect-gilded"]);
 
     // All four still reach the player in words, including the undrawn one. A
@@ -52,12 +53,15 @@ describe("card visuals", () => {
     expect(getCardModifierLines(loaded)).toHaveLength(4);
   });
 
-  it("draws nothing for 낙관 but never loses it", () => {
+  it("gives every 낙관 a distinct glyph and trigger cue", () => {
     const sealed = withMods({ seal: "purple" });
     expect(getCardMarks(sealed)).toEqual([]);
     expect(getCardModifierLines(sealed)).toEqual(["낙관 · 자인"]);
-    // The data itself is untouched, which is the whole point of the handoff.
+    expect(SEAL_VISUALS.purple).toEqual({ glyph: "棄", cue: "버릴 때" });
     expect(sealed.seal).toBe("purple");
+
+    const signatures = Object.values(SEAL_VISUALS).map(({ glyph, cue }) => `${glyph}|${cue}`);
+    expect(new Set(signatures).size).toBe(signatures.length);
   });
 
   it("never lets 각인 swallow 판본", () => {

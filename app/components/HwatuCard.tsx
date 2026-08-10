@@ -2,15 +2,19 @@
 
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
 import type { CardInstance, CardKind } from "@/game/types";
-import { getAtlasPosition } from "./hwatu-atlas";
+import { getCardArtUrl } from "./hwatu-atlas";
 import {
-  getCardMarks,
   getCardMaterial,
   getCardModifierLines,
   getCardShine,
   getCardSurface,
+  MATERIAL_GLYPHS,
+  MATERIAL_LABELS,
+  SEAL_LABELS,
+  SEAL_VISUALS,
+  SURFACE_GLYPHS,
+  SURFACE_LABELS,
 } from "./card-visuals";
-import { CardMark } from "./CardMark";
 
 export type HwatuCupRole = "animal" | "double_chaff";
 
@@ -80,7 +84,7 @@ export function HwatuCard({
   const isDisabled = disabled || Boolean(card.disabledForRound);
   const kindLabel = getCardKindLabel(card, cupRole);
   const monthValue = card.month + card.permanentKkeutBonus;
-  const atlasPosition = getAtlasPosition(card);
+  const cardArtUrl = getCardArtUrl(card);
   const ribbonLabel = card.ribbonGroup
     ? RIBBON_LABELS[card.ribbonGroup]
     : null;
@@ -92,7 +96,6 @@ export function HwatuCard({
   // Four categories, four channels: 각인 is what the card is MADE of, 판본 is how
   // it CATCHES LIGHT, 낙관 and the effect tag are things STUCK to it. Different
   // questions, so they cannot crowd each other out however many are on at once.
-  const marks = getCardMarks(card);
   const material = getCardMaterial(card);
   const surface = getCardSurface(card);
   const shine = getCardShine(card);
@@ -118,6 +121,8 @@ export function HwatuCard({
     node.style.setProperty("--pointer-y", y.toFixed(3));
     node.style.setProperty("--shine-x", `${((x + 0.5) * 100).toFixed(1)}%`);
     node.style.setProperty("--shine-y", `${((y + 0.5) * 100).toFixed(1)}%`);
+    node.style.setProperty("--shadow-x", `${(-x * 18).toFixed(1)}px`);
+    node.style.setProperty("--shadow-y", `${(12 - y * 12).toFixed(1)}px`);
   };
   const untilt = (event: React.PointerEvent<HTMLElement>) => {
     const node = event.currentTarget;
@@ -125,6 +130,8 @@ export function HwatuCard({
     node.style.removeProperty("--pointer-y");
     node.style.removeProperty("--shine-x");
     node.style.removeProperty("--shine-y");
+    node.style.removeProperty("--shadow-x");
+    node.style.removeProperty("--shadow-y");
   };
 
   /* The face is the picture, a month corner, and one sticker per modifier.
@@ -135,7 +142,7 @@ export function HwatuCard({
       <span
         className="hwatu-card__art"
         data-asset-tag={card.assetTag}
-        style={{ backgroundPosition: atlasPosition }}
+        style={{ backgroundImage: `url("${cardArtUrl}")` }}
         aria-hidden="true"
       />
       {/* Material first: it is the card stock, so everything else sits on top. */}
@@ -149,22 +156,31 @@ export function HwatuCard({
         <span className={`hwatu-card__shine hwatu-card__shine--${shine}`} aria-hidden="true" />
       ) : null}
 
+      {material ? (
+        <span className="hwatu-card__modifier-badge hwatu-card__modifier-badge--material" aria-hidden="true">
+          <b>{MATERIAL_GLYPHS[material]}</b><small>{MATERIAL_LABELS[material]}</small>
+        </span>
+      ) : null}
+      {surface ? (
+        <span className="hwatu-card__modifier-badge hwatu-card__modifier-badge--surface" aria-hidden="true">
+          <b>{SURFACE_GLYPHS[surface]}</b><small>{SURFACE_LABELS[surface]}</small>
+        </span>
+      ) : null}
+      {card.seal ? (
+        <span className={`hwatu-card__seal hwatu-card__seal--${card.seal}`} aria-hidden="true">
+          <b>{SEAL_VISUALS[card.seal].glyph}</b>
+          <small>{SEAL_LABELS[card.seal]} · {SEAL_VISUALS[card.seal].cue}</small>
+        </span>
+      ) : null}
+
+      {effectTag ? (
+        <span className="hwatu-card__effect-field" aria-hidden="true" />
+      ) : null}
+
       <span className="hwatu-card__corner" aria-hidden="true">{card.month}</span>
       {splitRole ? (
         <span className="hwatu-card__split" aria-hidden="true">{splitRole === "jit" ? "짓" : "끗"}</span>
       ) : null}
-
-      {/* One mark per modifier, each in its own corner. Four can be on at once
-          and none of them will ever land on another. */}
-      {marks.map((mark) => (
-        <span
-          className={`hwatu-card__mark hwatu-card__mark--${mark.slot}`}
-          key={mark.id}
-          aria-hidden="true"
-        >
-          <CardMark sprite={mark.sprite} fill={mark.fill} highlight={mark.highlight} title={mark.label} />
-        </span>
-      ))}
 
       <span className="hwatu-card__hint" role="tooltip">
         <b>{card.month}월 {monthValue > card.month ? `+${monthValue - card.month}` : ""}</b>

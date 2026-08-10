@@ -22,7 +22,7 @@ export const CONTENT_EXPECTED_COUNTS = {
   talismans: 58,
   painters: 15,
   forbidden: 10,
-  books: 14,
+  books: 22,
   enhancements: 8,
   editions: 4,
   seals: 4,

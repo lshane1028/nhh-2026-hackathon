@@ -4,7 +4,7 @@ export type GameAction =
   | { type: "HYDRATE"; payload: unknown }
   | { type: "SET_SEED"; seed: string }
   | { type: "OPEN_DECK_SELECT" }
-  | { type: "START_RUN"; startDeckId: string; tutorialMode: boolean }
+  | { type: "START_RUN"; startDeckId: string; tutorialMode: boolean; entropy?: string }
   | { type: "CONTINUE_RUN"; state: import("../types").GameState }
   | { type: "TOGGLE_EXPERIMENT"; key: keyof ExperimentalRules }
   | { type: "START_STAGE" }

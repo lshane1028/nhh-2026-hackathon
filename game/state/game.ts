@@ -126,6 +126,7 @@ function emptyStats(): GameState["stats"] {
     goSuccesses: 0,
     goFailures: 0,
     highestHand: 0,
+    highestSubmissionCards: 0,
     moneyEarned: 0,
     yakusPlayed: {},
   };
@@ -163,6 +164,8 @@ export function createInitialGameState(seed = DEFAULT_SEED): GameState {
     roundSettlementBonus: 0,
     failMoneyPenalty: 0,
     roundSubmissionIndex: 0,
+    roundHighestHand: 0,
+    roundHighestSubmissionCards: 0,
     roundTalismanUses: {},
     scoredMonthsThisRound: [],
     chain: createGoChainState(),
@@ -194,6 +197,7 @@ export function createInitialGameState(seed = DEFAULT_SEED): GameState {
     calendarStamps: [],
     lastScore: null,
     lastRoundReward: 0,
+    lastRoundSummary: null,
     returnScreen: null,
     logs: [],
     stats: emptyStats(),
@@ -241,6 +245,7 @@ function collectionPerks(state: GameState) {
   return calculateCollectionBonus(
     cardsFromIds(state, state.chain.collection.cardIds),
     state.cupAssignments,
+    state.yakuLevels,
   ).perks;
 }
 
@@ -293,15 +298,17 @@ function refillHand(state: GameState, currentHand: CardInstance[]): GameState {
   return {
     ...state,
     rngCursor: cursor,
-    hand: sortHand([...currentHand, ...faceDownForBoss(drawn, boss)]),
+    hand: state.tutorialMode && state.stage === 1
+      ? sortHand([...currentHand, ...faceDownForBoss(drawn, boss)])
+      : [...currentHand, ...faceDownForBoss(drawn, boss)],
     drawPile: pile.slice(drawn.length),
     usedPile,
   };
 }
 
-function startRun(state: GameState, startDeckId: string, tutorialMode: boolean): GameState {
+function startRun(state: GameState, startDeckId: string, tutorialMode: boolean, entropy = "fixed"): GameState {
   let cursor = 0;
-  const runId = `${state.seed}:run:${state.rngCursor}`;
+  const runId = `${state.seed}:run:${entropy}`;
   const random = () => randomAt(`${state.seed}:${runId}`, cursor++);
   const makeId = (prefix: string) => `${prefix}:${runId}:${cursor++}`;
   const result = applyStartDeck(createStandardHwatuDeck(), startDeckId, random, makeId);
@@ -373,8 +380,9 @@ function startStage(state: GameState): GameState {
   const stageBossId = state.stage > 12
     ? BOSSES[(state.stage - 13) % BOSSES.length].id
     : stage.bossId;
+  const scriptedTutorial = state.tutorialMode && state.stage === 1;
   const shuffled = shuffleDeterministic(state.deck.map(cloneCard), {
-    seed: `${state.seed}:${state.runId}:stage:${state.stage}`,
+    seed: scriptedTutorial ? `${DEFAULT_SEED}:tutorial-stage-1` : `${state.seed}:${state.runId}:stage:${state.stage}`,
     cursor: state.rngCursor,
   });
   const yardCards: CardInstance[] = [];
@@ -383,7 +391,8 @@ function startStage(state: GameState): GameState {
   const discards = state.baseDiscards + countContract(state, "discards_per_round");
   const boss = stageBossId ? BOSS_BY_ID[stageBossId] ?? null : null;
   const handSize = effectiveHandSize(state);
-  const hand = sortHand(faceDownForBoss(pileAfterYard.slice(0, handSize).map(cloneCard), boss));
+  const dealt = faceDownForBoss(pileAfterYard.slice(0, handSize).map(cloneCard), boss);
+  const hand = scriptedTutorial ? sortHand(dealt) : dealt;
   const next: GameState = {
     ...state,
     screen: "play",
@@ -402,10 +411,13 @@ function startStage(state: GameState): GameState {
     chain: createGoChainState(),
     yard: { cards: yardCards, sweptCount: 0 },
     roundSubmissionIndex: 0,
+    roundHighestHand: 0,
+    roundHighestSubmissionCards: 0,
     roundTalismanUses: {},
     scoredMonthsThisRound: [],
     lastScore: null,
     lastRoundReward: 0,
+    lastRoundSummary: null,
     returnScreen: null,
   };
   if (devouring.devoured.length > 0) {
@@ -610,10 +622,6 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
         capture.bonusKkeut,
         capture.bonusHeung,
       );
-      const collectionEffects = calculateCollectionBonus(
-        [...confirmedCards, ...pendingCards, ...evaluatedSubmission, ...evaluatedCaptured],
-        cupRoleMap,
-      ).effects;
       const fortuneEffects: OrderedScoreEffect[] = scoringCards
         .filter((card) => card.enhancement === "fortune" && randomAt(`${state.seed}:fortune-heung:${state.stage}:${state.roundSubmissionIndex}:${card.instanceId}`, 0) < 0.2)
         .map((card) => ({ sourceId: card.instanceId, label: "복패 대박", operation: "add_heung", value: 12 }));
@@ -625,7 +633,6 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
         applyCollectionCompletionBonus: false,
         orderedTalismanEffects: [
           ...stateEffects,
-          ...collectionEffects,
           ...fortuneEffects,
           ...talismanEffects,
         ],
@@ -799,6 +806,20 @@ function finishRound(state: GameState): GameState {
     0,
     Math.floor((rewardBreakdown.total + heldCoinMoney) * settlement.rewardFactor * settlementFactor),
   );
+  const collectionResult = calculateCollectionBonus(
+    cardsFromIds(state, state.chain.collection.cardIds),
+    state.cupAssignments,
+    state.yakuLevels,
+  );
+  const rewardReasons = [
+    { id: "base", label: "판을 이겨서", detail: "기본 승리 판돈", amount: rewardBreakdown.base },
+    ...(rewardBreakdown.remainingHands > 0 ? [{ id: "hands", label: "제출을 아껴서", detail: `남은 제출 ${state.handsRemaining}회`, amount: rewardBreakdown.remainingHands }] : []),
+    ...(rewardBreakdown.go > 0 ? [{ id: "go", label: `${state.chain.goCount}고를 성공해서`, detail: "고 성공 보너스", amount: rewardBreakdown.go }] : []),
+    ...(rewardBreakdown.overkill > 0 ? [{ id: "overkill", label: "목표를 크게 넘겨서", detail: `${state.chain.roundScore.toLocaleString("ko-KR")}점 달성`, amount: rewardBreakdown.overkill }] : []),
+    ...(rewardBreakdown.adjustment > 0 ? [{ id: "special", label: "부적·계약 효과로", detail: "추가 판돈", amount: rewardBreakdown.adjustment }] : []),
+    ...(heldCoinMoney > 0 ? [{ id: "coin", label: "금전패를 남겨서", detail: `금전패 ${heldCoinMoney / 2}장`, amount: heldCoinMoney }] : []),
+    ...((settlement.rewardFactor * settlementFactor) !== 1 ? [{ id: "factor", label: "고 판돈을 불려서", detail: "최종 판돈 배율", multiplier: Number((settlement.rewardFactor * settlementFactor).toFixed(2)) }] : []),
+  ];
   let yakuLevels = settlement.masteryLevels;
   if (state.lastScore && blueSeals > 0) {
     const current = yakuLevels[state.lastScore.yakuId] ?? { level: 1, mastery: 0 };
@@ -821,6 +842,18 @@ function finishRound(state: GameState): GameState {
     money: state.money + reward,
     yakuLevels,
     lastRoundReward: reward,
+    lastRoundSummary: {
+      submissionScore: state.chain.submissionScore,
+      collectionScore: state.chain.collectionScore,
+      goStopPoints: collectionResult.goStopPoints,
+      totalScore: state.chain.roundScore,
+      goCount: state.chain.goCount,
+      highestHand: state.roundHighestHand,
+      highestSubmissionCards: state.roundHighestSubmissionCards,
+      collectionCardIds: [...state.chain.collection.cardIds],
+      completedCollectionYakuIds: [...state.chain.collection.completedYakuIds],
+      rewardReasons,
+    },
     roundSettlementBonus: 0,
     selectedCardIds: [],
     calendarStamps: stamp ? [...state.calendarStamps, stamp] : state.calendarStamps,
@@ -863,10 +896,21 @@ function submitHand(state: GameState): GameState {
   const submittedIds = new Set(scored.submitted.map((card) => card.instanceId));
   const remainingHand = state.hand.filter((card) => !submittedIds.has(card.instanceId));
   const mastery = createMasteryEvents(scored.breakdown);
+  const collectedIds = [...new Set([
+    ...state.chain.collection.cardIds,
+    ...scored.submitted.map((card) => card.instanceId),
+    ...scored.captured.map((card) => card.instanceId),
+  ])];
+  const collectionResult = calculateCollectionBonus(
+    cardsFromIds(state, collectedIds),
+    state.cupAssignments,
+    state.yakuLevels,
+  );
   const chain = addHandToRound(state.chain, scored.breakdown.score, {
-    submittedCardIds: [...scored.submitted, ...scored.captured].map((card) => card.instanceId),
+    submittedCardIds: collectedIds,
     completedCollectionYakuIds: scored.breakdown.newCollectionYakuIds,
     masteryEvents: mastery,
+    collectionScore: collectionResult.goStopPoints * 20,
   });
 
   // 단은 완성되는 순간 버리기를 준다. 앞뒤 상태의 특전을 빼서 차이만 지급하므로
@@ -892,6 +936,8 @@ function submitHand(state: GameState): GameState {
       sweptCount: state.yard.sweptCount + Number(scored.swept),
     },
     roundSubmissionIndex: state.roundSubmissionIndex + 1,
+    roundHighestHand: Math.max(state.roundHighestHand, scored.breakdown.score),
+    roundHighestSubmissionCards: Math.max(state.roundHighestSubmissionCards, scored.submitted.length),
     scoredMonthsThisRound: [...new Set([
       ...state.scoredMonthsThisRound,
       ...scored.submitted
@@ -902,6 +948,7 @@ function submitHand(state: GameState): GameState {
       ...state.stats,
       handsPlayed: state.stats.handsPlayed + 1,
       highestHand: Math.max(state.stats.highestHand, scored.breakdown.score),
+      highestSubmissionCards: Math.max(state.stats.highestSubmissionCards, scored.submitted.length),
       yakusPlayed: {
         ...state.stats.yakusPlayed,
         [scored.breakdown.yakuId]: (state.stats.yakusPlayed[scored.breakdown.yakuId] ?? 0) + 1,
@@ -1083,7 +1130,7 @@ function generateShopOffers(state: GameState): { offers: ShopOffer[]; cursor: nu
     const remaining = [...pool];
     const picked: Purchasable[] = [];
     for (let index = 0; index < count && remaining.length > 0; index += 1) {
-      const at = Math.floor(randomAt(`${state.seed}:${salt}:${state.stage}`, cursor++) * remaining.length);
+      const at = Math.floor(randomAt(`${state.seed}:${state.runId}:${salt}:${state.stage}`, cursor++) * remaining.length);
       picked.push(remaining.splice(at, 1)[0]);
     }
     return picked;
@@ -1122,7 +1169,7 @@ function generateOffers(state: GameState, shopType: ShopCategory, free = false):
   const pool = [...categoryPool(state, shopType)];
   const offers: ShopOffer[] = [];
   for (let index = 0; index < Math.min(3, pool.length); index += 1) {
-    const pick = Math.floor(randomAt(`${state.seed}:shop:${state.stage}:${shopType}`, cursor++) * pool.length);
+    const pick = Math.floor(randomAt(`${state.seed}:${state.runId}:shop:${state.stage}:${shopType}`, cursor++) * pool.length);
     const [definition] = pool.splice(pick, 1);
     offers.push({
       offerId: `${state.runId}:offer:${state.stage}:${cursor}`,
@@ -1137,7 +1184,8 @@ function generateOffers(state: GameState, shopType: ShopCategory, free = false):
 
 /**
  * Rolls the candidates a bought card pack puts on the table. Every candidate
- * carries a random effect tag — a label only, see content/card-effects.ts.
+ * may carry a random effect tag. Plain cards are deliberate: a pack full of
+ * guaranteed powers removes the decision and inflates the deck too quickly.
  */
 function openCardPack(state: GameState, pack: { id: string; name: string; choices: number; picks: number }): {
   pendingPack: NonNullable<GameState["pendingPack"]>;
@@ -1147,14 +1195,18 @@ function openCardPack(state: GameState, pack: { id: string; name: string; choice
   const templates = createStandardHwatuDeck();
   const candidates: CardInstance[] = [];
   for (let index = 0; index < pack.choices; index += 1) {
-    const template = templates[Math.floor(randomAt(`${state.seed}:pack-card:${state.stage}:${pack.id}`, cursor++) * templates.length)];
+    const template = templates[Math.floor(randomAt(`${state.seed}:${state.runId}:pack-card:${state.stage}:${pack.id}`, cursor++) * templates.length)];
     if (!template) continue;
-    const tag = rollCardEffectTag(randomAt(`${state.seed}:pack-tag:${state.stage}:${pack.id}`, cursor++));
+    const effectRoll = randomAt(`${state.seed}:${state.runId}:pack-tag:${state.stage}:${pack.id}`, cursor++);
+    const plainChance = pack.id === "pack_hwatu_large" ? 0.2 : 0.3;
+    const tag = effectRoll < plainChance
+      ? undefined
+      : rollCardEffectTag((effectRoll - plainChance) / (1 - plainChance));
     candidates.push({
       ...template,
       tags: [...template.tags],
       instanceId: `pack:${state.runId}:${state.stage}:${pack.id}:${index}:${cursor}`,
-      effectTagId: tag.id,
+      effectTagId: tag?.id,
     });
   }
   return {
@@ -1322,7 +1374,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "OPEN_DECK_SELECT":
       return { ...state, screen: "deck_select" };
     case "START_RUN":
-      return startRun(state, action.startDeckId, action.tutorialMode);
+      return startRun(state, action.startDeckId, action.tutorialMode, action.entropy);
     case "TOGGLE_EXPERIMENT":
       return { ...state, experimentalRules: { ...state.experimentalRules, [action.key]: !state.experimentalRules[action.key] } };
     case "START_STAGE":
@@ -1346,9 +1398,20 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "ASSIGN_CUP_ROLE": {
       if (state.pendingCupCardId !== action.cardId) return state;
       const card = state.deck.find((entry) => entry.instanceId === action.cardId);
+      const cupAssignments = { ...state.cupAssignments, [action.cardId]: action.role };
+      const collectionScore = calculateCollectionBonus(
+        cardsFromIds(state, state.chain.collection.cardIds),
+        cupAssignments,
+        state.yakuLevels,
+      ).goStopPoints * 20;
       return {
         ...state,
-        cupAssignments: { ...state.cupAssignments, [action.cardId]: action.role },
+        cupAssignments,
+        chain: {
+          ...state.chain,
+          collectionScore,
+          roundScore: state.chain.submissionScore + collectionScore,
+        },
         pendingCupCardId: null,
         logs: logEntry(
           state,

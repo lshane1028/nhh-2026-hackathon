@@ -48,10 +48,11 @@ function noise(context: AudioContext, duration: number, volume: number, delay = 
 export function playPackOpenSound() {
   const context = getContext();
   if (!context) return;
-  noise(context, 0.24, 0.12);
-  tone(context, 180, 0.18, 0.08, "sawtooth");
-  tone(context, 420, 0.16, 0.055, "square", 0.12);
-  tone(context, 690, 0.22, 0.045, "triangle", 0.2);
+  noise(context, 0.3, 0.15);
+  tone(context, 140, 0.2, 0.1, "sawtooth");
+  tone(context, 260, 0.14, 0.075, "square", 0.08);
+  tone(context, 520, 0.18, 0.065, "square", 0.16);
+  tone(context, 920, 0.28, 0.05, "triangle", 0.25);
 }
 
 export function playCardRevealSound(index = 0) {

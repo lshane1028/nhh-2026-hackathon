@@ -432,6 +432,24 @@
 .play-side .collection-board__track--bright .collection-board__slot { width: 1rem; height: 1rem; }
 .play-side .collection-board__milestone { font-size: 0.5rem; }
 
+/* The collection rail is a scoring surface, not a thumbnail strip. */
+.play-shell { grid-template-columns: clamp(19rem, 22vw, 23rem) minmax(0, 1fr) clamp(15.5rem, 18vw, 19rem); }
+.play-side .collection-board { gap: 0.58rem; padding: 0.7rem; }
+.play-side .collection-board__header > p { display: block; color: #f2d58c; font-size: 0.72rem; font-weight: 800; }
+.play-side .collection-board__track { gap: 0.45rem; padding: 0.58rem 0.65rem; }
+.play-side .collection-board__icon { width: 2.7rem; height: 3.45rem; background-size: cover; background-position: center; image-rendering: auto; }
+.play-side .collection-board__track-heading strong { font-size: 0.92rem; }
+.play-side .collection-board__track-heading span { font-size: 0.68rem; line-height: 1.35; }
+.play-side .collection-board__cards { gap: 0.3rem; overflow-x: auto; padding: 0.2rem 0.15rem 0.35rem; }
+.play-side .collection-card { flex: 0 0 2.35rem; width: 2.35rem; height: 3.5rem; }
+.play-side .collection-card__art { background-size: cover; background-position: center; }
+.play-side .collection-board__milestone { font-size: 0.65rem; min-height: 1.8rem; }
+.play-side .collection-board__milestone em { font-size: 0.62rem; }
+.play-rail__score-split { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem; margin: 0.35rem 0; }
+.play-rail__score-split > span { display: grid; padding: 0.35rem 0.45rem; border: 1px solid rgb(210 179 111 / 25%); background: rgb(13 18 14 / 65%); color: #b9ae94; font-size: 0.62rem; }
+.play-rail__score-split b { color: #f0ddb2; font-size: 0.85rem; }
+.play-rail__score-split small { color: #cf9f4c; font-size: 0.52rem; }
+
 .go-danger-banner {
   display: flex;
   align-items: center;
@@ -576,6 +594,8 @@
 .market-panel__note { margin: auto 0 0; color: #9aa79d; font-size: 0.58rem; line-height: 1.45; }
 
 .market-panel__racks { display: flex; min-height: 0; flex-direction: column; gap: 0.45rem; overflow: visible; }
+.market-panel__racks:has(.market-reward) { overflow-y: auto; overscroll-behavior: contain; padding-right: 0.25rem; }
+.market-panel__racks:has(.market-reward) .market-rack { flex: 0 0 auto; }
 
 .market-rack {
   display: flex;
@@ -863,6 +883,30 @@
   color: #cfdcd2;
   font-size: 0.6rem;
   font-weight: 700;
+}
+
+.market-reward { grid-template-columns: minmax(10rem, 0.45fr) minmax(16rem, 1fr); align-items: start; }
+.market-reward .market-art--wide { min-height: 17rem; background-size: contain; background-position: center; background-repeat: no-repeat; }
+.market-reward__copy { align-self: center; }
+.market-reward__reasons { display: grid; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+.market-reward__reasons li { display: grid; grid-template-columns: 1fr auto; gap: 0.1rem 0.8rem; padding: 0.55rem 0.7rem; border: 1px solid rgb(227 191 105 / 35%); background: linear-gradient(90deg, rgb(103 34 24 / 35%), rgb(19 29 24 / 82%)); opacity: 0; transform: translateX(-1.2rem) scale(0.97); animation: reward-reason-in 460ms cubic-bezier(.2,.9,.2,1) forwards; animation-delay: var(--reward-delay); }
+.market-reward__reasons span { color: #f2dfb2; font-weight: 900; }
+.market-reward__reasons small { color: #aeb8af; }
+.market-reward__reasons strong { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: #f1c75b; font-size: 1.05rem; }
+@keyframes reward-reason-in { 60% { opacity: 1; transform: translateX(0.2rem) scale(1.02); } 100% { opacity: 1; transform: none; } }
+.market-reward__scores { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.45rem; }
+.market-reward__scores > span { display: grid; gap: 0.15rem; padding: 0.7rem; border: 1px solid #62543c; background: #151914; }
+.market-reward__scores small { color: #a9a18e; font-weight: 800; }
+.market-reward__scores strong { color: #f3dfae; font-size: 1.2rem; }
+.market-reward__scores em { color: #d7ad55; font-size: 0.65rem; font-style: normal; }
+.market-reward__score-total { border-color: #b64232 !important; background: #321814 !important; }
+.market-reward__collection { grid-column: 1 / -1; max-height: 25rem; overflow: auto; }
+.market-reward__collection .collection-board__items { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+@media (max-width: 1180px) {
+  .play-shell { grid-template-columns: 17rem minmax(0, 1fr); }
+  .market-reward { grid-template-columns: 1fr; }
+  .market-reward__scores { grid-template-columns: repeat(2, 1fr); }
 }
 
 .deck-editor-screen > header { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(16rem, 0.6fr); gap: 1rem; align-items: end; }

@@ -81,13 +81,13 @@ function januaryPair(): { cards: CardInstance[]; candidate: YakuCandidate } {
 describe("complete content catalog", () => {
   it("matches every required catalog count", () => {
     expect(CONTENT_ACTUAL_COUNTS).toEqual(CONTENT_EXPECTED_COUNTS);
-    expect(CONTENT_CATALOG_VALIDATION.totalEntries).toBe(149);
+    expect(CONTENT_CATALOG_VALIDATION.totalEntries).toBe(157);
     expect(CONTENT_CATALOG_COMPLETE).toBe(true);
     expect(assertContentCatalogComplete()).toBe(true);
   });
 
   it("has globally unique IDs and asset tags with usable descriptions", () => {
-    expect(catalogEntries).toHaveLength(149);
+    expect(catalogEntries).toHaveLength(157);
     expect(new Set(catalogEntries.map((entry) => entry.id)).size).toBe(catalogEntries.length);
     expect(new Set(ALL_CONTENT_ASSET_TAGS).size).toBe(ALL_CONTENT_ASSET_TAGS.length);
     for (const entry of catalogEntries) {

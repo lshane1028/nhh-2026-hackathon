@@ -38,6 +38,9 @@ export function loadGame(): GameState | null {
 }
 
 function normalizeGameState(game: GameState): GameState {
+  const legacyRoundScore = game.chain.roundScore ?? 0;
+  const submissionScore = game.chain.submissionScore ?? legacyRoundScore;
+  const collectionScore = game.chain.collectionScore ?? 0;
   return {
     ...game,
     experimentalRules: { ...game.experimentalRules, yardMatching: false },
@@ -48,11 +51,24 @@ function normalizeGameState(game: GameState): GameState {
     roundSettlementBonus: game.roundSettlementBonus ?? 0,
     failMoneyPenalty: game.failMoneyPenalty ?? 0,
     roundSubmissionIndex: game.roundSubmissionIndex ?? 0,
+    roundHighestHand: game.roundHighestHand ?? game.stats?.highestHand ?? 0,
+    roundHighestSubmissionCards: game.roundHighestSubmissionCards ?? 0,
     roundTalismanUses: game.roundTalismanUses ?? {},
     scoredMonthsThisRound: game.scoredMonthsThisRound ?? [],
     returnScreen: game.returnScreen ?? null,
     cupAssignments: game.cupAssignments ?? {},
     pendingCupCardId: game.pendingCupCardId ?? null,
+    chain: {
+      ...game.chain,
+      submissionScore,
+      collectionScore,
+      roundScore: submissionScore + collectionScore,
+    },
+    lastRoundSummary: game.lastRoundSummary ?? null,
+    stats: {
+      ...game.stats,
+      highestSubmissionCards: game.stats?.highestSubmissionCards ?? 0,
+    },
   };
 }
 

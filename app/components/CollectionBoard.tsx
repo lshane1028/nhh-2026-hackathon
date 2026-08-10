@@ -1,7 +1,7 @@
 "use client";
 
 import type { CollectionSlot } from "@/game/engine/collection-board";
-import { getAtlasPosition } from "./hwatu-atlas";
+import { getCardArtUrl } from "./hwatu-atlas";
 
 export type CollectionTrackKind =
   | "bright"
@@ -23,6 +23,7 @@ export interface CollectionBoardItem {
   name: string;
   kind: CollectionTrackKind;
   assetTag: string;
+  iconUrl?: string;
   confirmedCount: number;
   pendingCount?: number;
   /**
@@ -54,6 +55,7 @@ export interface CollectionBoardProps {
   assetTag: string;
   items: readonly CollectionBoardItem[];
   className?: string;
+  scoreLabel?: string;
 }
 
 function joinClassNames(...values: Array<string | false | undefined>): string {
@@ -110,7 +112,7 @@ function CollectionCard({ slot }: { slot: CollectionSlot }) {
     >
       <span
         className="collection-card__art"
-        style={{ backgroundPosition: getAtlasPosition(slot) }}
+        style={{ backgroundImage: `url("${getCardArtUrl(slot)}")` }}
         aria-hidden="true"
       />
       <span className="collection-card__month" aria-hidden="true">{slot.month}</span>
@@ -126,6 +128,7 @@ export function CollectionBoard({
   assetTag,
   items,
   className,
+  scoreLabel,
 }: CollectionBoardProps) {
   return (
     <section
@@ -138,7 +141,7 @@ export function CollectionBoard({
           <span>COLLECTION</span>
           <strong>수집판</strong>
         </div>
-        <p>줄마다 주는 것이 다릅니다. 광은 고 문턱을 깎고, 동물은 손패를 키우고, 고도리는 짓 규칙을 풀고, 띠는 버리기를, 피는 판돈을 줍니다.</p>
+        <p>{scoreLabel ?? "고스톱 기본 점수 · 비결서를 사면 추가 특전이 열립니다."}</p>
       </header>
 
       {items.length === 0 ? (
@@ -163,8 +166,12 @@ export function CollectionBoard({
               >
                 <div className="collection-board__track-heading">
                   {/* Image slot for the track's own picture. */}
-                  <span className="collection-board__icon" data-asset-tag={item.assetTag}>
-                    <span aria-hidden="true">IMG</span>
+                  <span
+                    className="collection-board__icon collection-board__icon--art"
+                    data-asset-tag={item.assetTag}
+                    style={item.iconUrl ? { backgroundImage: `url("${item.iconUrl}")` } : undefined}
+                  >
+                    {!item.iconUrl ? <span aria-hidden="true">IMG</span> : null}
                   </span>
                   <div>
                     <strong>{item.name}</strong>

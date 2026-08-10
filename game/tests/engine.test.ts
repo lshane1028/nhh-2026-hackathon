@@ -102,7 +102,7 @@ describe("standard content registries", () => {
     expect(ALL_IMMEDIATE_YAKU_DEFINITIONS.every((entry) => entry.baseKkeut === 0 && entry.growthKkeut === 0)).toBe(true);
     expect(COLLECTION_YAKU_DEFINITIONS.every((entry) => entry.completionKkeut === 0 && entry.growthKkeut === 0)).toBe(true);
     expect(STAGES.map((stage) => stage.target)).toEqual([
-      150, 290, 510, 950, 1_800, 3_400, 6_400, 12_000, 22_000, 41_000, 76_000, 140_000,
+      150, 280, 500, 850, 1_450, 2_450, 4_100, 6_800, 11_200, 18_500, 30_500, 50_000,
     ]);
   });
 

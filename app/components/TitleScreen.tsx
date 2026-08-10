@@ -26,11 +26,13 @@ export interface TitleScreenProps {
   continueSummary?: string;
   newGameLabel?: string;
   continueLabel?: string;
+  skipTutorialLabel?: string;
   onToggleExperimentalRule: (
     rule: ExperimentalRuleKey,
     enabled: boolean,
   ) => void;
   onNewGame: () => void;
+  onSkipTutorial: () => void;
   onContinue?: () => void;
   className?: string;
 }
@@ -51,8 +53,10 @@ export function TitleScreen({
   continueSummary,
   newGameLabel = "새 게임",
   continueLabel = "이어하기",
+  skipTutorialLabel = "튜토리얼 없이 시작",
   onToggleExperimentalRule,
   onNewGame,
+  onSkipTutorial,
   onContinue,
   className,
 }: TitleScreenProps) {
@@ -135,6 +139,14 @@ export function TitleScreen({
             onClick={onNewGame}
           >
             {newGameLabel}
+          </button>
+          <button
+            type="button"
+            className="screen-button screen-button--skip"
+            onClick={onSkipTutorial}
+          >
+            {skipTutorialLabel}
+            <small>1월부터 완전 무작위</small>
           </button>
           <button
             type="button"

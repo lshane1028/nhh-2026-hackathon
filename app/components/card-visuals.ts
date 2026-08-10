@@ -85,19 +85,43 @@ export const SURFACE_LABELS: Record<NonNullable<CardSurface>, string> = {
   engraved: "음각",
 };
 
-/*
-  낙관 has no artwork on purpose — see docs/HANDOFF-SEALS.md.
-
-  The data is untouched: `card.seal` is still set, still saved, still read by
-  the engine, and still named in the hover panel. Only the drawing is gone, so
-  whoever picks this up starts from a clean face instead of unpicking a version
-  that was already rejected.
-*/
+/* Names and trigger glyphs for the lacquer-stamp layer rendered by HwatuCard. */
 export const SEAL_LABELS: Record<NonNullable<CardInstance["seal"]>, string> = {
   yellow: "황인",
   red: "적인",
   blue: "청인",
   purple: "자인",
+};
+
+/** Colour is never the only identifier: every modifier also owns a glyph. */
+export const MATERIAL_GLYPHS: Record<CardMaterial, string> = {
+  inked: "墨",
+  scarlet: "倍",
+  wild: "萬",
+  glass: "璃",
+  steel: "鋼",
+  stone: "石",
+  coin: "錢",
+  fortune: "福",
+};
+
+export const SURFACE_GLYPHS: Record<NonNullable<CardSurface>, string> = {
+  gold_leaf: "金",
+  mother_of_pearl: "螺",
+  five_color: "彩",
+  engraved: "刻",
+};
+
+export interface SealVisual {
+  glyph: string;
+  cue: string;
+}
+
+export const SEAL_VISUALS: Record<NonNullable<CardInstance["seal"]>, SealVisual> = {
+  yellow: { glyph: "냥", cue: "득점 보상" },
+  red: { glyph: "再", cue: "한 번 더" },
+  blue: { glyph: "留", cue: "손에 보유" },
+  purple: { glyph: "棄", cue: "버릴 때" },
 };
 
 /** No two effect tags share both sprite and colour. The test enforces it. */
@@ -165,8 +189,8 @@ export function getCardShine(card: CardInstance): CardShine {
  * cluttered pile no matter how carefully each is drawn, because they all answer
  * the same question.
  *
- * 낙관 has none either, but for a different reason: it is unbuilt, and waiting
- * on docs/HANDOFF-SEALS.md.
+ * 낙관 is rendered by its own lacquer-stamp layer rather than as a CardMark,
+ * so it cannot collide with the effect title strip.
  *
  * So this is the effect tag alone right now. Every name still reaches the
  * player through the hover panel, which is where they go for exact wording.
@@ -202,8 +226,6 @@ export function getCardModifierLines(card: CardInstance): string[] {
   const lines: string[] = [];
   if (card.enhancement) lines.push(`각인 · ${MATERIAL_LABELS[card.enhancement]}`);
   if (card.edition) lines.push(`판본 · ${SURFACE_LABELS[card.edition]}`);
-  // Kept even though nothing is drawn for it. A seal the player owns and
-  // cannot see anywhere at all is worse than one that is only named.
   if (card.seal) lines.push(`낙관 · ${SEAL_LABELS[card.seal]}`);
   lines.push(...getCardMarks(card).map((mark) => mark.detail));
   return lines;

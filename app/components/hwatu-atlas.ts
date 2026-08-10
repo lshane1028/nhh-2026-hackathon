@@ -21,6 +21,15 @@ export interface AtlasCard {
   chaffValue?: number;
 }
 
+/**
+ * The shipping cards are individually cropped and normalised to 320x480.
+ * The source sheet has irregular gutters, so using it as a uniform CSS sprite
+ * clips a few pixels from every card even though it looks like an 8x6 grid.
+ */
+export function getCardArtUrl(card: AtlasCard): string {
+  return `/assets/cards/hwatu/${card.assetTag}.webp`;
+}
+
 /** Column offset of a card inside its month's block of four. */
 function cardOffset(card: AtlasCard): number {
   if (card.assetTag.endsWith("chaff-a")) return 2;

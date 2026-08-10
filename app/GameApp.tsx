@@ -39,7 +39,7 @@ import { CollectionBoard, type CollectionBoardItem } from "./components/Collecti
 import { GameModal } from "./components/GameModal";
 import { getGeneratedAssetUrl } from "./components/generated-asset";
 import { HwatuCard } from "./components/HwatuCard";
-import { getAtlasPosition } from "./components/hwatu-atlas";
+import { getAtlasPosition, getCardArtUrl } from "./components/hwatu-atlas";
 import { MarketScreen } from "./components/MarketScreen";
 import { PlayRail } from "./components/PlayRail";
 import { RunEndScreen } from "./components/RunEndScreen";
@@ -110,8 +110,9 @@ function cardsFor(state: GameState, ids: readonly string[]): CardInstance[] {
 function collectionItems(state: GameState): CollectionBoardItem[] {
   const confirmedCards = cardsFor(state, state.chain.collection.cardIds);
   const pendingCards: CardInstance[] = [];
-  const confirmed = calculateCollectionBonus(confirmedCards, state.cupAssignments);
-  const total = calculateCollectionBonus([...confirmedCards, ...pendingCards], state.cupAssignments);
+  const confirmed = calculateCollectionBonus(confirmedCards, state.cupAssignments, state.yakuLevels);
+  const total = calculateCollectionBonus([...confirmedCards, ...pendingCards], state.cupAssignments, state.yakuLevels);
+  const upgraded = (id: string) => (state.yakuLevels[id]?.level ?? 1) > 1;
   const pendingCount = (track: keyof typeof total.counts): number =>
     Math.max(0, total.counts[track] - confirmed.counts[track]);
 
@@ -135,14 +136,15 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       name: "광",
       kind: "bright",
       assetTag: "collection:bright-five-slots",
-      description: "모을수록 고 문턱이 싸집니다",
+      iconUrl: "/assets/cards/hwatu/card-08-bright-moon.webp",
+      description: `삼광 3점 · 비삼광 2점${["rain_three_brights", "three_brights", "four_brights", "five_brights"].some(upgraded) ? " · 비결: 고 문턱 감소" : ""}`,
       cards: slotsFor("bright"),
       confirmedCount: confirmed.counts.bright,
       pendingCount: pendingCount("bright"),
       milestones: [
-        { at: 3, label: "3장", reward: "배수 ×1.6 · 고 −10%" },
-        { at: 4, label: "4장", reward: "배수 ×2.2 · 고 −20%" },
-        { at: 5, label: "5장", reward: "배수 ×3.5 · 고 −30%" },
+        { at: 3, label: "삼광", reward: "3점 · 비광 포함 2점" },
+        { at: 4, label: "사광", reward: "4점" },
+        { at: 5, label: "오광", reward: "15점" },
       ],
     },
     {
@@ -150,14 +152,15 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       name: "동물",
       kind: "animal",
       assetTag: "collection:animal-track",
-      description: "5장 손패 +1 · 8장 배수 ×1.8",
+      iconUrl: "/assets/cards/hwatu/card-10-animal-deer.webp",
+      description: "5장부터 1점 · 이후 장당 +1점",
       cards: slotsFor("animal"),
       confirmedCount: confirmed.counts.animal,
       pendingCount: pendingCount("animal"),
       slotCount: 10,
       milestones: [
-        { at: 5, label: "5장", reward: "손패 +1" },
-        { at: 8, label: "8장", reward: "배수 ×1.8" },
+        { at: 5, label: "5장", reward: "1점" },
+        { at: 6, label: "추가", reward: "장당 +1점" },
       ],
     },
     {
@@ -165,13 +168,14 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       name: "고도리",
       kind: "godori",
       assetTag: "collection:godori-track",
-      description: "완성하면 짓 규칙이 풀립니다",
+      iconUrl: "/assets/cards/hwatu/card-08-animal-bird.webp",
+      description: `완성 +5점${upgraded("godori") ? " · 비결: 짓 5배수 허용" : ""}`,
       cards: slotsFor("godori"),
       confirmedCount: confirmed.counts.godori,
       pendingCount: pendingCount("godori"),
       slotLabels: GODORI_MONTHS.map((month) => `${month}월`),
       milestones: [
-        { at: 3, label: "세 마리", reward: "짓 5의 배수 허용", active: total.completedSets.godori },
+        { at: 3, label: "세 마리", reward: upgraded("godori") ? "+5점 · 짓 5배수" : "+5점", active: total.completedSets.godori },
       ],
     },
     {
@@ -179,16 +183,17 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       name: "띠",
       kind: "ribbon",
       assetTag: "collection:ribbon-track",
-      description: "단마다 버리기 +1 · 삼단이면 배수 ×2.5",
+      iconUrl: "/assets/cards/hwatu/card-03-ribbon-hong.webp",
+      description: "5장부터 1점 · 단마다 +3점",
       cards: slotsFor("ribbon"),
       confirmedCount: confirmed.counts.ribbon,
       pendingCount: pendingCount("ribbon"),
       slotCount: 10,
       milestones: [
-        { at: 3, label: "홍단", reward: "버리기 +1", active: total.completedSets.hongdan },
-        { at: 3, label: "초단", reward: "버리기 +1", active: total.completedSets.chodan },
-        { at: 3, label: "청단", reward: "버리기 +1", active: total.completedSets.cheongdan },
-        { at: 5, label: "5장", reward: "배수 ×1.4" },
+        { at: 3, label: "홍단", reward: upgraded("hongdan") ? "+3점 · 버리기 +1" : "+3점", active: total.completedSets.hongdan },
+        { at: 3, label: "초단", reward: upgraded("chodan") ? "+3점 · 버리기 +1" : "+3점", active: total.completedSets.chodan },
+        { at: 3, label: "청단", reward: upgraded("cheongdan") ? "+3점 · 버리기 +1" : "+3점", active: total.completedSets.cheongdan },
+        { at: 5, label: "5장", reward: "1점 · 이후 장당 +1" },
       ],
     },
     {
@@ -196,16 +201,16 @@ function collectionItems(state: GameState): CollectionBoardItem[] {
       name: "피",
       kind: "chaff",
       assetTag: "collection:chaff-ten-slots",
+      iconUrl: "/assets/cards/hwatu/card-01-chaff-a.webp",
       // 피는 덱에 24장이라 후보를 전부 깔면 판이 파묻힌다. 어차피 어떤 피든
       // 값이 같으니 체크리스트가 될 이유도 없다. 그래서 여기만 "가져온 것"만
       // 그리는 집계 줄이고, 쌍피는 값 배지로 두 칸어치임을 밝힌다.
       cards: slotsFor("chaff", true),
-      description: "피는 돈입니다 · 쌍피는 두 칸",
+      description: "10피부터 1점 · 쌍피는 2피",
       confirmedCount: confirmed.counts.chaff,
       pendingCount: pendingCount("chaff"),
       milestones: [
-        { at: 7, label: "7피", reward: "판돈 +0.5/점" },
-        { at: 10, label: "10피", reward: "배수 ×1.5 · 월 합 +1/점" },
+        { at: 10, label: "10피", reward: "1점 · 이후 피점당 +1" },
       ],
     },
   ];
@@ -375,6 +380,7 @@ export default function GameApp() {
   const [state, dispatch] = useReducer(gameReducer, undefined, () => createInitialGameState());
   const [savedState, setSavedState] = useState<GameState | null>(null);
   const [tutorialMode, setTutorialMode] = useState(true);
+  const runEntropy = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
   const [selectedContract, setSelectedContract] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [restartOpen, setRestartOpen] = useState(false);
@@ -415,6 +421,7 @@ export default function GameApp() {
       || calculateCollectionBonus(
         cardsFor(state, state.chain.collection.cardIds),
         state.cupAssignments,
+        state.yakuLevels,
       ).perks.allowFiveMultipleJit,
     [state],
   );
@@ -546,7 +553,8 @@ export default function GameApp() {
           canContinue={Boolean(savedState)}
           continueSummary={savedState ? `${savedState.stage}월 · ${format(savedState.chain.roundScore)}점` : undefined}
           onToggleExperimentalRule={(key: keyof ExperimentalRules) => dispatch({ type: "TOGGLE_EXPERIMENT", key })}
-          onNewGame={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode })}
+          onNewGame={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode, entropy: runEntropy() })}
+          onSkipTutorial={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode: false, entropy: runEntropy() })}
           onContinue={savedState ? () => dispatch({ type: "CONTINUE_RUN", state: savedState }) : undefined}
         />
       </div>
@@ -567,6 +575,10 @@ export default function GameApp() {
   }
 
   if (state.screen === "reward") {
+    const summary = state.lastRoundSummary;
+    const rewardArtCard = (summary ? cardsFor(state, summary.collectionCardIds) : [])[0]
+      ?? state.deck.find((card) => card.month === stage.month)
+      ?? state.deck[0];
     return marketShell(
       { assetTag: "ui:reward:ink-pouch", title: "판 승리", subtitle: "판돈을 받아 갑니다", tone: "reward" },
       "판을 넘겼습니다",
@@ -581,7 +593,19 @@ export default function GameApp() {
           amount: state.lastRoundReward,
           title: "판돈과 박 보상",
           description: `${format(state.chain.roundScore)}점으로 목표 달성`,
-          lines: [`남은 제출 ${state.handsRemaining}회`, `${state.chain.goCount}고`, `달력 도장 ${state.calendarStamps.length}개`],
+          imageUrl: rewardArtCard ? getCardArtUrl(rewardArtCard) : undefined,
+          reasons: summary?.rewardReasons,
+          scores: summary ? {
+            submission: summary.submissionScore,
+            collection: summary.collectionScore,
+            goStopPoints: summary.goStopPoints,
+            total: summary.totalScore,
+            goCount: summary.goCount,
+            highestHand: summary.highestHand,
+            highestSubmissionCards: summary.highestSubmissionCards,
+          } : undefined,
+          collectionItems: collections,
+          lines: summary ? undefined : [`남은 제출 ${state.handsRemaining}회`, `${state.chain.goCount}고`, `달력 도장 ${state.calendarStamps.length}개`],
         }}
         onContinue={() => dispatch({ type: "CONTINUE_AFTER_REWARD" })}
       />,
@@ -675,7 +699,7 @@ export default function GameApp() {
           stats={state.stats}
           summary={isWin ? "열두 달을 모두 도장 찍었습니다. 같은 덱으로 무한 달력을 이어갈 수 있습니다." : "덱은 사라지지 않았습니다. 같은 시드로 다시 설계해 보세요."}
           failureReason={!isWin ? `${format(Math.max(0, state.targetScore - state.chain.roundScore))}점 부족` : undefined}
-          onRestart={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode: state.tutorialMode })}
+          onRestart={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode: state.tutorialMode, entropy: runEntropy() })}
           onReturnToTitle={resetToTitle}
           onCopySeed={() => void navigator.clipboard?.writeText(state.seed)}
         />
@@ -707,7 +731,11 @@ export default function GameApp() {
   return (
     <div className="play-shell">
       <aside className="play-side" data-tutorial="collection">
-        <CollectionBoard assetTag="ui:collection-board" items={collections} />
+        <CollectionBoard
+          assetTag="ui:collection-board"
+          items={collections}
+          scoreLabel={`수집 ${format(state.chain.collectionScore)}점 · 고스톱 ${format(state.chain.collectionScore / 20)}점`}
+        />
       </aside>
 
       <main className="play-board">
@@ -850,6 +878,8 @@ export default function GameApp() {
         targetScore={requirement}
         rewardLabel={`${baseReward}냥`}
         roundScore={state.chain.roundScore}
+        submissionScore={state.chain.submissionScore}
+        collectionScore={state.chain.collectionScore}
         goCount={state.chain.goCount}
         breakdown={shownBreakdown}
         reveal={state.lastScore && shownBreakdown === state.lastScore ? reveal : undefined}
@@ -907,6 +937,13 @@ function PackPickModal({ pack, onPick, onClose }: {
   onPick: (instanceId: string) => void;
   onClose: () => void;
 }) {
+  const packKindLabel = (card: CardInstance) => {
+    if (card.kind === "chaff" && card.chaffValue === 2) return "쌍피";
+    if (card.kind === "bright") return "광";
+    if (card.kind === "animal") return "동물";
+    if (card.kind === "ribbon") return "띠";
+    return "피";
+  };
   const [opened, setOpened] = useState(false);
   const [opening, setOpening] = useState(false);
   const [revealedCount, setRevealedCount] = useState(0);
@@ -927,6 +964,7 @@ function PackPickModal({ pack, onPick, onClose }: {
   const handleOpen = () => {
     if (opening) return;
     playPackOpenSound();
+    window.navigator.vibrate?.([18, 28, 32]);
     setOpening(true);
     setRevealedCount(0);
     window.setTimeout(() => setOpened(true), 520);
@@ -934,6 +972,7 @@ function PackPickModal({ pack, onPick, onClose }: {
 
   const handlePick = (instanceId: string) => {
     playCardPickSound();
+    window.navigator.vibrate?.(18);
     onPick(instanceId);
   };
 
@@ -972,6 +1011,23 @@ function PackPickModal({ pack, onPick, onClose }: {
                   onSelect={() => handlePick(card.instanceId)}
                   ariaLabel={`${card.month}월 ${card.name}${tag ? `, ${tag.name}` : ""}`}
                 />
+                <div className={tag ? `pack-pick__details pack-pick__details--${tag.id.replaceAll("_", "-")}` : "pack-pick__details pack-pick__details--plain"}>
+                  <div className="pack-pick__identity">
+                    <span><b>{card.month}월</b> · {packKindLabel(card)}</span>
+                    <small>{card.monthName}</small>
+                  </div>
+                  {tag ? (
+                    <div className="pack-pick__effect-copy">
+                      <span className="pack-pick__effect-icon" aria-hidden="true">{tag.icon}</span>
+                      <span><b>{tag.name}</b><small>{tag.description}</small></span>
+                    </div>
+                  ) : (
+                    <div className="pack-pick__effect-copy pack-pick__effect-copy--none">
+                      <span className="pack-pick__effect-icon" aria-hidden="true">無</span>
+                      <span><b>기본패</b><small>추가 효과 없음</small></span>
+                    </div>
+                  )}
+                </div>
               </li>
             );
           })}

@@ -35,6 +35,8 @@ function emptyCollection(): CollectionState {
 
 export function createGoChainState(): GoChainState {
   return {
+    submissionScore: 0,
+    collectionScore: 0,
     roundScore: 0,
     goCount: 0,
     /** null until a Go is called; before that the bar is simply the target. */
@@ -93,6 +95,8 @@ export interface HandContribution {
   submittedCardIds?: readonly string[];
   completedCollectionYakuIds?: CollectionState["completedYakuIds"];
   masteryEvents?: readonly MasteryEvent[];
+  /** Absolute converted collection score after this hand. */
+  collectionScore?: number;
 }
 
 /** Folds one scored hand into the round. Nothing is ever rolled back. */
@@ -104,9 +108,13 @@ export function addHandToRound(
   if (!Number.isFinite(handScore) || handScore < 0) {
     throw new RangeError("handScore must be a finite non-negative value");
   }
+  const submissionScore = state.submissionScore + handScore;
+  const collectionScore = contribution.collectionScore ?? state.collectionScore;
   return {
     ...state,
-    roundScore: state.roundScore + handScore,
+    submissionScore,
+    collectionScore,
+    roundScore: submissionScore + collectionScore,
     collection: {
       cardIds: unique([...state.collection.cardIds, ...(contribution.submittedCardIds ?? [])]),
       completedYakuIds: unique([

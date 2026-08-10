@@ -439,6 +439,14 @@ export const BOOKS = [
     weight: 3,
     assetTag: "book:gwangttaeng-38",
   },
+  { id: "b_hongdan", name: "홍단 수집 비결", description: "홍단 점수 +1. 완성 시 버리기 +1을 해금.", yakuId: "hongdan", price: 6, rarity: "uncommon", weight: 12, assetTag: "book:hongdan" },
+  { id: "b_chodan", name: "초단 수집 비결", description: "초단 점수 +1. 완성 시 버리기 +1을 해금.", yakuId: "chodan", price: 6, rarity: "uncommon", weight: 12, assetTag: "book:chodan" },
+  { id: "b_cheongdan", name: "청단 수집 비결", description: "청단 점수 +1. 완성 시 버리기 +1을 해금.", yakuId: "cheongdan", price: 6, rarity: "uncommon", weight: 12, assetTag: "book:cheongdan" },
+  { id: "b_godori", name: "고도리 수집 비결", description: "고도리 점수 +1. 완성 시 짓 5배수 규칙을 해금.", yakuId: "godori", price: 7, rarity: "rare", weight: 9, assetTag: "book:godori" },
+  { id: "b_rain_three_brights", name: "비삼광 수집 비결", description: "비삼광 점수 +1. 광 비결은 고 문턱을 5% 낮춤.", yakuId: "rain_three_brights", price: 7, rarity: "rare", weight: 8, assetTag: "book:rain-three-brights" },
+  { id: "b_three_brights", name: "삼광 수집 비결", description: "삼광 점수 +1. 광 비결은 고 문턱을 5% 낮춤.", yakuId: "three_brights", price: 7, rarity: "rare", weight: 8, assetTag: "book:three-brights" },
+  { id: "b_four_brights", name: "사광 수집 비결", description: "사광 점수 +1. 광 비결은 고 문턱을 5% 낮춤.", yakuId: "four_brights", price: 8, rarity: "rare", weight: 6, assetTag: "book:four-brights" },
+  { id: "b_five_brights", name: "오광 수집 비결", description: "오광 점수 +1. 광 비결은 고 문턱을 5% 낮춤.", yakuId: "five_brights", price: 10, rarity: "legendary", weight: 3, assetTag: "book:five-brights" },
 ] as const satisfies readonly CatalogBookDefinition[];
 
 export const ENHANCEMENTS = [

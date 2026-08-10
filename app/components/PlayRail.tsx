@@ -15,6 +15,8 @@ export interface PlayRailProps {
   rewardLabel?: string;
   /** Everything scored this round so far. */
   roundScore: number;
+  submissionScore?: number;
+  collectionScore?: number;
   goCount: number;
   /** The hand currently being previewed, or the hand that was just played. */
   breakdown?: ScoreBreakdown | null;
@@ -54,6 +56,8 @@ export function PlayRail({
   targetScore,
   rewardLabel = "냥",
   roundScore,
+  submissionScore = roundScore,
+  collectionScore = 0,
   goCount,
   breakdown,
   formulaCaption,
@@ -104,6 +108,10 @@ export function PlayRail({
         <div className="play-rail__progress-head">
           <span>이번 판 점수</span>
           <strong>{formatNumber(roundScore)}</strong>
+        </div>
+        <div className="play-rail__score-split">
+          <span>제출 <b>{formatNumber(submissionScore)}</b></span>
+          <span>수집 <b>{formatNumber(collectionScore)}</b><small>고스톱 {formatNumber(collectionScore / 20)}점</small></span>
         </div>
         <div
           className="play-rail__progress-bar"

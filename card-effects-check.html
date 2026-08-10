@@ -11,12 +11,14 @@
   solved, it has been avoided.
 -->
 <link rel="stylesheet" href="./app/components/game-ui.css">
+<link rel="stylesheet" href="./app/game.css">
+<link rel="stylesheet" href="./app/components/pixel-direction.css">
 
 <style>
   body {
     margin: 0;
     padding: 2.5rem;
-    background: #14100c;
+    background: #14100c !important;
     color: #e8dcc2;
     font: 14px/1.6 system-ui, sans-serif;
   }
@@ -30,7 +32,14 @@
   figcaption span { color: #9a8f7c; font-size: 11px; }
   .hwatu-card__art { background-size: cover; background-position: center; }
   hr { margin: 2.5rem 0 0; border: 0; border-top: 1px solid #2c2620; }
+  .pack-picks { list-style: none; }
 </style>
+
+<h1>카드팩 실전 판독</h1>
+<p>설명을 열지 않아도 월·종류·효과 유무와 정확한 발동 내용을 바로 읽을 수 있어야 합니다.</p>
+<div class="game-modal--pack"><ul class="pack-picks" id="pack-preview"></ul></div>
+
+<hr>
 
 <h1>각인 — 카드가 무엇으로 만들어졌나</h1>
 <p>카드 면 전체. 구석을 쓰지 않으니 효과 표식과 절대 겹치지 않습니다. 원래 그림이 뭔지 계속 읽혀야 합니다.</p>
@@ -42,8 +51,13 @@
 <div class="grid" id="surfaces"></div>
 
 <hr>
+<h1>낙관 — 카드에 찍힌 발동 도장</h1>
+<p>색만 다른 점이 아니라 글자와 짧은 발동 조건까지 다릅니다.</p>
+<div class="grid" id="seals"></div>
+
+<hr>
 <h1>효과 — 카드가 지니고 있는 것</h1>
-<p>좌중단. 낙관은 지웠습니다 — <code>docs/HANDOFF-SEALS.md</code> 참고.</p>
+<p>글자 띠 없이 카드 면 전체에 새겨진 서로 다른 공예 문양으로 구분합니다.</p>
 <div class="grid" id="objects"></div>
 
 <hr>
@@ -58,6 +72,8 @@
     10: "card-10-animal-deer", 11: "card-11-bright-phoenix", 12: "card-12-bright-rain",
   };
   const MONTHS = Object.keys(ART).map(Number);
+  const MONTH_NAMES = { 1: "송학", 3: "벚꽃", 5: "난초", 7: "홍싸리", 8: "공산명월", 9: "국화", 10: "단풍", 11: "오동", 12: "비" };
+  const KIND_NAMES = { 1: "광", 3: "광", 5: "동물", 7: "동물", 8: "광", 9: "동물", 10: "동물", 11: "광", 12: "광" };
 
   const MATERIALS = [
     ["inked", "먹칠", "월 합 +3 · 잉크 경계선"], ["scarlet", "홍칠", "배수 +3 · 가로 붓결"],
@@ -70,63 +86,62 @@
     ["five_color", "오방색", "청·적·황·백·흑 다섯 띠"], ["engraved", "음각", "파낸 홈"],
   ];
   const EFFECTS = [
-    ["keeper-coin", "곳간패"], ["partner-boost", "짝패"], ["heavy-month", "무거운 달"],
-    ["echo", "메아리패"], ["drawn-luck", "행운패"], ["as-bright", "광 취급"],
-    ["as-animal", "동물 취급"], ["as-ribbon", "띠 취급"], ["extra-pi", "덧피"],
-    ["twin-kind", "쌍패"], ["gilded", "금칠패"], ["stubborn", "고집패"],
+    ["keeper-coin", "곳간패", "냥", "보유 +3냥"], ["partner-boost", "짝패", "짝", "함께 배수 +2"], ["heavy-month", "무거운 달", "+50", "득점 월합 +50"],
+    ["echo", "메아리패", "×2", "득점 재발동"], ["drawn-luck", "행운패", "+1", "버리기 +1"], ["as-bright", "광 취급", "光", "광으로도 셈"],
+    ["as-animal", "동물 취급", "獸", "동물로도 셈"], ["as-ribbon", "띠 취급", "帶", "띠로도 셈"], ["extra-pi", "덧피", "+1피", "피값 +1"],
+    ["twin-kind", "쌍패", "×2", "제 종류 2장"], ["gilded", "금칠패", "+1냥", "득점 +1냥"], ["stubborn", "고집패", "固", "못 버림 · 배수 +3"],
   ];
-  const SPRITE = {
-    "keeper-coin": ["coin", "#b8863a"], gilded: ["star", "#c2352a"], "partner-boost": ["rings", "#c2352a"],
-    "heavy-month": ["weight", "#2c2622"], echo: ["ripple", "#2f7a63"], "drawn-luck": ["knot", "#2f7a63"],
-    "as-bright": ["moon", "#e0ad45"], "as-animal": ["knot", "#8a5a2b"], "as-ribbon": ["ribbon", "#c2352a"],
-    "extra-pi": ["drops", "#3a5f8a"], "twin-kind": ["rings", "#7a3f74"], stubborn: ["pin", "#6a6f74"],
+  const SEALS = [
+    ["yellow", "황인", "냥", "득점 보상"],
+    ["red", "적인", "再", "한 번 더"],
+    ["blue", "청인", "留", "손에 보유"],
+    ["purple", "자인", "棄", "버릴 때"],
+  ];
+  const EFFECT_DESCRIPTIONS = {
+    "keeper-coin": "판이 끝날 때까지 손에 남아 있으면 3냥.",
+    "partner-boost": "다른 카드와 함께 제출하면 배수 +2.",
+    "heavy-month": "득점하면 월 합 +50.",
+    echo: "득점할 때 한 번 더 발동.",
+    "drawn-luck": "이 카드를 뽑은 손에서 버리기 1회 회복.",
+    "as-bright": "원래 종류에 더해 광으로도 셉니다.",
+    "as-animal": "원래 종류에 더해 동물로도 셉니다.",
+    "as-ribbon": "원래 종류에 더해 띠로도 셉니다.",
+    "extra-pi": "피값 +1. 피는 쌍피가 됩니다.",
+    "twin-kind": "제 종류로 두 장 취급.",
+    gilded: "득점하면 1냥.",
+    stubborn: "버릴 수 없지만 득점하면 배수 +3.",
   };
-
-  const SPRITES = {
-    coin: ["....oooo....","..ooXXXXoo..",".oXXXXXXXXo.",".oXXoooo XXo","oXXo....oXXo","oXXo....oXXo","oXXo....oXXo",".oXXoooooXXo",".oXXXXXXXXo.","..ooXXXXoo..","....oooo....","............"],
-    star: [".....oo.....",".....XX.....","....oXXo....","..ooXXXXoo..","ooXXXXXXXXoo",".oXXXXXXXXo.","..oXXXXXXo..","..oXXooXXo..",".oXXo..oXXo.","ooXo....oXoo",".o........o.","............"],
-    ink: ["....oooo....","..ooXXXXoo..",".oXXXXXXXXo.","oXXXXXXXXXXo","oXXXXXXXXXXo","oXXXXXXXXXXo",".oXXXXXXXXo.","..oXXXXXXo..","...oXXXXo...","..o.oXXo..o.",".....oo.....","............"],
-    rings: ["............",".ooo...ooo..","oXXXo.oXXXo.","oX.Xo.oX.Xo.","oX.XoooX.Xo.","oXXXoooXXXo.",".oooo.oooo..","............","............","............","............","............"],
-    weight: ["............","..oooooooo..",".oXXXXXXXXo.","oXX++++++XXo","oXXXXXXXXXXo","oXXXXXXXXXXo","oXXXXXXXXXXo","oXXXXXXXXXXo",".oXXXXXXXXo.","..oooooooo..","............","............"],
-    drops: ["............","..oo....oo..",".oXXo..oXXo.",".oXXo..oXXo.","..oo....oo..","............",".....oo.....","....oXXo....","....oXXo....",".....oo.....","............","............"],
-    ripple: ["...oooooo...","..o......o..",".o..oooo..o.","o..o....o..o","o.o..oo..o.o","o.o.oXXo.o.o","o.o..oo..o.o","o..o....o..o",".o..oooo..o.","..o......o..","...oooooo...","............"],
-    knot: ["............","..oo....oo..",".oXXo..oXXo.","..oXXooXXo..","...oXXXXo...","...oXXXXo...","..oXXooXXo..",".oXXo..oXXo.","..oo....oo..","............","............","............"],
-    pin: ["..oooooooo..",".oXXXXXXXXo.","..oooXXooo..","....oXXo....","....oXXo....","....oXXo....","....oXXo....",".....oXo....",".....oXo....","......o.....","............","............"],
-    ribbon: ["............","..oooooooo..",".oXXXXXXXXo.",".oX++++++Xo.",".oXXXXXXXXo.","..oooooooo..","...o....o...","...oXo.oXo..","...oXo.oXo..","....o...o...","............","............"],
-    moon: ["....oooo....","..ooXXXXoo..",".oXX++++XXo.","oXX++++++XXo","oX++++++++Xo","oX++++++++Xo","oXX++++++XXo",".oXX++++XXo.","..ooXXXXoo..","....oooo....","............","............"],
-  };
-
-  function markSvg(sprite, fill) {
-    let cells = "";
-    (SPRITES[sprite] || SPRITES.coin).forEach((row, y) => {
-      for (let x = 0; x < row.length; x++) {
-        const g = row[x];
-        if (g === "." || g === " ") continue;
-        const c = g === "o" ? "#17110c" : g === "+" ? "#fff3d2" : fill;
-        cells += `<rect x="${x}" y="${y}" width="1" height="1" fill="${c}"/>`;
-      }
-    });
-    return `<svg class="card-mark" viewBox="0 0 12 12" shape-rendering="crispEdges">${cells}</svg>`;
-  }
-
   let seed = 0;
   const pick = (list) => list[seed++ % list.length];
 
   /* Mirrors HwatuCard: material, then surface, then shine, then the objects. */
-  function card({ month, material, surface, effect }) {
+  function card({ month, material, surface, seal, effect, pack }) {
     const classes = ["hwatu-card"];
+    if (pack) classes.push("pack-pick__card");
     if (material) classes.push("hwatu-card--enhancement-" + material);
-    let html = `<article class="${classes.join(" ")}">`;
+    if (effect) classes.push("hwatu-card--effect-" + effect);
+    let html = `<button type="button" class="${classes.join(" ")}">`;
     html += `<span class="hwatu-card__art" style="background-image:url('./public/assets/cards/hwatu/${ART[month]}.webp')"></span>`;
     if (material) html += `<span class="hwatu-card__material hwatu-card__material--${material}"></span>`;
     if (surface) html += `<span class="hwatu-card__surface hwatu-card__surface--${surface}"></span>`;
     if (effect === "heavy-month") html += `<span class="hwatu-card__shine hwatu-card__shine--gilt"></span>`;
-    html += `<span class="hwatu-card__corner">${month}</span>`;
-    if (effect) {
-      const [sprite, fill] = SPRITE[effect];
-      html += `<span class="hwatu-card__mark hwatu-card__mark--mid-left">${markSvg(sprite, fill)}</span>`;
+    if (material) {
+      const data = MATERIALS.find(([id]) => id === material);
+      html += `<span class="hwatu-card__modifier-badge hwatu-card__modifier-badge--material"><b>${({inked:"墨",scarlet:"倍",wild:"萬",glass:"璃",steel:"鋼",stone:"石",coin:"錢",fortune:"福"})[material]}</b><small>${data[1]}</small></span>`;
     }
-    return html + "</article>";
+    if (surface) {
+      const data = SURFACES.find(([id]) => id === surface);
+      html += `<span class="hwatu-card__modifier-badge hwatu-card__modifier-badge--surface"><b>${({gold_leaf:"金",mother_of_pearl:"螺",five_color:"彩",engraved:"刻"})[surface]}</b><small>${data[1]}</small></span>`;
+    }
+    if (seal) {
+      const data = SEALS.find(([id]) => id === seal);
+      html += `<span class="hwatu-card__seal hwatu-card__seal--${seal}"><b>${data[2]}</b><small>${data[1]} · ${data[3]}</small></span>`;
+    }
+    if (effect) {
+      html += `<span class="hwatu-card__effect-field"></span>`;
+    }
+    html += `<span class="hwatu-card__corner">${month}</span>`;
+    return html + "</button>";
   }
 
   function render(target, items) {
@@ -135,22 +150,45 @@
     ).join("");
   }
 
+  function packDetails(month, effect) {
+    const data = effect ? EFFECTS.find(([id]) => id === effect) : null;
+    const effectHtml = data
+      ? `<div class="pack-pick__effect-copy"><span class="pack-pick__effect-icon">${data[2]}</span><span><b>${data[1]}</b><small>${EFFECT_DESCRIPTIONS[effect]}</small></span></div>`
+      : `<div class="pack-pick__effect-copy pack-pick__effect-copy--none"><span class="pack-pick__effect-icon">無</span><span><b>기본패</b><small>추가 효과 없음</small></span></div>`;
+    return `<div class="pack-pick__details pack-pick__details--${effect || "plain"}"><div class="pack-pick__identity"><span><b>${month}월</b> · ${KIND_NAMES[month]}</span><small>${MONTH_NAMES[month]}</small></div>${effectHtml}</div>`;
+  }
+
+  const PACK_PREVIEW = [
+    { month: 9, effect: "partner-boost" },
+    { month: 12, effect: "heavy-month" },
+    { month: 7, effect: "extra-pi" },
+    { month: 8, effect: "echo" },
+    { month: 3 },
+  ];
+  document.getElementById("pack-preview").innerHTML = PACK_PREVIEW.map((spec) =>
+    `<li class="pack-picks__item pack-picks__item--revealed">${card({ ...spec, pack: true })}${packDetails(spec.month, spec.effect)}</li>`,
+  ).join("");
+
   render("materials", MATERIALS.map(([id, name, note]) => ({
-    spec: { month: pick(MONTHS), material: id }, title: name, note,
+    spec: { month: 3, material: id }, title: name, note,
   })));
 
   render("surfaces", SURFACES.map(([id, name, note]) => ({
-    spec: { month: pick(MONTHS), surface: id }, title: name, note,
+    spec: { month: 3, surface: id }, title: name, note,
   })));
 
-  render("objects", EFFECTS.map(([id, name]) => ({
-    spec: { month: pick(MONTHS), effect: id }, title: name, note: "효과 · 좌중단",
+  render("seals", SEALS.map(([id, name, , cue]) => ({
+    spec: { month: 3, seal: id }, title: name, note: cue,
+  })));
+
+  render("objects", EFFECTS.map(([id, name, , cue]) => ({
+    spec: { month: pick(MONTHS), effect: id }, title: name, note: cue,
   })));
 
   render("stacks", [
-    { spec: { month: 3, material: "glass", surface: "gold_leaf" }, title: "2개", note: "유리패 + 금박" },
+    { spec: { month: 3, material: "glass", surface: "gold_leaf", seal: "red" }, title: "3개", note: "유리패 + 금박 + 적인" },
     { spec: { month: 7, material: "inked", effect: "heavy-month" }, title: "2개", note: "먹칠 + 무거운 달" },
-    { spec: { month: 9, material: "steel", surface: "mother_of_pearl", effect: "as-bright" }, title: "3개", note: "강철패 + 자개 + 광 취급" },
+    { spec: { month: 9, material: "steel", surface: "mother_of_pearl", seal: "blue", effect: "as-bright" }, title: "4개", note: "강철패 + 자개 + 청인 + 광 취급" },
     { spec: { month: 10, material: "coin", surface: "five_color", effect: "twin-kind" }, title: "3개", note: "금전패 + 오방색 + 쌍패" },
     { spec: { month: 11, material: "fortune", surface: "engraved", effect: "echo" }, title: "3개", note: "복패 + 음각 + 메아리패" },
     { spec: { month: 1, material: "inked", surface: "five_color", effect: "extra-pi" }, title: "3개", note: "먹칠 + 오방색 + 덧피" },
@@ -167,9 +205,11 @@
       el.style.setProperty("--pointer-y", y.toFixed(3));
       el.style.setProperty("--shine-x", ((x + 0.5) * 100).toFixed(1) + "%");
       el.style.setProperty("--shine-y", ((y + 0.5) * 100).toFixed(1) + "%");
+      el.style.setProperty("--shadow-x", (-x * 18).toFixed(1) + "px");
+      el.style.setProperty("--shadow-y", (12 - y * 12).toFixed(1) + "px");
     });
     el.addEventListener("pointerleave", () => {
-      for (const n of ["--pointer-x", "--pointer-y", "--shine-x", "--shine-y"]) el.style.removeProperty(n);
+      for (const n of ["--pointer-x", "--pointer-y", "--shine-x", "--shine-y", "--shadow-x", "--shadow-y"]) el.style.removeProperty(n);
     });
   }
 </script>

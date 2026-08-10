@@ -6,6 +6,7 @@ import type {
 } from "@/game/types";
 
 import { getGeneratedAssetUrl } from "./generated-asset";
+import { CollectionBoard, type CollectionBoardItem } from "./CollectionBoard";
 import "./screen-ui.css";
 
 export interface MarketRewardView {
@@ -14,6 +15,10 @@ export interface MarketRewardView {
   title?: string;
   description?: string;
   lines?: readonly string[];
+  imageUrl?: string;
+  reasons?: readonly { id: string; label: string; detail: string; amount?: number; multiplier?: number }[];
+  scores?: { submission: number; collection: number; goStopPoints: number; total: number; goCount: number; highestHand: number; highestSubmissionCards: number };
+  collectionItems?: readonly CollectionBoardItem[];
 }
 
 export interface MarketOfferView {
@@ -130,11 +135,12 @@ const DEPARTMENTS: readonly Department[] = [
 ];
 
 /** Text stand-in for a picture. Swap by styling [data-asset-tag]. */
-function ArtSlot({ assetTag, className }: { assetTag: string; className?: string }) {
+function ArtSlot({ assetTag, className, imageUrl }: { assetTag: string; className?: string; imageUrl?: string }) {
+  const generatedUrl = imageUrl ?? getGeneratedAssetUrl(assetTag);
   return (
-    <span className={joinClassNames("market-art", className)} data-asset-tag={assetTag}>
-      <span className="market-art__mark" aria-hidden="true">IMG</span>
-      <code>{assetTag}</code>
+    <span className={joinClassNames("market-art", className, Boolean(generatedUrl) && "market-art--generated")} data-asset-tag={assetTag} style={generatedUrl ? { backgroundImage: `url("${generatedUrl}")` } : undefined}>
+      {!generatedUrl ? <span className="market-art__mark" aria-hidden="true">IMG</span> : null}
+      {!generatedUrl ? <code>{assetTag}</code> : null}
     </span>
   );
 }
@@ -336,7 +342,7 @@ export function MarketScreen(props: MarketScreenProps) {
           {props.mode === "reward" ? (
             <Rack label="이번 판 보상" hint={`+${formatNumber(props.reward.amount)}냥`}>
               <div className="market-reward">
-                <ArtSlot assetTag={props.reward.assetTag} className="market-art--wide" />
+                <ArtSlot assetTag={props.reward.assetTag} imageUrl={props.reward.imageUrl} className="market-art--wide" />
                 <div className="market-reward__copy">
                   <strong>+{formatNumber(props.reward.amount)}냥</strong>
                   {props.reward.description ? <p>{props.reward.description}</p> : null}
@@ -346,6 +352,28 @@ export function MarketScreen(props: MarketScreenProps) {
                     </ul>
                   ) : null}
                 </div>
+                {props.reward.reasons?.length ? (
+                  <ol className="market-reward__reasons">
+                    {props.reward.reasons.map((reason, index) => (
+                      <li key={reason.id} style={{ "--reward-delay": `${index * 180}ms` } as React.CSSProperties}>
+                        <span>{reason.label}</span>
+                        <small>{reason.detail}</small>
+                        <strong>{reason.amount !== undefined ? `+${formatNumber(reason.amount)}냥` : `×${reason.multiplier}`}</strong>
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+                {props.reward.scores ? (
+                  <div className="market-reward__scores">
+                    <span><small>제출 점수</small><strong>{formatNumber(props.reward.scores.submission)}</strong></span>
+                    <span><small>수집 점수</small><strong>{formatNumber(props.reward.scores.collection)}</strong><em>고스톱 {props.reward.scores.goStopPoints}점</em></span>
+                    <span className="market-reward__score-total"><small>총점 · {props.reward.scores.goCount}고</small><strong>{formatNumber(props.reward.scores.total)}</strong></span>
+                    <span><small>최고 제출</small><strong>{formatNumber(props.reward.scores.highestHand)}점</strong><em>최대 {props.reward.scores.highestSubmissionCards}장</em></span>
+                  </div>
+                ) : null}
+                {props.reward.collectionItems ? (
+                  <CollectionBoard assetTag="ui:reward-collection" className="market-reward__collection" items={props.reward.collectionItems} scoreLabel="이번 판 최종 수집 족보" />
+                ) : null}
               </div>
             </Rack>
           ) : null}
