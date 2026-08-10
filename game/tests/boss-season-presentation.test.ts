@@ -45,4 +45,14 @@ describe("seasonal boss presentation", () => {
     expect(css).toContain("@keyframes boss-snow-fall");
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
   });
+
+  it("keeps the absolute submission theater out of the boss layer stacking rule", () => {
+    const gameCssPath = fileURLToPath(new URL("../../app/game.css", import.meta.url));
+    const theaterCssPath = fileURLToPath(new URL("../../app/components/pixel-direction.css", import.meta.url));
+    const gameCss = readFileSync(gameCssPath, "utf8");
+    const theaterCss = readFileSync(theaterCssPath, "utf8");
+
+    expect(gameCss).toContain(":not(.boss-season-fx, .card-theater)");
+    expect(theaterCss).toMatch(/\.card-theater\s*\{[^}]*position:\s*absolute/);
+  });
 });

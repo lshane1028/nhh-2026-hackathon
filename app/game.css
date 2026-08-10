@@ -371,7 +371,11 @@
     linear-gradient(180deg, #29342c, #1e2420);
   box-shadow: inset 0 0 3rem rgb(0 0 0 / 45%);
 }
-.play-board__felt > :not(.boss-season-fx) { position: relative; z-index: 2; }
+/* Keep ordinary play-board children above the boss weather, but do not change
+   the submission theater's absolute positioning. The broader selector added
+   with the boss overlay made the theater participate in the grid and collapse
+   into the top half of the felt. */
+.play-board__felt > :not(.boss-season-fx, .card-theater) { position: relative; z-index: 2; }
 
 /* Boss weather is a transparent stage layer. The felt below it is unchanged,
    and this clipped inner surface lets hovered cards still escape the board. */
