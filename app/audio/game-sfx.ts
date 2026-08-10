@@ -23,6 +23,7 @@ export const GAME_AUDIO_ASSETS = {
   hwatuSwipe: [1, 2, 3].map((index) => `/assets/audio/sfx/hwatu-swipe-${index}.wav`),
   hwatuPlasticCards: "/assets/audio/sfx/plastic-cards-table.mp3",
   hwatuPlasticSnap: "/assets/audio/sfx/plastic-snap.mp3",
+  hwatuFaceSlap: "/assets/audio/sfx/face-slap.mp3",
   chipLay: [1, 2, 3].map((index) => `/assets/audio/sfx/chip-lay-${index}.ogg`),
   chipStack: [1, 2, 3].map((index) => `/assets/audio/sfx/chips-stack-${index}.ogg`),
   cardShuffle: "/assets/audio/sfx/card-shuffle.ogg",
@@ -431,6 +432,7 @@ export function primeGameAudio() {
     ...GAME_AUDIO_ASSETS.hwatuSwipe,
     GAME_AUDIO_ASSETS.hwatuPlasticCards,
     GAME_AUDIO_ASSETS.hwatuPlasticSnap,
+    GAME_AUDIO_ASSETS.hwatuFaceSlap,
     ...GAME_AUDIO_ASSETS.chipLay,
     ...GAME_AUDIO_ASSETS.chipStack,
     GAME_AUDIO_ASSETS.select,
@@ -521,17 +523,18 @@ export function playYakuRevealSound() {
 /** A compact, pitched impact for each of the two scoring kkeut cards. */
 export function playKkeutHitSound(index = 0) {
   playSample(GAME_AUDIO_ASSETS.hwatuSwipe[Math.abs(index) % GAME_AUDIO_ASSETS.hwatuSwipe.length], 0.4, 1.06 + Math.min(index, 2) * 0.025);
-  playSample(GAME_AUDIO_ASSETS.cardPlace[Math.abs(index) % GAME_AUDIO_ASSETS.cardPlace.length], 0.4, 1.02 + Math.min(index, 3) * 0.018);
-  playSample(GAME_AUDIO_ASSETS.hwatuSlap[Math.abs(index) % GAME_AUDIO_ASSETS.hwatuSlap.length], 0.26, 1.16 + Math.min(index, 3) * 0.025);
+  playSample(GAME_AUDIO_ASSETS.hwatuFaceSlap, 0.86, 0.98 + (index % 4) * 0.045);
+  playSample(GAME_AUDIO_ASSETS.cardPlace[Math.abs(index) % GAME_AUDIO_ASSETS.cardPlace.length], 0.25, 1.02 + Math.min(index, 3) * 0.018);
+  playSample(GAME_AUDIO_ASSETS.hwatuSlap[Math.abs(index) % GAME_AUDIO_ASSETS.hwatuSlap.length], 0.14, 1.16 + Math.min(index, 3) * 0.025);
   playSampleSegment(
     GAME_AUDIO_ASSETS.hwatuPlasticCards,
     PLASTIC_CARD_HIT_OFFSETS[Math.abs(index) % PLASTIC_CARD_HIT_OFFSETS.length],
     0.3,
-    0.78,
+    0.3,
     1.02 + (index % 3) * 0.025,
   );
   if (typeof window !== "undefined") {
-    window.setTimeout(() => playSample(GAME_AUDIO_ASSETS.hwatuPlasticSnap, 0.7, 0.96 + (index % 4) * 0.06), 24);
+    window.setTimeout(() => playSample(GAME_AUDIO_ASSETS.hwatuPlasticSnap, 0.24, 0.96 + (index % 4) * 0.06), 24);
   }
   const context = getContext();
   if (!context) return;
@@ -555,17 +558,18 @@ export function playJitAdditionSound(index = 0) {
 
 /** A dry hwatu-on-table slap as a scored card lands in the collection board. */
 export function playCollectionSlapSound(index = 0) {
-  playSample(GAME_AUDIO_ASSETS.cardPlace[Math.abs(index) % GAME_AUDIO_ASSETS.cardPlace.length], 0.42, 1.01 + (index % 4) * 0.018);
-  playSample(GAME_AUDIO_ASSETS.hwatuSlap[Math.abs(index) % GAME_AUDIO_ASSETS.hwatuSlap.length], 0.32, 1.12 + (index % 4) * 0.025);
+  playSample(GAME_AUDIO_ASSETS.hwatuFaceSlap, 0.92, 0.96 + (index % 4) * 0.05);
+  playSample(GAME_AUDIO_ASSETS.cardPlace[Math.abs(index) % GAME_AUDIO_ASSETS.cardPlace.length], 0.24, 1.01 + (index % 4) * 0.018);
+  playSample(GAME_AUDIO_ASSETS.hwatuSlap[Math.abs(index) % GAME_AUDIO_ASSETS.hwatuSlap.length], 0.16, 1.12 + (index % 4) * 0.025);
   playSampleSegment(
     GAME_AUDIO_ASSETS.hwatuPlasticCards,
     PLASTIC_CARD_HIT_OFFSETS[Math.abs(index) % PLASTIC_CARD_HIT_OFFSETS.length],
     0.32,
-    0.88,
+    0.34,
     0.98 + (index % 4) * 0.025,
   );
   if (typeof window !== "undefined") {
-    window.setTimeout(() => playSample(GAME_AUDIO_ASSETS.hwatuPlasticSnap, 0.76, 0.94 + (index % 4) * 0.065), 22);
+    window.setTimeout(() => playSample(GAME_AUDIO_ASSETS.hwatuPlasticSnap, 0.26, 0.94 + (index % 4) * 0.065), 22);
   }
   const context = getContext();
   if (!context) return;

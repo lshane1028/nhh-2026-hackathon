@@ -138,3 +138,10 @@ recorded here so the project can audit and update its audio safely.
 - Source: https://freesound.org/people/florian_reinke/sounds/63531/
 - License: https://creativecommons.org/publicdomain/zero/1.0/
 - Included: the official high-quality preview in `sfx/plastic-snap.mp3`.
+
+## Face Slap Sound Effect
+
+- Creator: magicjoshua
+- Source: https://freesound.org/people/magicjoshua/sounds/704179/
+- License: https://creativecommons.org/publicdomain/zero/1.0/
+- Included: the official high-quality preview in `sfx/face-slap.mp3`.
