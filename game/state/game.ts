@@ -30,6 +30,10 @@ import {
   applyForbiddenEffect,
   applyPainterEffect,
   applyStartDeck,
+  canPayForbiddenCost,
+  getEligibleForbiddenTargetIds,
+  isForbiddenTargetEligible,
+  isForbiddenTargetSelectionValid,
 } from "../engine/consumables";
 import { rollCardEffectTag } from "../content/card-effects";
 import { calculateCollectionBonus } from "../engine/collection-bonus";
@@ -689,26 +693,40 @@ function applyCardAftermath(state: GameState, scored: ScoredSelection): GameStat
     return grown === item.growth ? item : { ...item, growth: grown };
   });
 
-  const cremation = talismans.find((item) => item.definitionId === "t_cremation_deed");
-  if (cremation && !roundTalismanUses.t_cremation_deed) {
-    const firstChaff = scoringCards.find((card) => card.kind === "chaff");
-    if (firstChaff) {
-      burned.add(firstChaff.instanceId);
-      talismans = talismans.map((item) => item.instanceId === cremation.instanceId
-        ? { ...item, growth: item.growth + 0.08 }
-        : item);
-      roundTalismanUses.t_cremation_deed = 1;
+  const cremations = talismans.filter((item) => item.definitionId === "t_cremation_deed");
+  const chaffToBurn = scoringCards.filter((card) => card.kind === "chaff").slice(0, cremations.length);
+  const growingCremationIds = new Set<string>();
+  const cremationsByGrowthPriority = [...cremations].sort((left, right) => {
+    const leftUsed = Number(Boolean(roundTalismanUses[`t_cremation_deed:${left.instanceId}`]));
+    const rightUsed = Number(Boolean(roundTalismanUses[`t_cremation_deed:${right.instanceId}`]));
+    return leftUsed - rightUsed;
+  });
+  cremationsByGrowthPriority.slice(0, chaffToBurn.length).forEach((cremation, index) => {
+    const chaff = chaffToBurn[index];
+    burned.add(chaff.instanceId);
+    const useKey = `t_cremation_deed:${cremation.instanceId}`;
+    if (!roundTalismanUses[useKey]) {
+      growingCremationIds.add(cremation.instanceId);
+      roundTalismanUses[useKey] = 1;
     }
+  });
+  if (growingCremationIds.size > 0) {
+    talismans = talismans.map((item) => growingCremationIds.has(item.instanceId)
+      ? { ...item, growth: item.growth + 0.08 }
+      : item);
+    roundTalismanUses.t_cremation_deed = (roundTalismanUses.t_cremation_deed ?? 0) + growingCremationIds.size;
   }
-  if (scored.usedUnifyMonth !== null) roundTalismanUses.t_twelve_month_painter = 1;
+  if (scored.usedUnifyMonth !== null) {
+    roundTalismanUses.t_twelve_month_painter = (roundTalismanUses.t_twelve_month_painter ?? 0) + 1;
+  }
   const burnedCards = deck.filter((card) => burned.has(card.instanceId));
   if (burned.size) deck = deck.filter((card) => !burned.has(card.instanceId));
 
-  const phoenix = talismans.find((item) => item.definitionId === "t_phoenix_seal");
-  if (phoenix && burnedCards.length && !roundTalismanUses.t_phoenix_seal) {
+  const phoenixCopies = calculateTalismanRoundRuleModifiers(talismans).scoreThenBurnCopies;
+  if (phoenixCopies > 0 && burnedCards.length && !roundTalismanUses.t_phoenix_seal) {
     const source = burnedCards[0];
     const editions = ["gold_leaf", "mother_of_pearl", "five_color"] as const;
-    const copies = Array.from({ length: 2 }, (_, index): CardInstance => ({
+    const copies = Array.from({ length: phoenixCopies }, (_, index): CardInstance => ({
       ...source,
       tags: [...source.tags],
       instanceId: `phoenix:${state.runId}:${state.stage}:${cursor++}:${index}`,
@@ -1258,8 +1276,26 @@ function buyOffer(state: GameState, offerId: string): GameState {
     ? PAINTER_BY_ID[offer.definitionId]
     : FORBIDDEN_BY_ID[offer.definitionId];
   if (!definition) return state;
-  if (offer.category === "forbidden" && definition.effectKey === "make_bright_pay" && state.money < offer.price + 6) {
-    return { ...state, logs: logEntry(state, "system", "대가 부족", "가격 외에 6냥이 더 필요합니다.") };
+  if (offer.category === "forbidden") {
+    const forbidden = FORBIDDEN_BY_ID[offer.definitionId] as ForbiddenDefinition | undefined;
+    if (!forbidden) return state;
+    const additionalCost = forbidden.additionalCost ?? 0;
+    if (state.money < offer.price + additionalCost) {
+      return {
+        ...state,
+        logs: logEntry(state, "system", "대가 부족", `구매가 외에 ${additionalCost}냥이 더 필요합니다.`),
+      };
+    }
+    const afterPurchase = { ...state, money: state.money - offer.price };
+    if (!canPayForbiddenCost(afterPurchase, forbidden)) {
+      return { ...state, logs: logEntry(state, "system", "대가 불가", forbidden.cost) };
+    }
+    if (
+      forbidden.targetKind !== "none"
+      && getEligibleForbiddenTargetIds(state, forbidden).length < forbidden.minTargets
+    ) {
+      return { ...state, logs: logEntry(state, "system", "대상 없음", forbidden.targetPrompt) };
+    }
   }
   return {
     ...state,
@@ -1306,7 +1342,13 @@ function applyConsumable(state: GameState, option?: string): GameState {
   }
   const forbidden = FORBIDDEN_BY_ID[id];
   if (!forbidden) return state;
-  let targets = state.pendingTargetIds;
+  const selectedTargets = forbidden.targetKind === "none" ? [] : state.pendingTargetIds;
+  if (
+    !canPayForbiddenCost(state, forbidden)
+    || !isForbiddenTargetSelectionValid(state, forbidden, selectedTargets)
+  ) return state;
+
+  let targets = selectedTargets;
   if (forbidden.effectKey === "random_burn_for_money" && targets.length === 0) {
     targets = [...state.deck]
       .filter((card) => !card.enhancement && !card.edition && !card.seal)
@@ -1316,6 +1358,7 @@ function applyConsumable(state: GameState, option?: string): GameState {
     cursor += state.deck.length;
   }
   const result = applyForbiddenEffect(state, forbidden, targets, makeId);
+  if (!result.applied) return state;
   let talismans = result.talismans;
   if (result.grantLegendaryTalisman) {
     const legendary = TALISMANS.filter((entry) => entry.rarity === "legendary");
@@ -1329,6 +1372,7 @@ function applyConsumable(state: GameState, option?: string): GameState {
     handSize: result.handSize,
     money: result.money,
     talismans,
+    talismanSlots: result.talismanSlots,
     yakuLevels: result.yakuLevels,
     screen: state.returnScreen ?? "shop",
     returnScreen: null,
@@ -1502,9 +1546,32 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, pendingPack: null };
     case "SELECT_CONSUMABLE_TARGET": {
       const exists = state.pendingTargetIds.includes(action.cardId);
-      const definition = getPendingConsumableDefinition(state);
-      const maxTargets = definition && "maxTargets" in definition ? definition.maxTargets : 5;
-      return { ...state, pendingTargetIds: exists ? state.pendingTargetIds.filter((id) => id !== action.cardId) : [...state.pendingTargetIds, action.cardId].slice(0, maxTargets) };
+      const forbidden = state.pendingConsumableId
+        ? FORBIDDEN_BY_ID[state.pendingConsumableId]
+        : undefined;
+      if (forbidden) {
+        if (forbidden.targetKind === "none") {
+          return state.pendingTargetIds.length > 0 ? { ...state, pendingTargetIds: [] } : state;
+        }
+        if (!isForbiddenTargetEligible(state, forbidden, action.cardId)) return state;
+        if (exists) {
+          return { ...state, pendingTargetIds: state.pendingTargetIds.filter((id) => id !== action.cardId) };
+        }
+        if (forbidden.maxTargets === 1) return { ...state, pendingTargetIds: [action.cardId] };
+        if (state.pendingTargetIds.length >= forbidden.maxTargets) return state;
+        return { ...state, pendingTargetIds: [...state.pendingTargetIds, action.cardId] };
+      }
+
+      const painter = state.pendingConsumableId
+        ? PAINTER_BY_ID[state.pendingConsumableId]
+        : undefined;
+      if (!painter || painter.maxTargets === 0) return state;
+      if (exists) {
+        return { ...state, pendingTargetIds: state.pendingTargetIds.filter((id) => id !== action.cardId) };
+      }
+      if (painter.maxTargets === 1) return { ...state, pendingTargetIds: [action.cardId] };
+      if (state.pendingTargetIds.length >= painter.maxTargets) return state;
+      return { ...state, pendingTargetIds: [...state.pendingTargetIds, action.cardId] };
     }
     case "APPLY_CONSUMABLE":
       return applyConsumable(state, action.option);
@@ -1569,7 +1636,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
   }
 }
 
-export function getDefinitionForOffer(offer: ShopOffer): { name: string; description: string; assetTag: string } | null {
+export function getDefinitionForOffer(offer: ShopOffer) {
   if (offer.category === "talisman") return TALISMAN_BY_ID[offer.definitionId] ?? null;
   if (offer.category === "painter") return PAINTER_BY_ID[offer.definitionId] ?? null;
   if (offer.category === "book") return BOOK_BY_ID[offer.definitionId] ?? null;
@@ -1577,9 +1644,9 @@ export function getDefinitionForOffer(offer: ShopOffer): { name: string; descrip
   return PACK_BY_ID[offer.definitionId] ?? null;
 }
 
-export function getPendingConsumableDefinition(state: GameState): PainterDefinition | (ForbiddenDefinition & { description: string }) | null {
+export function getPendingConsumableDefinition(state: GameState): PainterDefinition | ForbiddenDefinition | null {
   if (!state.pendingConsumableId) return null;
   const painter = PAINTER_BY_ID[state.pendingConsumableId] as PainterDefinition | undefined;
-  const forbidden = FORBIDDEN_BY_ID[state.pendingConsumableId] as (ForbiddenDefinition & { description: string }) | undefined;
+  const forbidden = FORBIDDEN_BY_ID[state.pendingConsumableId] as ForbiddenDefinition | undefined;
   return painter ?? forbidden ?? null;
 }

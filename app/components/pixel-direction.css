@@ -875,6 +875,7 @@ button small,
    high z-index. Keep this panel open just like the market departments above. */
 .play-board__top { position: relative; z-index: 40; }
 .play-board__top .talisman-strip { overflow: visible !important; clip-path: none !important; }
+.ritual-talisman-targets .talisman-strip { overflow: visible !important; clip-path: none !important; }
 .market-dept:nth-child(-n + 2) .market-card__hint {
   top: calc(100% + 0.6rem) !important;
   bottom: auto !important;

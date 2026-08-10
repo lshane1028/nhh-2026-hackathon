@@ -1,7 +1,7 @@
 "use client";
 
 import type { CollectionSlot } from "@/game/engine/collection-board";
-import { getCardArtUrl } from "./hwatu-atlas";
+import { CardArt } from "./CardArt";
 
 export type CollectionTrackKind =
   | "bright"
@@ -110,11 +110,7 @@ function CollectionCard({ slot }: { slot: CollectionSlot }) {
       aria-label={title}
       data-asset-tag={slot.assetTag}
     >
-      <span
-        className="collection-card__art"
-        style={{ backgroundImage: `url("${getCardArtUrl(slot)}")` }}
-        aria-hidden="true"
-      />
+      <CardArt className="collection-card__art" card={slot} />
       <span className="collection-card__month" aria-hidden="true">{slot.month}</span>
       {slot.chaffValue === 2 ? (
         <b className="collection-card__value" aria-hidden="true">2점</b>

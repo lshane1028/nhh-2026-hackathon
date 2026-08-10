@@ -19,6 +19,8 @@ export interface TalismanStripProps {
   items: readonly TalismanStripItem[];
   slots: number;
   selectedInstanceId?: string | null;
+  /** A neighbouring talisman that will be destroyed if the selection resolves. */
+  sacrificeInstanceId?: string | null;
   /**
    * The talisman firing right now during a score reveal. Talismans stay on
    * screen after a hand is submitted — unlike the cards, which have already
@@ -46,6 +48,7 @@ export function TalismanStrip({
   items,
   slots,
   selectedInstanceId,
+  sacrificeInstanceId,
   firingInstanceId,
   onSelect,
   className,
@@ -80,6 +83,7 @@ export function TalismanStrip({
           }
 
           const isSelected = selectedInstanceId === item.instance.instanceId;
+          const isSacrifice = sacrificeInstanceId === item.instance.instanceId;
           const artUrl = getGeneratedAssetUrl(item.definition.assetTag);
           const itemContent = (
             <>
@@ -95,6 +99,7 @@ export function TalismanStrip({
                 <code>{item.definition.assetTag}</code>
               </span>
               <strong className="talisman-strip__name">{item.definition.name}</strong>
+              {isSacrifice ? <span className="talisman-strip__sacrifice-badge" aria-hidden="true">제물</span> : null}
 
               <span className="talisman-strip__hint" role="tooltip">
                 <b>{item.definition.name}</b>
@@ -108,6 +113,7 @@ export function TalismanStrip({
           const itemClassName = joinClassNames(
             "talisman-strip__item",
             isSelected && "talisman-strip__item--selected",
+            isSacrifice && "talisman-strip__item--sacrifice",
             firingInstanceId === item.instance.instanceId && "talisman-strip__item--firing",
             item.disabled && "talisman-strip__item--disabled",
           );
@@ -130,6 +136,7 @@ export function TalismanStrip({
               className={itemClassName}
               key={item.instance.instanceId}
               aria-pressed={isSelected}
+              aria-label={`${item.definition.name}${isSacrifice ? ", 전승 제물로 영구 파괴 예정" : ""}`}
               disabled={item.disabled}
               onClick={() => onSelect(item)}
               data-asset-tag={item.definition.assetTag}

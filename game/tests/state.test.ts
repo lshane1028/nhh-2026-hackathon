@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { TALISMANS } from "../content/talismans";
-import type { TalismanDefinition } from "../types";
+import type { GameState, TalismanDefinition } from "../types";
 import { createStandardHwatuDeck } from "../engine/deck";
 import { createGoChainState } from "../engine/go";
-import { createInitialGameState, gameReducer, sortHand } from "../state/game";
+import { createInitialGameState, evaluateSelectedHand, gameReducer, sortHand } from "../state/game";
 
 describe("playable run reducer", () => {
   it("starts a seeded run with the full deck, hand and four actions", () => {
@@ -396,6 +396,245 @@ describe("playable run reducer", () => {
     expect(applied.screen).toBe("shop");
     expect(applied.deck.find((card) => card.instanceId === target.instanceId)?.month).toBe(2);
     expect(applied.lastConsumableId).toBe("p_month_plus");
+  });
+
+  it("treats 광내림 as one exact non-bright target and charges the full 12+6냥", () => {
+    const base = createInitialGameState("BRIGHT-DESCENT");
+    const targets = base.deck.filter((card) => card.kind !== "bright").slice(0, 2);
+    const alreadyBright = base.deck.find((card) => card.kind === "bright");
+    if (targets.length < 2 || !alreadyBright) throw new Error("Test deck is missing 광내림 targets");
+    const shop = {
+      ...base,
+      runId: "bright-descent",
+      screen: "shop" as const,
+      money: 99,
+      shopType: "forbidden" as const,
+      shopOffers: [{ offerId: "offer-bright", category: "forbidden" as const, definitionId: "f_bright_descent", price: 12, sold: false }],
+    };
+
+    const editing = gameReducer(shop, { type: "BUY_OFFER", offerId: "offer-bright" });
+    expect(editing.screen).toBe("deck_editor");
+    expect(editing.money).toBe(87);
+
+    const withoutTarget = gameReducer(editing, { type: "APPLY_CONSUMABLE" });
+    expect(withoutTarget).toEqual(editing);
+
+    const first = gameReducer(editing, { type: "SELECT_CONSUMABLE_TARGET", cardId: targets[0].instanceId });
+    const invalid = gameReducer(first, { type: "SELECT_CONSUMABLE_TARGET", cardId: alreadyBright.instanceId });
+    expect(invalid.pendingTargetIds).toEqual([targets[0].instanceId]);
+
+    const replaced = gameReducer(invalid, { type: "SELECT_CONSUMABLE_TARGET", cardId: targets[1].instanceId });
+    expect(replaced.pendingTargetIds).toEqual([targets[1].instanceId]);
+    const applied = gameReducer(replaced, { type: "APPLY_CONSUMABLE" });
+    expect(applied.screen).toBe("shop");
+    expect(applied.money).toBe(81);
+    expect(applied.deck.find((card) => card.instanceId === targets[0].instanceId)?.kind).toBe(targets[0].kind);
+    expect(applied.deck.find((card) => card.instanceId === targets[1].instanceId)?.kind).toBe("bright");
+  });
+
+  it("refuses 광내림 before purchase when the hidden ritual fee is unaffordable", () => {
+    const base = createInitialGameState("BRIGHT-COST");
+    const shop = {
+      ...base,
+      runId: "bright-cost",
+      screen: "shop" as const,
+      money: 17,
+      shopType: "forbidden" as const,
+      shopOffers: [{ offerId: "offer-bright", category: "forbidden" as const, definitionId: "f_bright_descent", price: 12, sold: false }],
+    };
+
+    const rejected = gameReducer(shop, { type: "BUY_OFFER", offerId: "offer-bright" });
+    expect(rejected.screen).toBe("shop");
+    expect(rejected.money).toBe(17);
+    expect(rejected.shopOffers[0].sold).toBe(false);
+    expect(rejected.logs.at(-1)).toMatchObject({ title: "대가 부족" });
+  });
+
+  it("ignores player targets for 큰 소각 and resolves five random ordinary cards internally", () => {
+    const base = createInitialGameState("GREAT-BURN");
+    const protectedCard = { ...base.deck[0], enhancement: "inked" as const };
+    const shop = {
+      ...base,
+      runId: "great-burn",
+      screen: "shop" as const,
+      deck: [protectedCard, ...base.deck.slice(1)],
+      money: 99,
+      shopType: "forbidden" as const,
+      shopOffers: [{ offerId: "offer-burn", category: "forbidden" as const, definitionId: "f_great_burn", price: 8, sold: false }],
+    };
+
+    const editing = gameReducer(shop, { type: "BUY_OFFER", offerId: "offer-burn" });
+    const clicked = gameReducer(editing, { type: "SELECT_CONSUMABLE_TARGET", cardId: protectedCard.instanceId });
+    expect(clicked.pendingTargetIds).toEqual([]);
+    const applied = gameReducer(clicked, { type: "APPLY_CONSUMABLE" });
+    expect(applied.screen).toBe("shop");
+    expect(applied.deck).toHaveLength(shop.deck.length - 5);
+    expect(applied.deck.some((card) => card.instanceId === protectedCard.instanceId)).toBe(true);
+    expect(applied.money).toBe(109);
+  });
+
+  it("targets owned talismans for 전승 instead of silently using the first two", () => {
+    const base = createInitialGameState("INHERITANCE");
+    const talismans = [
+      { instanceId: "owned-a", definitionId: "t_first_charm", growth: 0 },
+      { instanceId: "owned-b", definitionId: "t_empty_shrine", growth: 0 },
+      { instanceId: "owned-c", definitionId: "t_twelve_moons", growth: 2 },
+    ];
+    const shop = {
+      ...base,
+      runId: "inheritance",
+      screen: "shop" as const,
+      talismans,
+      money: 99,
+      shopType: "forbidden" as const,
+      shopOffers: [{ offerId: "offer-inheritance", category: "forbidden" as const, definitionId: "f_inheritance", price: 14, sold: false }],
+    };
+
+    const editing = gameReducer(shop, { type: "BUY_OFFER", offerId: "offer-inheritance" });
+    const invalidFirst = gameReducer(editing, { type: "SELECT_CONSUMABLE_TARGET", cardId: "owned-a" });
+    expect(invalidFirst.pendingTargetIds).toEqual([]);
+    const selected = gameReducer(invalidFirst, { type: "SELECT_CONSUMABLE_TARGET", cardId: "owned-c" });
+    expect(selected.pendingTargetIds).toEqual(["owned-c"]);
+    const applied = gameReducer(selected, { type: "APPLY_CONSUMABLE" });
+    expect(applied.screen).toBe("shop");
+    expect(applied.talismans.map((item) => item.definitionId)).toEqual([
+      "t_first_charm",
+      "t_twelve_moons",
+      "t_twelve_moons",
+    ]);
+    expect(applied.talismans.some((item) => item.instanceId === "owned-b")).toBe(false);
+  });
+
+  it("refuses talisman purchases when the effective pouch is full", () => {
+    const base = createInitialGameState("FULL-TALISMAN-POUCH");
+    const owned = Array.from({ length: 5 }, (_, index) => ({
+      instanceId: `owned-${index}`,
+      definitionId: "t_first_charm",
+      growth: 0,
+    }));
+    const offer = {
+      offerId: "offer-talisman",
+      category: "talisman" as const,
+      definitionId: "t_empty_shrine",
+      price: 7,
+      sold: false,
+    };
+    const fullShop = {
+      ...base,
+      screen: "shop" as const,
+      money: 99,
+      talismans: owned,
+      shopOffers: [offer],
+    };
+
+    const rejected = gameReducer(fullShop, { type: "BUY_OFFER", offerId: offer.offerId });
+    expect(rejected).toBe(fullShop);
+
+    const engravedShop = {
+      ...fullShop,
+      talismans: owned.map((item, index) => index === 0 ? { ...item, edition: "engraved" as const } : item),
+    };
+    const purchased = gameReducer(engravedShop, { type: "BUY_OFFER", offerId: offer.offerId });
+    expect(purchased.talismans).toHaveLength(6);
+    expect(purchased.money).toBe(92);
+  });
+
+  it("tracks each duplicated 열두 달의 화공 use instead of granting infinite unifications", () => {
+    const deck = createStandardHwatuDeck();
+    const pairs = [
+      [deck.find((card) => card.month === 2)!, deck.find((card) => card.month === 3)!],
+      [deck.find((card) => card.month === 4)!, deck.find((card) => card.month === 5)!],
+      [deck.find((card) => card.month === 6)!, deck.find((card) => card.month === 7)!],
+    ];
+    const talismans = [
+      { instanceId: "painter-a", definitionId: "t_twelve_month_painter", growth: 0 },
+      { instanceId: "painter-b", definitionId: "t_twelve_month_painter", growth: 0 },
+    ];
+    let state: GameState = {
+      ...createInitialGameState("DOUBLE-PAINTER"),
+      runId: "double-painter",
+      screen: "play" as const,
+      deck,
+      targetScore: 1_000_000,
+      talismans,
+      chain: createGoChainState(),
+      handsRemaining: 4,
+    };
+
+    for (let index = 0; index < pairs.length; index += 1) {
+      const pair = pairs[index];
+      state = {
+        ...state,
+        screen: "play" as const,
+        hand: pair,
+        drawPile: deck.filter((card) => !pair.some((selected) => selected.instanceId === card.instanceId)),
+        selectedCardIds: pair.map((card) => card.instanceId),
+        handsRemaining: 4 - index,
+      };
+      const scored = evaluateSelectedHand(state);
+      expect(scored).not.toBeNull();
+      if (index < 2) expect(scored?.usedUnifyMonth).not.toBeNull();
+      else expect(scored?.usedUnifyMonth).toBeNull();
+      state = gameReducer(state, { type: "SUBMIT_HAND" });
+      expect(state.roundTalismanUses.t_twelve_month_painter ?? 0).toBe(Math.min(index + 1, 2));
+    }
+  });
+
+  it("stacks duplicated 화형 문서 and 불사조 triggers by owned instance", () => {
+    const deck = createStandardHwatuDeck();
+    const januaryChaff = deck.filter((card) => card.month === 1 && card.kind === "chaff");
+    if (januaryChaff.length !== 2) throw new Error("January chaff pair missing");
+    const cremations = [
+      { instanceId: "cremation-a", definitionId: "t_cremation_deed", growth: 0 },
+      { instanceId: "cremation-b", definitionId: "t_cremation_deed", growth: 0 },
+    ];
+    const base = {
+      ...createInitialGameState("DOUBLE-RITUAL-TALISMANS"),
+      runId: "double-ritual-talismans",
+      screen: "play" as const,
+      deck,
+      hand: januaryChaff,
+      drawPile: deck.filter((card) => !januaryChaff.includes(card)),
+      selectedCardIds: januaryChaff.map((card) => card.instanceId),
+      targetScore: 1_000_000,
+      chain: createGoChainState(),
+      talismans: cremations,
+    };
+    const burned = gameReducer(base, { type: "SUBMIT_HAND" });
+    expect(burned.deck).toHaveLength(46);
+    expect(burned.talismans.map((item) => item.growth)).toEqual([0.08, 0.08]);
+
+    const januaryBright = deck.find((card) => card.month === 1 && card.kind === "bright");
+    const januaryRibbon = deck.find((card) => card.month === 1 && card.kind === "ribbon");
+    if (!januaryBright || !januaryRibbon) throw new Error("January scoring cards missing");
+    const firstHand = [januaryChaff[0], januaryBright];
+    const firstBurn = gameReducer({
+      ...base,
+      hand: firstHand,
+      drawPile: deck.filter((card) => !firstHand.includes(card)),
+      selectedCardIds: firstHand.map((card) => card.instanceId),
+    }, { type: "SUBMIT_HAND" });
+    expect(firstBurn.talismans.map((item) => item.growth)).toEqual([0.08, 0]);
+
+    const secondHand = [januaryChaff[1], januaryRibbon];
+    const secondBurn = gameReducer({
+      ...firstBurn,
+      screen: "play" as const,
+      hand: secondHand,
+      drawPile: firstBurn.deck.filter((card) => !secondHand.includes(card)),
+      selectedCardIds: secondHand.map((card) => card.instanceId),
+    }, { type: "SUBMIT_HAND" });
+    expect(secondBurn.talismans.map((item) => item.growth)).toEqual([0.08, 0.08]);
+
+    const phoenixBase = {
+      ...base,
+      talismans: [cremations[0],
+        { instanceId: "phoenix-a", definitionId: "t_phoenix_seal", growth: 0 },
+        { instanceId: "phoenix-b", definitionId: "t_phoenix_seal", growth: 0 }],
+    };
+    const reborn = gameReducer(phoenixBase, { type: "SUBMIT_HAND" });
+    expect(reborn.deck).toHaveLength(51);
+    expect(reborn.deck.filter((card) => card.instanceId.startsWith("phoenix:")).length).toBe(4);
   });
 
   it("never restocks a talisman the player already owns", () => {

@@ -2,7 +2,7 @@
 
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
 import type { CardInstance, CardKind } from "@/game/types";
-import { getCardArtUrl } from "./hwatu-atlas";
+import { CardArt } from "./CardArt";
 import {
   getCardMaterial,
   getCardModifierLines,
@@ -84,7 +84,6 @@ export function HwatuCard({
   const isDisabled = disabled || Boolean(card.disabledForRound);
   const kindLabel = getCardKindLabel(card, cupRole);
   const monthValue = card.month + card.permanentKkeutBonus;
-  const cardArtUrl = getCardArtUrl(card);
   const ribbonLabel = card.ribbonGroup
     ? RIBBON_LABELS[card.ribbonGroup]
     : null;
@@ -139,12 +138,7 @@ export function HwatuCard({
      the bottom of the screen for the hand, which is the only place it matters. */
   const content = (
     <>
-      <span
-        className="hwatu-card__art"
-        data-asset-tag={card.assetTag}
-        style={{ backgroundImage: `url("${cardArtUrl}")` }}
-        aria-hidden="true"
-      />
+      <CardArt className="hwatu-card__art" card={card} />
       {/* Material first: it is the card stock, so everything else sits on top. */}
       {material ? (
         <span className={`hwatu-card__material hwatu-card__material--${material}`} aria-hidden="true" />
