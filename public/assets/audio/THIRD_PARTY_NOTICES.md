@@ -124,6 +124,14 @@ recorded here so the project can audit and update its audio safely.
 - License: https://creativecommons.org/publicdomain/zero/1.0/
 - Included: `bgm/boss-oh-boss.mp3`; used as the shared high-tension boss theme.
 
+## Jazzy Vibes #36 - Loop - Smooth Jazz
+
+- Creator: Tri-Tachyon
+- Source: https://opengameart.org/content/jazzy-vibes-36-loop-smooth-jazz
+- License: https://creativecommons.org/licenses/by/4.0/
+- Attribution: Music by Tri-Tachyon - https://soundcloud.com/tri-tachyon/albums
+- Included: `bgm/table-jazzy-vibes-36.mp3`; used as the normal-stage table theme.
+
 ## Purchasing Sound Effect
 
 - Creator: Spring Spring

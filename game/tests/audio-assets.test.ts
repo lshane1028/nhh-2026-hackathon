@@ -41,6 +41,7 @@ describe("game audio assets", () => {
     expect(notice).toContain("Kenney Music Jingles");
     expect(notice).toContain("Moil");
     expect(notice).toContain("Oh! boss!");
+    expect(notice).toContain("Jazzy Vibes #36");
     expect(notice).toContain("Thwack Sounds");
     expect(notice).toContain("Cash Register (imitation with toaster and bells)");
     expect(notice).toContain("Coin Drop");

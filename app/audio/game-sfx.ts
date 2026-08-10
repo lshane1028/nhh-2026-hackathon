@@ -7,7 +7,7 @@ const MUSIC_VOLUME = 0.17;
 const DUCKED_MUSIC_FACTOR = 0.28;
 
 export const GAME_AUDIO_ASSETS = {
-  musicTable: "/assets/audio/bgm/noir-table.mp3",
+  musicTable: "/assets/audio/bgm/table-jazzy-vibes-36.mp3",
   musicTitle: "/assets/audio/bgm/title-menu.mp3",
   musicShop: "/assets/audio/bgm/shop-radio.ogg",
   musicBoss: "/assets/audio/bgm/boss-oh-boss.mp3",
