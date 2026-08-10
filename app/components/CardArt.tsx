@@ -1,6 +1,6 @@
 "use client";
 
-import type { SyntheticEvent } from "react";
+import { useState } from "react";
 import Image from "next/image";
 
 import type { AtlasCard } from "./hwatu-atlas";
@@ -17,45 +17,42 @@ interface CardArtProps {
  * only after both individual files fail.
  */
 export function CardArt({ card, className }: CardArtProps) {
-  const sources = getCardArtSources(card);
-  const handleError = (event: SyntheticEvent<HTMLImageElement>) => {
-    const image = event.currentTarget;
-    const fallbackUrl = image.dataset.fallbackUrl;
-    if (fallbackUrl) {
-      delete image.dataset.fallbackUrl;
-      image.removeAttribute("srcset");
-      image.removeAttribute("sizes");
-      image.src = fallbackUrl;
-      return;
-    }
+  return <CardArtSource key={card.assetTag} card={card} className={className} />;
+}
 
-    const frame = image.parentElement;
-    if (frame) {
-      frame.style.backgroundImage = `url("${sources.atlasUrl}")`;
-      frame.style.backgroundPosition = sources.atlasPosition;
-      frame.style.backgroundSize = "800% 600%";
-      frame.style.backgroundRepeat = "no-repeat";
-    }
-    image.hidden = true;
-  };
+type CardArtStage = "webp" | "png" | "atlas";
+
+function CardArtSource({ card, className }: CardArtProps) {
+  const sources = getCardArtSources(card);
+  const [stage, setStage] = useState<CardArtStage>("webp");
+  const frameStyle = stage === "atlas" ? {
+    backgroundImage: `url("${sources.atlasUrl}")`,
+    backgroundPosition: sources.atlasPosition,
+    backgroundSize: "800% 600%",
+    backgroundRepeat: "no-repeat",
+  } : undefined;
+  const imageUrl = stage === "webp" ? sources.primaryUrl : sources.fallbackUrl;
 
   return (
     <span
       className={`${className} card-art-frame`}
       data-asset-tag={card.assetTag}
       aria-hidden="true"
+      style={frameStyle}
     >
-      <Image
-        className="card-art-frame__image"
-        src={sources.primaryUrl}
-        width={320}
-        height={480}
-        unoptimized
-        data-fallback-url={sources.fallbackUrl}
-        alt=""
-        draggable={false}
-        onError={handleError}
-      />
+      {stage !== "atlas" ? (
+        <Image
+          key={imageUrl}
+          className="card-art-frame__image"
+          src={imageUrl}
+          width={320}
+          height={480}
+          unoptimized
+          alt=""
+          draggable={false}
+          onError={() => setStage((current) => current === "webp" ? "png" : "atlas")}
+        />
+      ) : null}
     </span>
   );
 }
