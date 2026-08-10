@@ -51,7 +51,8 @@ describe("game audio assets", () => {
     expect(notice).toContain("Purchasing Sound Effect");
     expect(notice).toContain("Plastic Cards (credit, debit, etc)");
     expect(notice).toContain("Plastic Click");
-    expect(notice.match(/creativecommons\.org\/publicdomain\/zero\/1\.0/g)).toHaveLength(19);
+    expect(notice).toContain("Face Slap Sound Effect");
+    expect(notice.match(/creativecommons\.org\/publicdomain\/zero\/1\.0/g)).toHaveLength(20);
   });
 
   it("selects distinct title, shop, and seasonal boss music scenes", () => {
@@ -104,6 +105,7 @@ describe("game audio assets", () => {
 
     played.length = 0;
     playCollectionSlapSound(2);
+    expect(played).toContain(GAME_AUDIO_ASSETS.hwatuFaceSlap);
     expect(played).toContain(GAME_AUDIO_ASSETS.hwatuPlasticCards);
     await vi.advanceTimersByTimeAsync(22);
     expect(played).toContain(GAME_AUDIO_ASSETS.hwatuPlasticSnap);
