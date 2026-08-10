@@ -9,7 +9,21 @@ import { getTalismanTimingText, TALISMAN_BY_ID } from "@/game/content/talismans"
 import { BOOK_BY_ID, FORBIDDEN_BY_ID } from "@/game/content/upgrades";
 import { ALL_IMMEDIATE_YAKU_DEFINITIONS, getYakuDisplayName } from "@/game/content/yaku";
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
-import { playCardPickSound, playCardRevealSound, playDrawSnapSound, playPackOpenSound, primeGameAudio } from "./audio/game-sfx";
+import {
+  getGameAudioMuted,
+  playCardPickSound,
+  playCardRevealSound,
+  playDrawSnapSound,
+  playPackOpenSound,
+  playShopEntrySound,
+  playShopPurchaseSound,
+  playShopRerollSound,
+  playShopSaleSound,
+  primeGameAudio,
+  resolveGameMusicScene,
+  setGameMusicScene,
+  toggleGameAudio,
+} from "./audio/game-sfx";
 import {
   calculateCollectionBonus,
   calculateCupRolePreview,
@@ -55,6 +69,7 @@ import type {
 } from "@/game/types";
 
 import { AssetPlaceholder } from "./components/AssetPlaceholder";
+import { BossSeasonOverlay, getBossSeasonForMonth } from "./components/BossSeasonOverlay";
 import { CollectionBoard, type CollectionBoardItem } from "./components/CollectionBoard";
 import {
   DiscardTheater,
@@ -725,6 +740,7 @@ export default function GameApp() {
   const [selectedContract, setSelectedContract] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [restartOpen, setRestartOpen] = useState(false);
+  const [audioMuted, setAudioMuted] = useState(false);
   const [tutorialIndex, setTutorialIndex] = useState(0);
   const [tutorialOff, setTutorialOff] = useState(false);
   const [cardPresentation, setCardPresentation] = useState<CardPresentationSnapshot | null>(null);
@@ -735,7 +751,20 @@ export default function GameApp() {
   const [landedCollectionTargets, setLandedCollectionTargets] = useState<Set<string>>(() => new Set());
   const [drawFeedbackIds, setDrawFeedbackIds] = useState<Set<string>>(() => new Set());
   const previousHandIds = useRef<Set<string>>(new Set());
+  const previousScreen = useRef(state.screen);
   const collectionLandingTimer = useRef<number | null>(null);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setAudioMuted(getGameAudioMuted()), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+  useEffect(() => {
+    if (state.screen === "shop" && previousScreen.current !== "shop") playShopEntrySound();
+    previousScreen.current = state.screen;
+  }, [state.screen]);
+  const handleAudioToggle = useCallback(() => {
+    primeGameAudio();
+    setAudioMuted(toggleGameAudio());
+  }, []);
   const clearCardPresentation = useCallback(() => {
     if (collectionLandingTimer.current !== null) {
       window.clearTimeout(collectionLandingTimer.current);
@@ -823,6 +852,9 @@ export default function GameApp() {
 
   const stage = getStageDefinition(state.stage, state.infiniteLap);
   const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
+  const bossSeason = getBossSeasonForMonth(stage.month, Boolean(boss));
+  const musicScene = resolveGameMusicScene(state.screen, boss ? stage.month : null);
+  useEffect(() => setGameMusicScene(musicScene), [musicScene]);
   // Only a SUBMITTED hand gets played back. The preview must stay a still
   // picture of the bare 짓 × 끗패, otherwise there is nothing left to show.
   // Declared up here with the other hooks, above every early screen return.
@@ -1108,10 +1140,18 @@ export default function GameApp() {
 
   if (state.screen === "title" || state.screen === "deck_select") {
     return (
-      <div className="game-root title-root">
+      <div className="game-root title-root" onPointerDownCapture={primeGameAudio}>
         <section className="title-controls" aria-label="판 설정">
           <label><span>재현 시드</span><input value={state.seed} onChange={(event) => dispatch({ type: "SET_SEED", seed: event.target.value })} /></label>
           <label className="tutorial-toggle"><input type="checkbox" checked={tutorialMode} onChange={(event) => setTutorialMode(event.target.checked)} /><span>처음이라면 단계별 안내 켜기</span></label>
+          <button
+            type="button"
+            className="audio-toggle"
+            aria-pressed={!audioMuted}
+            onClick={handleAudioToggle}
+          >
+            {audioMuted ? "소리 켜기" : "소리 켜짐"}
+          </button>
         </section>
         <TitleScreen
           assetTag="ui:gyeonghwasuwol-logo-backdrop"
@@ -1124,9 +1164,16 @@ export default function GameApp() {
           canContinue={Boolean(savedState)}
           continueSummary={savedState ? `${savedState.stage}월 · ${format(savedState.chain.roundScore)}점` : undefined}
           onSelectStartDeck={setSelectedStartDeckId}
-          onNewGame={() => dispatch({ type: "START_RUN", startDeckId: selectedStartDeckId, tutorialMode, entropy: runEntropy() })}
-          onSkipTutorial={() => dispatch({ type: "START_RUN", startDeckId: selectedStartDeckId, tutorialMode: false, entropy: runEntropy() })}
+          onNewGame={() => {
+            primeGameAudio();
+            dispatch({ type: "START_RUN", startDeckId: selectedStartDeckId, tutorialMode, entropy: runEntropy() });
+          }}
+          onSkipTutorial={() => {
+            primeGameAudio();
+            dispatch({ type: "START_RUN", startDeckId: selectedStartDeckId, tutorialMode: false, entropy: runEntropy() });
+          }}
           onContinue={savedState ? () => {
+            primeGameAudio();
             setSuppressedScoreRevealId(`${savedState.runId}:${savedState.stage}:${savedState.roundSubmissionIndex}`);
             dispatch({ type: "CONTINUE_RUN", state: savedState });
           } : undefined}
@@ -1280,16 +1327,34 @@ export default function GameApp() {
         rerollCost={state.rerollCost}
         canReroll={true}
         ownedTalismans={ownedTalismanViews}
-        onSellTalisman={(instanceId) => dispatch({ type: "SELL_TALISMAN", instanceId })}
+        onSellTalisman={(instanceId) => {
+          primeGameAudio();
+          playShopSaleSound();
+          dispatch({ type: "SELL_TALISMAN", instanceId });
+        }}
         onMoveTalisman={(instanceId, targetInstanceId) => dispatch({ type: "MOVE_TALISMAN_TO", instanceId, targetInstanceId })}
         onOpenDeck={() => dispatch({ type: "OPEN_SCREEN", screen: "deck_editor" })}
-        onBuyOffer={(offerId) => dispatch({ type: "BUY_OFFER", offerId })}
-        onReroll={() => dispatch({ type: "REROLL_SHOP" })}
+        onBuyOffer={(offerId) => {
+          const offer = state.shopOffers.find((entry) => entry.offerId === offerId);
+          if (!offer || offer.sold) return;
+          primeGameAudio();
+          playShopPurchaseSound(offer.category);
+          dispatch({ type: "BUY_OFFER", offerId });
+        }}
+        onReroll={() => {
+          primeGameAudio();
+          playShopRerollSound();
+          dispatch({ type: "REROLL_SHOP" });
+        }}
         onLeave={() => dispatch({ type: "NEXT_STAGE" })}
       />,
       <OwnedTalismanBar
         items={ownedTalismanViews}
-        onSell={(instanceId) => dispatch({ type: "SELL_TALISMAN", instanceId })}
+        onSell={(instanceId) => {
+          primeGameAudio();
+          playShopSaleSound();
+          dispatch({ type: "SELL_TALISMAN", instanceId });
+        }}
         onMove={(instanceId, targetInstanceId) => dispatch({ type: "MOVE_TALISMAN_TO", instanceId, targetInstanceId })}
       />,
     );
@@ -1435,6 +1500,7 @@ export default function GameApp() {
         ) : null}
 
         <div className="play-board__felt">
+          <BossSeasonOverlay season={bossSeason} />
           {cardTheater}
           <p className="play-board__prompt">
             {isDecision
@@ -1594,6 +1660,8 @@ export default function GameApp() {
         seed={state.seed}
         onOpenRules={() => setRulesOpen(true)}
         onRestart={() => setRestartOpen(true)}
+        audioMuted={audioMuted}
+        onToggleAudio={handleAudioToggle}
       />
 
       <CupChoiceModal

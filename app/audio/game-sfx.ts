@@ -1,5 +1,288 @@
 "use client";
 
+import type { ScoreOperation, ScreenId, ShopOffer } from "@/game/types";
+
+const AUDIO_MUTED_KEY = "flower-board-go:audio-muted";
+const MUSIC_VOLUME = 0.17;
+const DUCKED_MUSIC_FACTOR = 0.28;
+
+export const GAME_AUDIO_ASSETS = {
+  musicTable: "/assets/audio/bgm/table-jazzy-vibes-36.mp3",
+  musicTitle: "/assets/audio/bgm/title-menu.mp3",
+  musicShop: "/assets/audio/bgm/shop-radio.ogg",
+  musicBoss: "/assets/audio/bgm/boss-oh-boss.mp3",
+  ambienceBossSummer: "/assets/audio/bgm/boss-summer-rain.ogg",
+  ambienceBossAutumn: "/assets/audio/bgm/boss-autumn-wind.ogg",
+  cardPlace: [1, 2, 3, 4].map((index) => `/assets/audio/sfx/card-place-${index}.ogg`),
+  cardSlide: [1, 2, 3, 4].map((index) => `/assets/audio/sfx/card-slide-${index}.ogg`),
+  cardShove: [1, 2].map((index) => `/assets/audio/sfx/card-shove-${index}.ogg`),
+  hwatuSlap: [1, 2, 3, 4].map((index) => `/assets/audio/sfx/hwatu-slap-${index}.ogg`),
+  hwatuSwipe: [1, 2, 3].map((index) => `/assets/audio/sfx/hwatu-swipe-${index}.wav`),
+  hwatuPlasticCards: "/assets/audio/sfx/plastic-cards-table.mp3",
+  hwatuPlasticSnap: "/assets/audio/sfx/plastic-snap.mp3",
+  hwatuFaceSlap: "/assets/audio/sfx/face-slap.mp3",
+  chipLay: [1, 2, 3].map((index) => `/assets/audio/sfx/chip-lay-${index}.ogg`),
+  chipStack: [1, 2, 3].map((index) => `/assets/audio/sfx/chips-stack-${index}.ogg`),
+  cardShuffle: "/assets/audio/sfx/card-shuffle.ogg",
+  packOpen: "/assets/audio/sfx/cards-pack-open-1.ogg",
+  select: "/assets/audio/sfx/select_001.ogg",
+  confirm: "/assets/audio/sfx/confirmation_002.ogg",
+  multiplier: "/assets/audio/sfx/maximize_005.ogg",
+  reset: "/assets/audio/sfx/glass_004.ogg",
+  hit: "/assets/audio/sfx/jingles_HIT07.ogg",
+  reward: "/assets/audio/sfx/jingles_PIZZI03.ogg",
+  jackpot: "/assets/audio/sfx/jingles_STEEL07.ogg",
+  cashRegister: "/assets/audio/sfx/cash-register.mp3",
+  coinDrop: "/assets/audio/sfx/coin-drop.ogg",
+  shopPurchase: "/assets/audio/sfx/shop-purchase.wav",
+} as const;
+
+export type GameMusicScene =
+  | "title"
+  | "table"
+  | "shop"
+  | "boss-spring"
+  | "boss-summer"
+  | "boss-autumn"
+  | "boss-winter";
+
+interface MusicSceneDefinition {
+  track: string;
+  volume: number;
+  ambience?: string;
+  ambienceVolume?: number;
+}
+
+const MUSIC_SCENES: Record<GameMusicScene, MusicSceneDefinition> = {
+  title: { track: GAME_AUDIO_ASSETS.musicTitle, volume: 0.115 },
+  table: { track: GAME_AUDIO_ASSETS.musicTable, volume: MUSIC_VOLUME },
+  shop: { track: GAME_AUDIO_ASSETS.musicShop, volume: 0.12 },
+  "boss-spring": { track: GAME_AUDIO_ASSETS.musicBoss, volume: 0.23 },
+  "boss-summer": {
+    track: GAME_AUDIO_ASSETS.musicBoss,
+    volume: 0.23,
+    ambience: GAME_AUDIO_ASSETS.ambienceBossSummer,
+    ambienceVolume: 0.055,
+  },
+  "boss-autumn": {
+    track: GAME_AUDIO_ASSETS.musicBoss,
+    volume: 0.23,
+    ambience: GAME_AUDIO_ASSETS.ambienceBossAutumn,
+    ambienceVolume: 0.038,
+  },
+  "boss-winter": { track: GAME_AUDIO_ASSETS.musicBoss, volume: 0.23 },
+};
+
+export function resolveGameMusicScene(screen: ScreenId, bossMonth?: number | null): GameMusicScene {
+  if (screen === "title" || screen === "deck_select") return "title";
+  if (screen === "shop") return "shop";
+  if (screen === "round_intro" || screen === "play" || screen === "decision") {
+    if (bossMonth === 3) return "boss-spring";
+    if (bossMonth === 6) return "boss-summer";
+    if (bossMonth === 9) return "boss-autumn";
+    if (bossMonth === 12) return "boss-winter";
+  }
+  return "table";
+}
+
+let audioPrimed = false;
+let mutedPreference: boolean | null = null;
+let backgroundMusic: HTMLAudioElement | null = null;
+let backgroundAmbience: HTMLAudioElement | null = null;
+let desiredMusicScene: GameMusicScene = "title";
+let activeMusicScene: GameMusicScene | null = null;
+let musicTransitionToken = 0;
+let musicDuckTimer: number | null = null;
+const samplePools = new Map<string, HTMLAudioElement[]>();
+const segmentPlayTokens = new WeakMap<HTMLAudioElement, number>();
+const PLASTIC_CARD_HIT_OFFSETS = [1.34, 4.33, 7.48, 10.68] as const;
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function readMutedPreference(): boolean {
+  if (mutedPreference !== null) return mutedPreference;
+  if (typeof window === "undefined") return false;
+  try {
+    mutedPreference = window.localStorage.getItem(AUDIO_MUTED_KEY) === "true";
+  } catch {
+    mutedPreference = false;
+  }
+  return mutedPreference;
+}
+
+function createAudio(url: string): HTMLAudioElement | null {
+  if (typeof window === "undefined" || typeof window.Audio === "undefined") return null;
+  const audio = new window.Audio(url);
+  audio.preload = "auto";
+  return audio;
+}
+
+function preloadSample(url: string): void {
+  if (samplePools.has(url)) return;
+  const audio = createAudio(url);
+  if (!audio) return;
+  samplePools.set(url, [audio]);
+  audio.load();
+}
+
+function playSample(url: string, volume: number, playbackRate = 1): void {
+  if (readMutedPreference()) return;
+  let pool = samplePools.get(url);
+  if (!pool) {
+    const first = createAudio(url);
+    if (!first) return;
+    pool = [first];
+    samplePools.set(url, pool);
+  }
+  let audio = pool.find((candidate) => candidate.paused || candidate.ended);
+  if (!audio) {
+    audio = createAudio(url) ?? undefined;
+    if (!audio) return;
+    if (pool.length < 5) pool.push(audio);
+  }
+  audio.currentTime = 0;
+  audio.volume = clamp(volume, 0, 1);
+  audio.playbackRate = clamp(playbackRate, 0.72, 1.65);
+  void audio.play().catch(() => undefined);
+}
+
+function playSampleSegment(
+  url: string,
+  startTime: number,
+  duration: number,
+  volume: number,
+  playbackRate = 1,
+): void {
+  if (readMutedPreference() || typeof window === "undefined") return;
+  let pool = samplePools.get(url);
+  if (!pool) {
+    const first = createAudio(url);
+    if (!first) return;
+    pool = [first];
+    samplePools.set(url, pool);
+  }
+  let audio = pool.find((candidate) => candidate.paused || candidate.ended);
+  if (!audio) {
+    audio = createAudio(url) ?? undefined;
+    if (!audio) return;
+    if (pool.length < 6) pool.push(audio);
+  }
+  const token = (segmentPlayTokens.get(audio) ?? 0) + 1;
+  segmentPlayTokens.set(audio, token);
+  audio.currentTime = startTime;
+  audio.volume = clamp(volume, 0, 1);
+  audio.playbackRate = clamp(playbackRate, 0.72, 1.65);
+  void audio.play().catch(() => undefined);
+  window.setTimeout(() => {
+    if (segmentPlayTokens.get(audio) === token) audio.pause();
+  }, Math.ceil((duration / audio.playbackRate) * 1_000));
+}
+
+function configureLoop(audio: HTMLAudioElement, volume: number): void {
+  audio.preload = "metadata";
+  audio.loop = true;
+  audio.volume = clamp(volume, 0, 1);
+}
+
+function fadeBetweenLoops(
+  previous: HTMLAudioElement | null,
+  next: HTMLAudioElement | null,
+  targetVolume: number,
+  token: number,
+): void {
+  if (next) {
+    configureLoop(next, 0);
+    void next.play().catch(() => undefined);
+  }
+  const steps = 7;
+  for (let step = 1; step <= steps; step += 1) {
+    window.setTimeout(() => {
+      if (token !== musicTransitionToken || readMutedPreference()) return;
+      const progress = step / steps;
+      if (next) next.volume = clamp(targetVolume * progress, 0, 1);
+      if (previous) previous.volume = clamp(targetVolume * (1 - progress), 0, 1);
+      if (step === steps) previous?.pause();
+    }, step * 42);
+  }
+}
+
+function startGameMusic(): void {
+  if (!audioPrimed || readMutedPreference()) return;
+  const scene = MUSIC_SCENES[desiredMusicScene];
+  if (activeMusicScene === desiredMusicScene && backgroundMusic) {
+    configureLoop(backgroundMusic, scene.volume);
+    void backgroundMusic.play().catch(() => undefined);
+    if (backgroundAmbience && scene.ambienceVolume) {
+      configureLoop(backgroundAmbience, scene.ambienceVolume);
+      void backgroundAmbience.play().catch(() => undefined);
+    }
+    return;
+  }
+
+  const nextMusic = createAudio(scene.track);
+  const nextAmbience = scene.ambience ? createAudio(scene.ambience) : null;
+  if (!nextMusic) return;
+  const previousMusic = backgroundMusic;
+  const previousAmbience = backgroundAmbience;
+  backgroundMusic = nextMusic;
+  backgroundAmbience = nextAmbience;
+  activeMusicScene = desiredMusicScene;
+  const token = ++musicTransitionToken;
+  fadeBetweenLoops(previousMusic, nextMusic, scene.volume, token);
+  fadeBetweenLoops(previousAmbience, nextAmbience, scene.ambienceVolume ?? 0, token);
+}
+
+function duckGameMusic(duration = 900): void {
+  if (!backgroundMusic || backgroundMusic.paused) return;
+  const scene = MUSIC_SCENES[desiredMusicScene];
+  backgroundMusic.volume = scene.volume * DUCKED_MUSIC_FACTOR;
+  if (backgroundAmbience) {
+    backgroundAmbience.volume = (scene.ambienceVolume ?? 0) * DUCKED_MUSIC_FACTOR;
+  }
+  if (musicDuckTimer !== null) window.clearTimeout(musicDuckTimer);
+  musicDuckTimer = window.setTimeout(() => {
+    if (backgroundMusic && !readMutedPreference()) backgroundMusic.volume = scene.volume;
+    if (backgroundAmbience && !readMutedPreference()) {
+      backgroundAmbience.volume = scene.ambienceVolume ?? 0;
+    }
+    musicDuckTimer = null;
+  }, duration);
+}
+
+export function setGameMusicScene(scene: GameMusicScene): void {
+  if (desiredMusicScene === scene && activeMusicScene === scene) return;
+  desiredMusicScene = scene;
+  startGameMusic();
+}
+
+export function getGameAudioMuted(): boolean {
+  return readMutedPreference();
+}
+
+export function setGameAudioMuted(muted: boolean): boolean {
+  mutedPreference = muted;
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(AUDIO_MUTED_KEY, String(muted));
+    } catch {
+      // Preferences are best-effort; audio should still work without storage.
+    }
+  }
+  if (muted) {
+    musicTransitionToken += 1;
+    backgroundMusic?.pause();
+    backgroundAmbience?.pause();
+  }
+  else startGameMusic();
+  return muted;
+}
+
+export function toggleGameAudio(): boolean {
+  return setGameAudioMuted(!readMutedPreference());
+}
+
 let sharedContext: AudioContext | null = null;
 
 function getContext(): AudioContext | null {
@@ -107,6 +390,8 @@ function discardThud(context: AudioContext, delay = 0) {
 }
 
 export function playPackOpenSound() {
+  playSample(GAME_AUDIO_ASSETS.packOpen, 0.7);
+  playSample(GAME_AUDIO_ASSETS.cardShuffle, 0.28, 1.08);
   const context = getContext();
   if (!context) return;
   noise(context, 0.3, 0.15);
@@ -117,6 +402,7 @@ export function playPackOpenSound() {
 }
 
 export function playCardRevealSound(index = 0) {
+  playSample(GAME_AUDIO_ASSETS.cardSlide[Math.abs(index) % GAME_AUDIO_ASSETS.cardSlide.length], 0.52, 0.96 + (index % 4) * 0.025);
   const context = getContext();
   if (!context) return;
   noise(context, 0.055, 0.035);
@@ -124,6 +410,7 @@ export function playCardRevealSound(index = 0) {
 }
 
 export function playCardPickSound() {
+  playSample(GAME_AUDIO_ASSETS.select, 0.5, 1.04);
   const context = getContext();
   if (!context) return;
   tone(context, 520, 0.12, 0.05, "square");
@@ -132,10 +419,34 @@ export function playCardPickSound() {
 
 /** Call from a real click before delayed score/reward sounds begin. */
 export function primeGameAudio() {
+  audioPrimed = true;
   getContext();
+  [
+    ...GAME_AUDIO_ASSETS.cardPlace,
+    ...GAME_AUDIO_ASSETS.cardSlide,
+    ...GAME_AUDIO_ASSETS.cardShove,
+    ...GAME_AUDIO_ASSETS.hwatuSlap,
+    ...GAME_AUDIO_ASSETS.hwatuSwipe,
+    GAME_AUDIO_ASSETS.hwatuPlasticCards,
+    GAME_AUDIO_ASSETS.hwatuPlasticSnap,
+    GAME_AUDIO_ASSETS.hwatuFaceSlap,
+    ...GAME_AUDIO_ASSETS.chipLay,
+    ...GAME_AUDIO_ASSETS.chipStack,
+    GAME_AUDIO_ASSETS.select,
+    GAME_AUDIO_ASSETS.confirm,
+    GAME_AUDIO_ASSETS.multiplier,
+    GAME_AUDIO_ASSETS.reset,
+    GAME_AUDIO_ASSETS.reward,
+    GAME_AUDIO_ASSETS.jackpot,
+    GAME_AUDIO_ASSETS.cashRegister,
+    GAME_AUDIO_ASSETS.coinDrop,
+    GAME_AUDIO_ASSETS.shopPurchase,
+  ].forEach(preloadSample);
+  startGameMusic();
 }
 
 export function playRewardStepSound(index = 0) {
+  playSample(GAME_AUDIO_ASSETS.chipLay[Math.abs(index) % GAME_AUDIO_ASSETS.chipLay.length], 0.48, 0.95 + Math.min(index, 7) * 0.055);
   const context = getContext();
   if (!context) return;
   noise(context, 0.045, 0.022);
@@ -144,6 +455,8 @@ export function playRewardStepSound(index = 0) {
 }
 
 export function playRewardFinishSound() {
+  duckGameMusic(1_200);
+  playSample(GAME_AUDIO_ASSETS.reward, 0.62, 1.02);
   const context = getContext();
   if (!context) return;
   tone(context, 520, 0.16, 0.05, "square");
@@ -151,8 +464,51 @@ export function playRewardFinishSound() {
   tone(context, 1040, 0.28, 0.04, "triangle", 0.16);
 }
 
+/** A till bell fired from the click that actually collects the payout. */
+export function playCashRegisterSound() {
+  duckGameMusic(1_350);
+  playSample(GAME_AUDIO_ASSETS.cashRegister, 0.9, 1);
+  if (typeof window !== "undefined") {
+    window.setTimeout(() => playSample(GAME_AUDIO_ASSETS.coinDrop, 0.5, 1.04), 130);
+  }
+}
+
+/** A bright coin jingle with a material accent for the thing that was bought. */
+export function playShopPurchaseSound(category: ShopOffer["category"]) {
+  duckGameMusic(760);
+  playSample(GAME_AUDIO_ASSETS.shopPurchase, 0.64, category === "talisman" ? 1.08 : 1);
+  if (typeof window === "undefined") return;
+  window.setTimeout(() => {
+    if (category === "talisman") {
+      playSample(GAME_AUDIO_ASSETS.reset, 0.5, 1.28);
+    } else if (category === "pack") {
+      playSample(GAME_AUDIO_ASSETS.cardShuffle, 0.28, 1.08);
+    } else {
+      playSample(GAME_AUDIO_ASSETS.confirm, 0.4, 1.04);
+    }
+  }, 95);
+}
+
+export function playShopRerollSound() {
+  playSample(GAME_AUDIO_ASSETS.cardShuffle, 0.5, 1.12);
+  playSample(GAME_AUDIO_ASSETS.select, 0.26, 0.92);
+}
+
+export function playShopSaleSound() {
+  duckGameMusic(620);
+  playSample(GAME_AUDIO_ASSETS.coinDrop, 0.62, 0.94);
+  if (typeof window !== "undefined") {
+    window.setTimeout(() => playSample(GAME_AUDIO_ASSETS.confirm, 0.36, 1.12), 90);
+  }
+}
+
+export function playShopEntrySound() {
+  playSample(GAME_AUDIO_ASSETS.confirm, 0.28, 0.86);
+}
+
 /** Announces the submitted two-card kkeut/yaku before its cards resolve. */
 export function playYakuRevealSound() {
+  playSample(GAME_AUDIO_ASSETS.confirm, 0.68, 0.94);
   const context = getContext();
   if (!context) return;
   filteredNoise(context, 0.09, 0.05, 0, "lowpass", 1050, 440, 0.9);
@@ -177,6 +533,20 @@ export function playHighYakuRevealSound(tier: 1 | 2 | 3) {
 
 /** A compact, pitched impact for each of the two scoring kkeut cards. */
 export function playKkeutHitSound(index = 0) {
+  playSample(GAME_AUDIO_ASSETS.hwatuSwipe[Math.abs(index) % GAME_AUDIO_ASSETS.hwatuSwipe.length], 0.4, 1.06 + Math.min(index, 2) * 0.025);
+  playSample(GAME_AUDIO_ASSETS.hwatuFaceSlap, 0.86, 0.98 + (index % 4) * 0.045);
+  playSample(GAME_AUDIO_ASSETS.cardPlace[Math.abs(index) % GAME_AUDIO_ASSETS.cardPlace.length], 0.25, 1.02 + Math.min(index, 3) * 0.018);
+  playSample(GAME_AUDIO_ASSETS.hwatuSlap[Math.abs(index) % GAME_AUDIO_ASSETS.hwatuSlap.length], 0.14, 1.16 + Math.min(index, 3) * 0.025);
+  playSampleSegment(
+    GAME_AUDIO_ASSETS.hwatuPlasticCards,
+    PLASTIC_CARD_HIT_OFFSETS[Math.abs(index) % PLASTIC_CARD_HIT_OFFSETS.length],
+    0.3,
+    0.3,
+    1.02 + (index % 3) * 0.025,
+  );
+  if (typeof window !== "undefined") {
+    window.setTimeout(() => playSample(GAME_AUDIO_ASSETS.hwatuPlasticSnap, 0.24, 0.96 + (index % 4) * 0.06), 24);
+  }
   const context = getContext();
   if (!context) return;
   const step = Math.max(0, Math.min(5, index));
@@ -187,6 +557,7 @@ export function playKkeutHitSound(index = 0) {
 
 /** An ascending abacus-like click for each card added while making a jit total. */
 export function playJitAdditionSound(index = 0) {
+  playSample(GAME_AUDIO_ASSETS.chipStack[Math.abs(index) % GAME_AUDIO_ASSETS.chipStack.length], 0.58, 0.94 + Math.min(index, 8) * 0.055);
   const context = getContext();
   if (!context) return;
   const step = Math.max(0, Math.min(8, index));
@@ -198,6 +569,19 @@ export function playJitAdditionSound(index = 0) {
 
 /** A dry hwatu-on-table slap as a scored card lands in the collection board. */
 export function playCollectionSlapSound(index = 0) {
+  playSample(GAME_AUDIO_ASSETS.hwatuFaceSlap, 0.92, 0.96 + (index % 4) * 0.05);
+  playSample(GAME_AUDIO_ASSETS.cardPlace[Math.abs(index) % GAME_AUDIO_ASSETS.cardPlace.length], 0.24, 1.01 + (index % 4) * 0.018);
+  playSample(GAME_AUDIO_ASSETS.hwatuSlap[Math.abs(index) % GAME_AUDIO_ASSETS.hwatuSlap.length], 0.16, 1.12 + (index % 4) * 0.025);
+  playSampleSegment(
+    GAME_AUDIO_ASSETS.hwatuPlasticCards,
+    PLASTIC_CARD_HIT_OFFSETS[Math.abs(index) % PLASTIC_CARD_HIT_OFFSETS.length],
+    0.32,
+    0.34,
+    0.98 + (index % 4) * 0.025,
+  );
+  if (typeof window !== "undefined") {
+    window.setTimeout(() => playSample(GAME_AUDIO_ASSETS.hwatuPlasticSnap, 0.26, 0.94 + (index % 4) * 0.065), 22);
+  }
   const context = getContext();
   if (!context) return;
   const variation = Math.abs(index) % 4;
@@ -215,6 +599,8 @@ export function playCollectionSlapSound(index = 0) {
 
 /** A short lacquered-card glide before the collection-board impact. */
 export function playCollectionSlideSound(index = 0) {
+  playSample(GAME_AUDIO_ASSETS.hwatuSwipe[Math.abs(index) % GAME_AUDIO_ASSETS.hwatuSwipe.length], 0.82, 1.02 + (index % 3) * 0.028);
+  playSample(GAME_AUDIO_ASSETS.cardSlide[Math.abs(index) % GAME_AUDIO_ASSETS.cardSlide.length], 0.3, 0.98 + (index % 4) * 0.018);
   const context = getContext();
   if (!context) return;
   const variation = Math.abs(index) % 4;
@@ -246,6 +632,7 @@ export function playDiscardSound() {
 
 /** A taut paper snap for a card entering the hand. */
 export function playDrawSnapSound(index = 0) {
+  playSample(GAME_AUDIO_ASSETS.cardShove[Math.abs(index) % GAME_AUDIO_ASSETS.cardShove.length], 0.52, 1 + (index % 3) * 0.025);
   const context = getContext();
   if (!context) return;
   const variation = Math.abs(index) % 4;
@@ -254,8 +641,40 @@ export function playDrawSnapSound(index = 0) {
   sweptTone(context, 245, 455 + variation * 20, 0.095, 0.025, "triangle", 0.018);
 }
 
+/** Gives each score-operation lane its own material and weight. */
+export function playScoreOperationSound(operation: ScoreOperation, index = 0) {
+  const step = Math.max(0, Math.min(8, index));
+  if (operation.operation === "multiply_heung") {
+    duckGameMusic(620);
+    playSample(GAME_AUDIO_ASSETS.multiplier, 0.76, 0.92 + step * 0.035);
+  } else if (operation.operation === "add_heung") {
+    playSample(GAME_AUDIO_ASSETS.confirm, 0.58, 0.96 + step * 0.045);
+  } else if (operation.operation === "set_kkeut") {
+    playSample(GAME_AUDIO_ASSETS.reset, 0.66, 0.98);
+  } else {
+    playSample(GAME_AUDIO_ASSETS.chipStack[step % GAME_AUDIO_ASSETS.chipStack.length], 0.6, 0.94 + step * 0.055);
+  }
+
+  const context = getContext();
+  if (!context) return;
+  if (operation.operation === "multiply_heung") {
+    sweptTone(context, 210, 780 + step * 45, 0.22, 0.055, "sawtooth");
+    sweptTone(context, 720 + step * 38, 1_080 + step * 55, 0.2, 0.035, "triangle", 0.08);
+  } else if (operation.operation === "add_heung") {
+    tone(context, 610 + step * 58, 0.13, 0.042, "triangle");
+    tone(context, 910 + step * 70, 0.18, 0.03, "sine", 0.045);
+  } else if (operation.operation === "set_kkeut") {
+    filteredNoise(context, 0.1, 0.04, 0, "highpass", 5_200, 1_900, 0.7);
+    sweptTone(context, 900, 240, 0.18, 0.045, "triangle");
+  } else {
+    sweptTone(context, 390 + step * 48, 315 + step * 42, 0.1, 0.04, "square");
+  }
+}
+
 /** Resolves the complete submission sequence with a short celebratory cadence. */
-export function playSubmissionFinaleSound() {
+export function playSubmissionFinaleSound(score = 0) {
+  duckGameMusic(1_450);
+  playSample(score >= 1_000 ? GAME_AUDIO_ASSETS.jackpot : GAME_AUDIO_ASSETS.hit, score >= 1_000 ? 0.82 : 0.7);
   const context = getContext();
   if (!context) return;
   filteredNoise(context, 0.09, 0.038, 0, "lowpass", 1200, 480, 0.8);
