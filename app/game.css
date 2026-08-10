@@ -419,14 +419,15 @@
   animation: boss-rain-glimmer 7s ease-in-out infinite;
 }
 .boss-season-fx--summer .boss-season-fx__particle {
-  width: 1px;
-  height: clamp(1rem, 3.4vh, 2.5rem);
-  background: linear-gradient(180deg, transparent, rgb(205 235 244 / 62%));
-  box-shadow: 0 0 2px rgb(158 221 241 / 30%);
-  transform: rotate(9deg);
+  width: 2px;
+  height: clamp(1.8rem, 6.2vh, 4.8rem);
+  background: linear-gradient(180deg, transparent 2%, rgb(218 242 250 / 78%));
+  box-shadow: 0 0 3px rgb(158 221 241 / 42%);
+  transform: rotate(11deg);
   animation: boss-rain-fall var(--season-rain-duration) linear var(--season-delay) infinite;
 }
-.boss-season-fx--summer .boss-season-fx__particle:nth-child(4n) { opacity: 0.35; height: 1rem; }
+.boss-season-fx--summer .boss-season-fx__particle:nth-child(3n) { width: 3px; }
+.boss-season-fx--summer .boss-season-fx__particle:nth-child(4n) { opacity: 0.52; height: 2.4rem; }
 
 .boss-season-fx--autumn .boss-season-fx__particle {
   width: 0.58rem;
@@ -460,10 +461,10 @@
   100% { opacity: 0; transform: translate3d(var(--season-drift-back), 112vh, 0) rotate(820deg) scale(var(--season-scale)); }
 }
 @keyframes boss-rain-fall {
-  0% { opacity: 0; transform: translate3d(0, -8%, 0) rotate(9deg); }
-  8% { opacity: 0.72; }
-  88% { opacity: 0.62; }
-  100% { opacity: 0; transform: translate3d(-4.8rem, 118vh, 0) rotate(9deg); }
+  0% { opacity: 0; transform: translate3d(0, -12%, 0) rotate(11deg); }
+  5% { opacity: 0.88; }
+  92% { opacity: 0.74; }
+  100% { opacity: 0; transform: translate3d(-7rem, 128vh, 0) rotate(11deg); }
 }
 @keyframes boss-rain-glimmer {
   0%, 46%, 54%, 100% { opacity: 0.08; }

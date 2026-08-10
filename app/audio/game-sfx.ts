@@ -10,10 +10,7 @@ export const GAME_AUDIO_ASSETS = {
   musicTable: "/assets/audio/bgm/noir-table.mp3",
   musicTitle: "/assets/audio/bgm/title-menu.mp3",
   musicShop: "/assets/audio/bgm/shop-radio.ogg",
-  musicBossSpring: "/assets/audio/bgm/boss-spring.ogg",
-  musicBossSummer: "/assets/audio/bgm/boss-summer.ogg",
-  musicBossAutumn: "/assets/audio/bgm/boss-autumn.ogg",
-  musicBossWinter: "/assets/audio/bgm/boss-winter.ogg",
+  musicBoss: "/assets/audio/bgm/boss-oh-boss.mp3",
   ambienceBossSummer: "/assets/audio/bgm/boss-summer-rain.ogg",
   ambienceBossAutumn: "/assets/audio/bgm/boss-autumn-wind.ogg",
   cardPlace: [1, 2, 3, 4].map((index) => `/assets/audio/sfx/card-place-${index}.ogg`),
@@ -60,20 +57,20 @@ const MUSIC_SCENES: Record<GameMusicScene, MusicSceneDefinition> = {
   title: { track: GAME_AUDIO_ASSETS.musicTitle, volume: 0.115 },
   table: { track: GAME_AUDIO_ASSETS.musicTable, volume: MUSIC_VOLUME },
   shop: { track: GAME_AUDIO_ASSETS.musicShop, volume: 0.12 },
-  "boss-spring": { track: GAME_AUDIO_ASSETS.musicBossSpring, volume: 0.18 },
+  "boss-spring": { track: GAME_AUDIO_ASSETS.musicBoss, volume: 0.23 },
   "boss-summer": {
-    track: GAME_AUDIO_ASSETS.musicBossSummer,
-    volume: 0.18,
+    track: GAME_AUDIO_ASSETS.musicBoss,
+    volume: 0.23,
     ambience: GAME_AUDIO_ASSETS.ambienceBossSummer,
     ambienceVolume: 0.055,
   },
   "boss-autumn": {
-    track: GAME_AUDIO_ASSETS.musicBossAutumn,
-    volume: 0.18,
+    track: GAME_AUDIO_ASSETS.musicBoss,
+    volume: 0.23,
     ambience: GAME_AUDIO_ASSETS.ambienceBossAutumn,
     ambienceVolume: 0.038,
   },
-  "boss-winter": { track: GAME_AUDIO_ASSETS.musicBossWinter, volume: 0.18 },
+  "boss-winter": { track: GAME_AUDIO_ASSETS.musicBoss, volume: 0.23 },
 };
 
 export function resolveGameMusicScene(screen: ScreenId, bossMonth?: number | null): GameMusicScene {

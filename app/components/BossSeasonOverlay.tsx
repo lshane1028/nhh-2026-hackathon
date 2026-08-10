@@ -10,10 +10,10 @@ const BOSS_SEASON_BY_MONTH: Readonly<Partial<Record<number, BossSeason>>> = {
 };
 
 const PARTICLE_COUNT: Record<BossSeason, number> = {
-  spring: 30,
-  summer: 36,
-  autumn: 26,
-  winter: 36,
+  spring: 45,
+  summer: 54,
+  autumn: 39,
+  winter: 54,
 };
 
 export function getBossSeasonForMonth(month: number, bossActive = true): BossSeason | null {
@@ -26,7 +26,7 @@ function particleStyle(index: number): CSSProperties {
     "--season-x": `${(index * 37 + 9) % 101}%`,
     "--season-delay": `${-((index * 17) % 41) / 4}s`,
     "--season-duration": `${5.4 + ((index * 11) % 31) / 5}s`,
-    "--season-rain-duration": `${0.66 + ((index * 7) % 9) / 20}s`,
+    "--season-rain-duration": `${0.28 + ((index * 7) % 9) / 45}s`,
     "--season-snow-duration": `${8.8 + ((index * 11) % 31) / 4}s`,
     "--season-drift": `${drift}px`,
     "--season-drift-back": `${Math.round(drift * -0.55)}px`,
