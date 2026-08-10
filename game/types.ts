@@ -74,7 +74,10 @@ export type CollectionYakuId =
   | "rain_three_brights"
   | "three_brights"
   | "four_brights"
-  | "five_brights";
+  | "five_brights"
+  | "six_brights"
+  | "four_godori"
+  | "five_godori";
 
 export type YakuId = ImmediateYakuId | CollectionYakuId;
 
@@ -276,7 +279,7 @@ export interface PackDefinition {
   id: string;
   name: string;
   description: string;
-  category: "card" | "painter" | "book" | "talisman" | "forbidden";
+  category: "card" | "book" | "talisman" | "burn";
   price: number;
   choices: number;
   picks: number;
@@ -414,7 +417,9 @@ export interface PendingPack {
   packId: string;
   name: string;
   picksLeft: number;
+  category?: "card" | "book" | "talisman" | "burn";
   candidates: CardInstance[];
+  rewardCandidates?: Array<{ candidateId: string; definitionId: string; category: "book" | "talisman" }>;
 }
 
 export interface ShopOffer {

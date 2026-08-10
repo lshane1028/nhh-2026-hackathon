@@ -266,6 +266,14 @@ textarea {
   line-height: 1.05;
   text-shadow: 4px 0 0 #5c1b16, 0 4px 0 #5c1b16, 4px 4px 0 #0b0908 !important;
 }
+.title-screen__intro .title-screen__logo {
+  padding: 0.08em 0.16em 0.13em 0.23em;
+  border-block: 2px solid #e7be63;
+  background: linear-gradient(90deg, transparent, rgb(7 6 5 / 58%) 16% 84%, transparent);
+  color: #fff0c9;
+  letter-spacing: 0.12em;
+  text-shadow: 4px 0 0 #5c1b16, 0 4px 0 #5c1b16, 4px 4px 0 #0b0908 !important;
+}
 .title-screen__subtitle { font-family: var(--pixel-display) !important; }
 .title-screen__panel { border-block-width: 2px !important; }
 .title-screen__rule {
@@ -288,7 +296,7 @@ textarea {
 .intro-screen__target strong { font-family: var(--pixel-display) !important; text-shadow: 2px 2px 0 #c79756; }
 .intro-screen__rules article {
   border-left-width: 4px !important;
-  background: rgb(255 248 225 / 22%) !important;
+  background: linear-gradient(145deg, #211913, #12110e) !important;
 }
 .intro-screen__rule-mark { border-width: 2px !important; border-radius: 0 !important; }
 .deck-editor-screen > header {
@@ -514,17 +522,38 @@ button small,
 .intro-screen__rules article strong { font-size: 0.95rem !important; }
 
 .market-card__wrap {
-  width: clamp(8.25rem, 10vw, 11rem) !important;
+  width: min(100%, clamp(5.4rem, 6.5vw, 7.25rem)) !important;
 }
 .market-panel--contract .market-rack__items { justify-content: center; gap: clamp(2rem, 5vw, 5rem) !important; padding: clamp(1.4rem, 4vh, 3rem) !important; }
 .market-panel--contract .market-card__wrap { width: clamp(17rem, 26vw, 25rem) !important; }
 .market-panel--contract .market-card__label { font-size: clamp(1rem, 1.4vw, 1.35rem) !important; }
 .market-panel--contract .market-card__hint { width: min(28rem, 88vw) !important; max-width: 28rem !important; }
+.market-panel--contract .market-panel__body { grid-template-columns: clamp(9rem, 13vw, 12rem) minmax(0, 1fr); }
+.market-panel--contract .market-panel__racks { height: 100%; align-self: stretch; }
+.season-contract { display: grid; width: 100%; height: 100%; min-height: 0; flex: 1 1 auto; grid-template-rows: minmax(0, 1fr) auto; gap: clamp(0.7rem, 1.5vw, 1.4rem); padding: 0.5rem; overflow: hidden; }
+.season-contract__scene { display: flex; min-height: 18rem; flex-direction: column; justify-content: flex-end; gap: 0.35rem; padding: clamp(1rem, 2vw, 1.8rem); border: 3px solid #9a7335; background-color: #18120e; background-position: center 38%; background-size: cover; box-shadow: inset 0 0 0 3px #1b100b, 5px 6px 0 rgb(0 0 0 / 55%); }
+.season-contract__scene > span { color: #e5bf68; font-size: 0.76rem; font-weight: 900; letter-spacing: 0.14em; }
+.season-contract__scene > strong { color: #fff0c3; font-size: clamp(1.55rem, 3vw, 3rem); text-shadow: 3px 3px 0 #40120e; }
+.season-contract__scene > p { margin: 0.35rem 0 0; padding: 0.75rem; border: 2px solid #826635; background: rgb(12 10 8 / 88%); color: #f0dfb9; font-size: clamp(0.85rem, 1.15vw, 1.08rem); line-height: 1.7; }
+.season-contract__choices { display: grid; min-height: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: stretch; gap: clamp(0.8rem, 2vh, 1.4rem); }
+.season-contract__choice { display: grid !important; min-height: 7rem; grid-template-columns: 2.5rem minmax(0, 1fr); gap: 0.7rem; align-items: center; padding: 0.85rem 1rem !important; border: 3px solid #6f5732 !important; background: linear-gradient(135deg, #e7d6ad, #c9ad72) !important; color: #24170f !important; text-align: left; box-shadow: 4px 5px 0 rgb(0 0 0 / 48%); }
+.season-contract__choice:hover:not(:disabled), .season-contract__choice--selected { border-color: #c83429 !important; background: linear-gradient(135deg, #f2dfb0, #d8b75f) !important; transform: translateX(-0.35rem); }
+.season-contract__choice > em { display: grid; width: 2.25rem; aspect-ratio: 1; place-items: center; border: 2px solid #8c2e21; background: #a93629; color: #fff0d0; font-style: normal; font-weight: 950; }
+.season-contract__choice > span { display: grid; gap: 0.28rem; }
+.season-contract__choice b { font-size: clamp(0.9rem, 1.2vw, 1.15rem); }
+.season-contract__choice small { color: #4a3827; font-size: clamp(0.78rem, 1vw, 0.95rem) !important; font-weight: 750; line-height: 1.55; }
 .market-dept__items {
-  gap: clamp(0.8rem, 1.2vw, 1.25rem) !important;
-  padding: clamp(0.9rem, 1.6vh, 1.35rem) 0.5rem 0.65rem !important;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(5rem, 1fr));
+  gap: clamp(0.35rem, 0.7vw, 0.7rem) !important;
+  place-items: start center;
+  align-content: start;
+  padding: 0.7rem 0.25rem 0.25rem !important;
 }
-.market-dept__sign { min-height: 3.6rem; padding: 0.55rem 0.7rem !important; }
+.market-panel__racks { overflow: hidden !important; }
+.market-floor { min-height: 0; overflow: hidden; }
+.market-dept { overflow: hidden; padding: 0.35rem !important; }
+.market-dept__sign { min-height: 2.8rem; padding: 0.35rem 0.5rem !important; }
 .market-dept__mark { min-width: 2.1rem; font-size: 0.68rem !important; }
 .market-dept__sign strong { font-size: 1rem !important; }
 .market-dept__sign span { font-size: 0.72rem !important; line-height: 1.45 !important; }
@@ -545,15 +574,17 @@ button small,
   gap: 0.38rem;
   margin: 0.22rem 0 0.12rem;
 }
-.market-owned { display: grid; gap: 0.45rem; padding: 0.55rem 0.7rem; border: 2px solid #6f5732; background: #17130f; }
+.market-owned { display: grid; max-height: 5.25rem; flex: 0 0 auto; gap: 0.25rem; padding: 0.35rem 0.55rem; overflow: hidden; border: 2px solid #6f5732; background: #17130f; }
 .market-owned > header { display: flex; align-items: baseline; justify-content: space-between; color: #f0ddb4; }
 .market-owned > header span { color: #9c8c72; font-size: 0.72rem; }
-.market-owned > div { display: flex; min-height: 4.5rem; gap: 0.5rem; align-items: stretch; overflow-x: auto; }
-.market-owned > div > button { display: grid; grid-template-columns: 2.6rem minmax(5rem, auto); grid-template-rows: 1fr auto; gap: 0 0.45rem; min-width: 9.5rem; align-items: center; padding: 0.3rem !important; background: #e5d1a5 !important; text-align: left; }
-.market-owned > div > button > span { grid-row: 1 / 3; width: 2.6rem; aspect-ratio: 2 / 3; border: 1px solid #6f4a24; background: #2a2118 center/contain no-repeat; }
+.market-owned > div { display: flex; min-height: 3.2rem; gap: 0.35rem; align-items: stretch; overflow-x: auto; }
+.market-owned > div > button { display: grid; grid-template-columns: 2rem minmax(4rem, auto); grid-template-rows: 1fr auto; gap: 0 0.35rem; min-width: 7.5rem; align-items: center; padding: 0.2rem !important; background: #e5d1a5 !important; text-align: left; }
+.market-owned > div > button > span { grid-row: 1 / 3; width: 2rem; aspect-ratio: 2 / 3; border: 1px solid #6f4a24; background: #2a2118 center/contain no-repeat; }
 .market-owned > div > button b { font-size: 0.76rem; }
 .market-owned > div > button small { color: #8e241b; font-size: 0.66rem !important; font-weight: 900; }
 .market-owned > div > p { margin: auto 0; color: #887d6c; }
+.talisman-strip__item[draggable="true"] { cursor: grab; }
+.talisman-strip__item[draggable="true"]:active { cursor: grabbing; }
 .market-card__comparison > span {
   display: grid;
   min-width: 0;
@@ -640,11 +671,14 @@ button small,
 .tutorial-spotlight__callout h2 { font-size: 0.98rem !important; }
 
 @media (max-width: 980px) {
-  .market-card__wrap { width: clamp(7.5rem, 18vw, 9.5rem) !important; }
+  .market-card__wrap { width: min(100%, clamp(5.2rem, 14vw, 7rem)) !important; }
+  .season-contract { grid-template-rows: auto auto; overflow-y: auto; }
+  .season-contract__scene { min-height: 20rem; }
+  .season-contract__choices { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
-  .market-card__wrap { width: clamp(7.2rem, 34vw, 9rem) !important; }
+  .market-card__wrap { width: min(100%, clamp(5rem, 30vw, 7rem)) !important; }
   .market-dept__items { padding-inline: 0.2rem !important; }
 }
 
@@ -929,7 +963,7 @@ button small,
    and transformed card. Their coordinates are clamped to the viewport in JS. */
 .market-card__hint--portal {
   position: fixed !important;
-  z-index: 1000 !important;
+  z-index: 2147483000 !important;
   right: auto !important;
   bottom: auto !important;
   display: grid !important;
@@ -941,10 +975,70 @@ button small,
   pointer-events: none;
 }
 .market-card__hint--portal[data-placement="above"] {
-  transform: translate(-50%, -100%) !important;
+  transform: translateX(-50%) !important;
+}
+.pack-picks__item--selected .pack-pick__card,
+.pack-picks__item--selected .pack-reward-pick {
+  transform: translateY(-0.65rem) scale(1.035) !important;
+  filter: brightness(1.08) drop-shadow(0 0 0.8rem rgb(214 152 48 / 82%));
+}
+.pack-picks__item--selected .pack-pick__details,
+.pack-picks__item--selected .pack-reward-pick { outline: 3px solid #b82e23; outline-offset: 3px; }
+.pack-pick__selected-mark {
+  position: absolute;
+  z-index: 12;
+  top: 0.15rem;
+  right: 0.2rem;
+  display: grid;
+  min-width: 2.7rem;
+  min-height: 1.65rem;
+  place-items: center;
+  padding: 0.2rem 0.35rem;
+  border: 2px solid #f0bd55;
+  background: #a92e24;
+  color: #fff0c8;
+  font-size: 0.65rem;
+  font-weight: 950;
+  box-shadow: 3px 3px 0 rgb(42 11 8 / 75%);
+  pointer-events: none;
+  animation: pack-selected-pop 180ms steps(4, end) both;
+}
+@keyframes pack-selected-pop {
+  from { opacity: 0; transform: scale(0.6) rotate(-5deg); }
+  to { opacity: 1; transform: none; }
 }
 .market-card__hint--portal[data-placement="below"] {
-  transform: translate(-50%, 0) !important;
+  transform: translateX(-50%) !important;
+}
+
+/* Card, market, and talisman explanations all live under document.body.
+   No transformed card, scrolling deck row, shelf, modal, or clipped panel can
+   establish a stacking context above them. */
+.hwatu-card__hint--portal,
+.market-card__hint--portal,
+.talisman-strip__hint--portal {
+  position: fixed !important;
+  z-index: 2147483000 !important;
+  right: auto !important;
+  bottom: auto !important;
+  max-height: calc(100dvh - 1.5rem) !important;
+  overflow-y: auto !important;
+  opacity: 1 !important;
+  transform: translateX(-50%) !important;
+  pointer-events: none !important;
+}
+
+.hwatu-card__hint--portal {
+  display: grid !important;
+  width: min(18rem, calc(100vw - 1.5rem)) !important;
+  max-width: 18rem !important;
+  gap: 0.18rem !important;
+  padding: 0.7rem 0.8rem !important;
+}
+.hwatu-card__hint--portal[data-placement="below"]::after {
+  top: auto;
+  bottom: 100%;
+  transform: translate(-50%, 55%) rotate(225deg);
 }
 
 @media (max-width: 760px) {
@@ -964,6 +1058,26 @@ button small,
   .pack-picks__item--revealed { animation: none !important; }
   .pack-picks__item--revealed { opacity: 1; transform: none; }
 }
+
+/* Non-card pack rewards use the same physical bundle reveal but keep their
+   full description visible on a compact 서책/부적 tile. */
+.game-modal .pack-reward-pick {
+  display: grid;
+  width: clamp(7.5rem, 11vw, 10rem);
+  min-height: 16rem;
+  grid-template-rows: minmax(8rem, 1fr) auto 1fr auto;
+  gap: 0.45rem;
+  padding: 0.45rem !important;
+  border: 3px solid #8a6832 !important;
+  background: #e5d1a5 !important;
+  color: #24170f !important;
+  text-align: left;
+  box-shadow: 4px 5px 0 rgb(0 0 0 / 48%);
+}
+.pack-reward-pick__art { display: block; width: 100%; min-height: 8rem; border: 2px solid #60441e; background: #211810 center/contain no-repeat; }
+.pack-reward-pick strong { font-size: 0.9rem; }
+.pack-reward-pick small { color: #5d4a34; font-size: 0.7rem !important; line-height: 1.5; }
+.pack-reward-pick b { color: #9b2e22; font-size: 0.72rem; }
 
 /* --------------------------------------------------------------------------
    Submission / discard theater
@@ -1003,15 +1117,12 @@ button small,
   100% { transform: none; }
 }
 .card-theater {
-  position: fixed;
+  position: absolute;
   z-index: 1100;
   overflow: hidden;
   color: #f7e8c1;
   font-family: var(--font-pixel), var(--font-geist-sans), sans-serif;
-  top: clamp(7.4rem, 15vh, 10rem);
-  bottom: 0;
-  left: calc(clamp(19rem, 22vw, 23rem) + var(--shell-gap) + var(--shell-gap));
-  right: calc(clamp(15.5rem, 18vw, 19rem) + var(--shell-gap) + var(--shell-gap));
+  inset: 0;
   isolation: isolate;
 }
 .card-theater__backdrop {
@@ -1139,6 +1250,40 @@ button small,
 .submission-theater--kkeut-card .submission-theater__card--active { filter: saturate(1.25) drop-shadow(0 0 1rem rgb(220 62 39 / 72%)); }
 .submission-theater--jit-card .submission-theater__card--active { filter: saturate(1.2) drop-shadow(0 0 1rem rgb(68 151 177 / 78%)); }
 .submission-theater--effect .submission-theater__card--active { animation: theater-card-crack 260ms steps(2, jump-none) both; }
+.submission-theater--yaku.submission-theater--tier-1 .card-theater__headline > strong {
+  color: #ffe08a;
+  text-shadow: 0 0.18rem 0 #7d2419, 0 0 1.4rem #e47730, 0 0 2.8rem rgb(255 204 90 / 55%);
+  animation: theater-title-heavy 620ms cubic-bezier(.12,.84,.2,1.2) both;
+}
+.submission-theater--yaku.submission-theater--tier-2 .card-theater__backdrop {
+  background: repeating-linear-gradient(135deg, rgb(255 226 133 / 8%) 0 2px, transparent 2px 14px), radial-gradient(circle at 50% 46%, #8d3b29 0 10%, #174f3e 42%, #082f26 78%);
+}
+.submission-theater--yaku.submission-theater--tier-2 .card-theater__headline > strong,
+.submission-theater--yaku.submission-theater--tier-3 .card-theater__headline > strong {
+  color: #fff4b7;
+  text-shadow: 0 0.2rem 0 #8b251b, 0 0 1rem #ff7d3b, 0 0 2.6rem #f8d96c, 0 0 4.8rem rgb(255 238 156 / 70%);
+  animation: theater-title-legendary 880ms cubic-bezier(.12,.84,.2,1.2) both;
+}
+.submission-theater--yaku.submission-theater--tier-3 .card-theater__backdrop {
+  background: repeating-linear-gradient(45deg, rgb(255 235 157 / 12%) 0 3px, transparent 3px 18px), radial-gradient(circle at 50% 45%, #a63d22 0 8%, #395d44 38%, #092d25 76%);
+  animation: theater-legendary-field 720ms steps(4, end) infinite alternate;
+}
+.submission-theater--growth .card-theater__backdrop {
+  background:
+    repeating-radial-gradient(circle at 50% 46%, rgb(255 224 119 / 10%) 0 2px, transparent 3px 16px),
+    radial-gradient(circle at 50% 44%, #8a5b20 0 8%, #285743 38%, #082d24 76%);
+  animation: theater-growth-field 520ms steps(3, end) infinite alternate;
+}
+.submission-theater--growth .card-theater__headline > span { color: #f5d878; }
+.submission-theater--growth .card-theater__headline > strong {
+  color: #fff1a6;
+  text-shadow: 0 0.18rem 0 #6f3619, 0 0 1.2rem #e6aa3e, 0 0 3.2rem rgb(255 224 113 / 72%);
+  animation: theater-title-legendary 880ms cubic-bezier(.12,.84,.2,1.2) both;
+}
+.submission-theater--growth .submission-theater__cards {
+  opacity: 0.16;
+  filter: sepia(0.8) brightness(0.62);
+}
 .submission-theater__card--collecting { z-index: 12; }
 .submission-theater__flight-card {
   z-index: 2200;
@@ -1165,6 +1310,26 @@ button small,
   62% { opacity: 1; transform: scale(0.94); filter: none; }
   100% { transform: scale(1); }
 }
+@keyframes theater-title-heavy {
+  0% { opacity: 0; transform: scale(2.1) rotate(-2deg); filter: blur(0.35rem); }
+  60% { opacity: 1; transform: scale(0.9) rotate(1deg); filter: none; }
+  82% { transform: scale(1.08) rotate(0); }
+  100% { transform: scale(1); }
+}
+@keyframes theater-title-legendary {
+  0% { opacity: 0; letter-spacing: 0.7em; transform: scale(2.6); filter: brightness(2.4) blur(0.5rem); }
+  52% { opacity: 1; letter-spacing: 0.05em; transform: scale(0.84); filter: brightness(1.8); }
+  72% { transform: scale(1.16); filter: none; }
+  100% { letter-spacing: 0; transform: scale(1); }
+}
+@keyframes theater-legendary-field {
+  from { filter: saturate(1) brightness(0.95); }
+  to { filter: saturate(1.45) brightness(1.16); }
+}
+@keyframes theater-growth-field {
+  from { filter: saturate(1) brightness(0.94); }
+  to { filter: saturate(1.38) brightness(1.18); }
+}
 @keyframes theater-impact-ring {
   0% { opacity: 0.9; transform: scale(0.62); }
   100% { opacity: 0; transform: scale(1.35); }
@@ -1180,10 +1345,6 @@ button small,
   .submission-theater__formula > span { min-width: 4.6rem; }
   .submission-theater__cards { min-height: 10rem; }
   .card-theater__skip { right: 0.4rem; }
-}
-
-@media (max-width: 1080px), (max-height: 620px) {
-  .card-theater { right: 0; left: 0; }
 }
 
 @media (max-height: 520px) {
@@ -1212,4 +1373,670 @@ button small,
   .hand-card--discarding .hwatu-card,
   .hand-card--inline-drawn .hwatu-card,
   .card-theater__headline > strong { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+
+/* --------------------------------------------------------------------------
+   Month opening — a self-contained dark stage. Keep this block last: the
+   generic pixel-paper rules above must never turn the opening ivory again.
+   -------------------------------------------------------------------------- */
+.game-root:has(> .intro-screen--ritual) {
+  height: 100dvh;
+  min-height: 0;
+  padding: clamp(0.45rem, 1vw, 0.9rem);
+  overflow: hidden;
+  background:
+    linear-gradient(45deg, rgb(192 137 63 / 5%) 25%, transparent 25% 75%, rgb(192 137 63 / 5%) 75%) 0 0 / 12px 12px,
+    radial-gradient(circle at 50% 115%, #24483d 0, #10251f 37%, transparent 65%),
+    #090b09;
+}
+
+.game-root > .intro-screen.intro-screen--ritual {
+  isolation: isolate;
+  display: grid;
+  width: min(100%, 118rem);
+  height: calc(100dvh - clamp(0.9rem, 2vw, 1.8rem));
+  min-height: 0;
+  grid-template-rows: minmax(12rem, 1fr) auto auto auto;
+  gap: clamp(0.65rem, 1.5vh, 1.15rem);
+  padding: clamp(1.1rem, 2.8vw, 2.7rem) clamp(1rem, 4vw, 4.5rem) clamp(0.85rem, 2vh, 1.5rem);
+  overflow: hidden;
+  border: 2px solid #2e1b10 !important;
+  outline: 3px solid #9e6730;
+  outline-offset: -7px;
+  background:
+    linear-gradient(90deg, rgb(231 187 98 / 3%) 1px, transparent 1px) 0 0 / 7px 7px,
+    linear-gradient(rgb(231 187 98 / 2%) 1px, transparent 1px) 0 0 / 7px 7px,
+    radial-gradient(ellipse at 50% -12%, rgb(126 42 29 / 38%), transparent 42%),
+    radial-gradient(ellipse at 50% 110%, rgb(33 91 70 / 48%), transparent 52%),
+    linear-gradient(155deg, #21130e 0%, #0b0d0b 42%, #0b1713 100%) !important;
+  box-shadow: inset 0 0 0 6px #0b0907, inset 0 0 0 8px #5d3b20, inset 0 0 8rem #000, 0 0 2rem #000 !important;
+  clip-path: none;
+  color: #f1dfba;
+}
+
+.intro-screen--ritual::before,
+.intro-screen--ritual::after {
+  position: absolute;
+  z-index: -1;
+  content: "";
+  pointer-events: none;
+}
+
+.intro-screen--ritual::before {
+  inset: 1rem;
+  border: 1px solid rgb(206 152 73 / 32%);
+  box-shadow: inset 0 0 4rem rgb(0 0 0 / 56%);
+}
+
+.intro-screen--ritual::after {
+  right: 10%;
+  bottom: -18%;
+  left: 10%;
+  height: 48%;
+  background:
+    linear-gradient(150deg, transparent 0 22%, rgb(17 47 38 / 78%) 22% 42%, transparent 42%) 0 100% / 36% 100% repeat-x,
+    linear-gradient(30deg, transparent 0 28%, rgb(11 37 30 / 92%) 28% 54%, transparent 54%) 0 100% / 42% 86% repeat-x;
+  filter: drop-shadow(0 -2px 0 rgb(179 126 56 / 15%));
+  opacity: 0.75;
+}
+
+.intro-screen__stage-curtain {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.intro-screen__stage-curtain::before,
+.intro-screen__stage-curtain::after {
+  position: absolute;
+  top: 0;
+  width: min(22vw, 22rem);
+  height: 100%;
+  content: "";
+  background:
+    repeating-linear-gradient(90deg, transparent 0 12px, rgb(0 0 0 / 16%) 12px 18px),
+    linear-gradient(90deg, #39150f, #6e241b 55%, #2b110d);
+  box-shadow: 0 0 2.5rem #000;
+  opacity: 0.48;
+}
+
+.intro-screen__stage-curtain::before { left: 0; clip-path: polygon(0 0, 100% 0, 55% 100%, 0 100%); }
+.intro-screen__stage-curtain::after { right: 0; clip-path: polygon(0 0, 100% 0, 100% 100%, 45% 100%); transform: scaleX(-1); }
+.intro-screen__stage-curtain i {
+  position: absolute;
+  top: clamp(1rem, 4vh, 3rem);
+  left: 50%;
+  width: clamp(0.28rem, 0.5vw, 0.48rem);
+  height: clamp(0.28rem, 0.5vw, 0.48rem);
+  background: #d8a855;
+  box-shadow: -2.1rem 0 0 #8c4426, 2.1rem 0 0 #8c4426;
+  transform: translateX(-50%) rotate(45deg);
+}
+.intro-screen__stage-curtain i:nth-child(2) { top: auto; bottom: 17%; left: 20%; opacity: 0.5; }
+.intro-screen__stage-curtain i:nth-child(3) { top: auto; right: 20%; bottom: 17%; left: auto; opacity: 0.5; }
+
+.intro-screen--ritual .intro-screen__heading {
+  position: relative;
+  display: grid;
+  width: min(100%, 104rem);
+  align-self: end;
+  justify-self: center;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: clamp(1.1rem, 3vw, 3.2rem);
+  align-items: center;
+  padding: clamp(1.15rem, 3vh, 2.3rem) clamp(1.2rem, 3vw, 3rem);
+  border: 1px solid #9c6b36 !important;
+  border-top-width: 3px !important;
+  background:
+    linear-gradient(90deg, rgb(120 35 27 / 26%), transparent 30% 70%, rgb(28 86 67 / 24%)),
+    linear-gradient(180deg, #17120eeb, #080b09f5) !important;
+  box-shadow: 0 0.85rem 0 #050403, 0 1.1rem 2rem rgb(0 0 0 / 55%), inset 0 0 0 3px #0b0806, inset 0 0 0 4px rgb(214 160 76 / 22%);
+}
+
+.intro-screen--ritual .intro-screen__heading::before,
+.intro-screen--ritual .intro-screen__heading::after {
+  position: absolute;
+  top: 50%;
+  width: clamp(1rem, 2vw, 2.2rem);
+  aspect-ratio: 1;
+  content: "";
+  border: 1px solid #bc7f3b;
+  background: #7f251d;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.intro-screen--ritual .intro-screen__heading::before { left: 0; }
+.intro-screen--ritual .intro-screen__heading::after { right: 0; transform: translate(50%, -50%) rotate(45deg); }
+
+.intro-screen--ritual .intro-screen__month {
+  position: relative;
+  width: clamp(5.3rem, 8vw, 8.2rem);
+  border: 3px solid #bb7235 !important;
+  outline: 3px solid #180b08;
+  outline-offset: -7px;
+  background:
+    linear-gradient(45deg, rgb(255 210 119 / 8%) 25%, transparent 25% 75%, rgb(255 210 119 / 8%) 75%) 0 0 / 8px 8px,
+    #85271e !important;
+  color: #ffe7ac;
+  box-shadow: 0.45rem 0.55rem 0 #050403, inset 0 0 2rem #4a110d !important;
+}
+.intro-screen--ritual .intro-screen__month::after {
+  position: absolute;
+  inset: 0.5rem;
+  content: "";
+  border: 1px solid rgb(255 220 151 / 36%);
+}
+.intro-screen--ritual .intro-screen__month strong {
+  color: #ffe6ad;
+  font-size: clamp(2.25rem, 4vw, 4.2rem) !important;
+  text-shadow: 3px 3px 0 #3d0e0a !important;
+}
+.intro-screen--ritual .intro-screen__month span { color: #efc675; }
+
+.intro-screen--ritual .intro-screen__copy { min-width: 0; }
+.intro-screen--ritual .intro-screen__copy .eyebrow {
+  color: #c89c5c !important;
+  font-size: clamp(0.72rem, 1vw, 0.9rem);
+  letter-spacing: 0.16em;
+}
+.intro-screen--ritual .intro-screen__copy > span {
+  margin-top: 0.45rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid #754329;
+  background: #32130f;
+  color: #f0c87d !important;
+  font-size: clamp(0.72rem, 1vw, 0.92rem);
+}
+.intro-screen--ritual .intro-screen__copy h1 {
+  margin: clamp(0.35rem, 1vh, 0.7rem) 0 0.2rem;
+  color: #f5e3bd;
+  font-family: var(--pixel-display), "Noto Serif KR", serif !important;
+  font-size: clamp(3rem, 6vw, 6.3rem) !important;
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+  text-shadow: 4px 4px 0 #36130e, 0 0 2rem rgb(228 174 86 / 14%) !important;
+}
+.intro-screen--ritual .intro-screen__copy > p:not(.eyebrow) {
+  color: #c7b89a !important;
+  font-size: clamp(0.9rem, 1.3vw, 1.15rem);
+}
+
+.intro-screen--ritual .intro-screen__target {
+  position: relative;
+  min-width: clamp(9.4rem, 13vw, 13.5rem);
+  padding: 1rem 1.2rem;
+  border: 2px solid #9b6935;
+  background: linear-gradient(145deg, #16130f, #050605) !important;
+  box-shadow: 0.4rem 0.5rem 0 #050403, inset 0 0 0 2px #24150c, inset 0 0 1.8rem #000;
+}
+.intro-screen--ritual .intro-screen__target span { color: #c8ae7a; font-size: clamp(0.68rem, 1vw, 0.84rem) !important; }
+.intro-screen--ritual .intro-screen__target strong {
+  color: #f6c75e;
+  font-size: clamp(2.8rem, 4.7vw, 5.1rem) !important;
+  text-shadow: 3px 3px 0 #5e2c12 !important;
+}
+.intro-screen--ritual .intro-screen__target small { color: #d0ae6d; font-size: 0.82rem !important; }
+
+.intro-screen--ritual .intro-screen__rules {
+  display: grid;
+  width: min(100%, 104rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(0.7rem, 1.5vw, 1.25rem);
+  justify-self: center;
+  margin: 0;
+}
+.intro-screen--ritual .intro-screen__rules > h2 {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: baseline;
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0 0 0.5rem;
+  border: 0;
+  border-bottom: 1px solid #78502e;
+  color: #eed5a5;
+  font-size: clamp(1rem, 1.4vw, 1.25rem);
+}
+.intro-screen--ritual .intro-screen__rules > h2::before { content: "◆"; color: #b43a2d; }
+.intro-screen--ritual .intro-screen__rules > h2 small { color: #8f826b; font-size: 0.72em; font-weight: 600; }
+
+.intro-screen--ritual .intro-screen__rule {
+  position: relative;
+  display: grid;
+  min-height: clamp(7rem, 14vh, 10.5rem);
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: clamp(0.85rem, 1.5vw, 1.35rem);
+  align-items: center;
+  padding: clamp(0.9rem, 1.5vw, 1.35rem);
+  overflow: hidden;
+  border: 1px solid #72502d !important;
+  border-left: 5px solid #a9362a !important;
+  background:
+    linear-gradient(120deg, rgb(143 43 31 / 16%), transparent 37%),
+    linear-gradient(150deg, #1d1711f5, #090b09f7) !important;
+  box-shadow: 0.35rem 0.45rem 0 #050403, inset 0 0 0 2px #100c09, inset 0 0 2.5rem rgb(0 0 0 / 42%) !important;
+}
+.intro-screen--ritual .intro-screen__rule--weather { border-left-color: #357c6b !important; }
+.intro-screen--ritual .intro-screen__rule--weather::before {
+  position: absolute;
+  right: -2rem;
+  width: 12rem;
+  aspect-ratio: 1;
+  content: "";
+  border: 1px solid rgb(78 145 124 / 30%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5rem rgb(78 145 124 / 5%), 0 0 0 3rem rgb(78 145 124 / 4%);
+}
+.intro-screen--ritual .intro-screen__rule--boss::before {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 42%;
+  content: "";
+  background: linear-gradient(90deg, #0b0c0a, transparent 45%), var(--boss-art) center / cover no-repeat;
+  filter: saturate(0.78) contrast(1.08);
+  opacity: 0.38;
+}
+.intro-screen--ritual .intro-screen__rule-mark {
+  z-index: 1;
+  width: clamp(3.6rem, 5vw, 5.2rem);
+  border: 2px solid #a66d36 !important;
+  background: #24120d !important;
+  color: #edc478;
+  font-size: clamp(1.2rem, 2vw, 1.8rem);
+  box-shadow: inset 0 0 0 3px #0d0907, 0.25rem 0.3rem 0 #050403;
+}
+.intro-screen--ritual .intro-screen__rule--weather .intro-screen__rule-mark { background: #102b24 !important; color: #a7d4c3; }
+.intro-screen--ritual .intro-screen__rule > div { z-index: 1; gap: 0.28rem; }
+.intro-screen--ritual .intro-screen__rule em {
+  color: #aa8b59;
+  font-size: clamp(0.68rem, 0.9vw, 0.78rem) !important;
+  font-style: normal;
+  letter-spacing: 0.12em;
+}
+.intro-screen--ritual .intro-screen__rule strong { color: #f5dfb3; font-size: clamp(1.05rem, 1.6vw, 1.4rem) !important; }
+.intro-screen--ritual .intro-screen__rule small { color: #c7b99e; font-size: clamp(0.76rem, 1.05vw, 0.94rem) !important; line-height: 1.55; }
+.intro-screen--ritual .intro-screen__rule b {
+  width: fit-content;
+  margin-top: 0.15rem;
+  padding: 0.2rem 0.45rem;
+  border-left: 2px solid #a9362a;
+  background: rgb(121 38 29 / 16%);
+  color: #df826e;
+  font-size: clamp(0.68rem, 0.9vw, 0.8rem);
+}
+
+.intro-screen--ritual .calendar-strip {
+  z-index: 1;
+  width: min(100%, 104rem);
+  justify-self: center;
+}
+.intro-screen--ritual .calendar-strip code {
+  border: 1px solid #72502f;
+  background: #17120e !important;
+  color: #d0b47d;
+}
+
+.intro-screen--ritual .intro-screen__actions {
+  z-index: 1;
+  width: min(100%, 104rem);
+  justify-self: center;
+  justify-content: center;
+  gap: clamp(0.45rem, 1vw, 0.8rem);
+  margin: 0;
+  padding-top: clamp(0.25rem, 0.8vh, 0.6rem);
+  border-top: 1px solid #53371f;
+}
+.intro-screen--ritual .intro-screen__actions button {
+  min-width: clamp(7.5rem, 10vw, 10rem);
+  min-height: clamp(2.8rem, 5.5vh, 3.6rem);
+  border: 2px solid #6f4c2e !important;
+  background: #14110e !important;
+  color: #dfcba5 !important;
+  box-shadow: 3px 3px 0 #050403 !important;
+}
+.intro-screen--ritual .intro-screen__actions .primary-action {
+  min-width: clamp(10rem, 14vw, 14rem);
+  border-color: #c57839 !important;
+  background: linear-gradient(#b63a2d, #85261e) !important;
+  color: #fff0ca !important;
+  box-shadow: 3px 3px 0 #3c0e0a, inset 0 0 0 2px rgb(255 214 137 / 16%) !important;
+}
+.intro-screen--ritual .intro-screen__actions button:hover { filter: brightness(1.16); transform: translateY(-1px); }
+
+@media (max-width: 760px) {
+  .game-root > .intro-screen.intro-screen--ritual {
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    gap: 0.55rem;
+    padding: 0.8rem;
+    overflow: auto;
+  }
+  .intro-screen--ritual .intro-screen__heading { grid-template-columns: auto minmax(0, 1fr); gap: 0.8rem; padding: 0.9rem; }
+  .intro-screen--ritual .intro-screen__month { width: 4.4rem; }
+  .intro-screen--ritual .intro-screen__copy h1 { font-size: clamp(2.2rem, 10vw, 3.4rem) !important; }
+  .intro-screen--ritual .intro-screen__target {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr auto auto;
+    align-items: baseline;
+    justify-items: start;
+    padding: 0.55rem 0.75rem;
+  }
+  .intro-screen--ritual .intro-screen__target strong { justify-self: end; font-size: 2rem !important; }
+  .intro-screen--ritual .intro-screen__rules { grid-template-columns: 1fr; }
+  .intro-screen--ritual .intro-screen__rule { min-height: 6rem; }
+  .intro-screen--ritual .intro-screen__rules > h2 small { display: none; }
+}
+
+@media (max-height: 690px) and (min-width: 761px) {
+  .game-root > .intro-screen.intro-screen--ritual {
+    grid-template-rows: minmax(9.5rem, 1fr) auto auto auto;
+    gap: 0.45rem;
+    padding-block: 0.75rem;
+  }
+  .intro-screen--ritual .intro-screen__heading { padding-block: 0.75rem; }
+  .intro-screen--ritual .intro-screen__copy h1 { font-size: clamp(2.5rem, 5vw, 4rem) !important; }
+  .intro-screen--ritual .intro-screen__month { width: 4.7rem; }
+  .intro-screen--ritual .intro-screen__rule { min-height: 5.6rem; padding-block: 0.55rem; }
+  .intro-screen--ritual .intro-screen__rule-mark { width: 3.2rem; }
+  .intro-screen--ritual .intro-screen__actions button { min-height: 2.55rem; }
+}
+
+/* Boss months use the commissioned boss art as the event itself, not as a
+   thumbnail hidden inside a rule card. */
+.game-root > .intro-screen.intro-screen--ritual.intro-screen--boss {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: clamp(0.42rem, 0.9vh, 0.75rem);
+}
+.intro-screen--boss .intro-screen__heading {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  padding: clamp(0.65rem, 1.4vh, 1rem) clamp(1rem, 2.5vw, 2.2rem);
+}
+.intro-screen--boss .intro-screen__month { width: clamp(4.25rem, 6vw, 5.6rem); }
+.intro-screen--boss .intro-screen__copy h1 { font-size: clamp(2.1rem, 4.5vw, 4.4rem) !important; }
+.intro-screen--boss .intro-screen__boss-encounter {
+  position: relative;
+  display: grid;
+  width: min(100%, 76rem);
+  min-height: 0;
+  grid-template-columns: minmax(13rem, 0.72fr) minmax(18rem, 1.28fr);
+  justify-self: center;
+  overflow: hidden;
+  border: 3px solid #9b642f;
+  outline: 2px solid #2a100b;
+  background: radial-gradient(circle at 72% 38%, rgb(146 38 26 / 30%), transparent 42%), linear-gradient(115deg, #130d0a, #29120d 58%, #091a16);
+  box-shadow: inset 0 0 0 2px rgb(235 184 91 / 10%), 0.55rem 0.65rem 0 rgb(0 0 0 / 44%);
+}
+.intro-screen--boss .intro-screen__boss-encounter::before,
+.intro-screen--boss .intro-screen__boss-encounter::after {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  width: 0.8rem;
+  aspect-ratio: 1;
+  rotate: 45deg;
+  border: 1px solid #df9d46;
+  background: #992f24;
+  content: "";
+}
+.intro-screen--boss .intro-screen__boss-encounter::before { left: -0.42rem; }
+.intro-screen--boss .intro-screen__boss-encounter::after { right: -0.42rem; }
+.intro-screen--boss .intro-screen__boss-art {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 2px solid #815126;
+  background: #070706 var(--boss-portrait) center / contain no-repeat;
+  animation: boss-portrait-arrive 680ms cubic-bezier(.13,.78,.17,1) both;
+}
+.intro-screen--boss .intro-screen__boss-art > span {
+  position: absolute;
+  z-index: 2;
+  top: 0.75rem;
+  left: 0.75rem;
+  padding: 0.32rem 0.55rem;
+  border: 2px solid #d48b3c;
+  background: #9d2d23;
+  color: #fff0c8;
+  font-size: clamp(0.72rem, 1vw, 0.9rem);
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  box-shadow: 3px 3px 0 #2a0c09;
+}
+.intro-screen--boss .intro-screen__boss-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(1rem, 2.5vw, 2.4rem);
+  background: repeating-linear-gradient(90deg, rgb(255 224 154 / 2%) 0 1px, transparent 1px 6px);
+}
+.intro-screen--boss .intro-screen__boss-copy > p {
+  margin: 0;
+  color: #d6834b;
+  font-size: clamp(0.72rem, 1vw, 0.9rem);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+.intro-screen--boss .intro-screen__boss-copy > h2 {
+  margin: 0.2rem 0 0.55rem;
+  color: #ffe7b3;
+  font-family: var(--pixel-display);
+  font-size: clamp(2.5rem, 6vw, 6rem);
+  line-height: 0.95;
+  text-shadow: 4px 4px 0 #671d16, 0 0 1.5rem rgb(214 66 42 / 24%);
+}
+.intro-screen--boss .intro-screen__boss-copy > strong {
+  color: #e7d2a7;
+  font-size: clamp(0.9rem, 1.45vw, 1.2rem);
+  line-height: 1.55;
+}
+.intro-screen--boss .intro-screen__boss-copy > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: center;
+  margin-top: 0.85rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #714a28;
+  background: rgb(6 10 8 / 68%);
+}
+.intro-screen--boss .intro-screen__boss-rules {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  align-items: stretch;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.intro-screen--boss .intro-screen__boss-rules article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.18rem 0.55rem;
+  align-content: center;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #714a28;
+  background: rgb(6 10 8 / 72%);
+}
+.intro-screen--boss .intro-screen__boss-rules em { grid-column: 1 / -1; color: #d6834b; font-size: 0.62rem; font-style: normal; letter-spacing: 0.1em; }
+.intro-screen--boss .intro-screen__boss-rules b { color: #f0a260; font-size: clamp(0.78rem, 1vw, 0.94rem); }
+.intro-screen--boss .intro-screen__boss-rules span { color: #c9baa0; font-size: clamp(0.7rem, 0.9vw, 0.84rem); line-height: 1.45; }
+.intro-screen--boss .intro-screen__actions { width: min(100%, 76rem); justify-self: center; margin-top: 0; }
+
+@keyframes boss-portrait-arrive {
+  from { opacity: 0; transform: scale(1.09) translateY(1.2rem); filter: saturate(0.2) contrast(1.4) brightness(0.3); }
+  58% { opacity: 1; filter: saturate(0.75) contrast(1.18) brightness(0.78); }
+  to { transform: scale(1); filter: saturate(0.9) contrast(1.08); }
+}
+
+@media (max-width: 700px) {
+  .intro-screen--boss .intro-screen__boss-encounter { grid-template-columns: minmax(7.2rem, 0.58fr) minmax(0, 1.42fr); }
+  .intro-screen--boss .intro-screen__boss-copy { padding: 0.75rem; }
+  .intro-screen--boss .intro-screen__boss-copy > h2 { font-size: clamp(2rem, 10vw, 3.4rem); }
+  .intro-screen--boss .intro-screen__boss-rules { grid-template-columns: 1fr; margin-top: 0.45rem; }
+  .intro-screen--boss .intro-screen__boss-rules article { padding: 0.45rem; }
+}
+
+/* Shop header inventory: owned charms live beside the 시장 sign, leaving the
+   entire felt floor below for merchandise. */
+.market-shell__banner:has(.market-owned--banner) {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(4.6rem, 1fr);
+  min-height: clamp(7.2rem, 13vh, 8.5rem);
+  gap: 0.25rem 0.65rem;
+  padding: 0.42rem 0.55rem;
+}
+.market-shell__banner:has(.market-owned--banner) > div:not(.market-shell__banner-tools) { grid-column: 2; grid-row: 1; }
+.market-shell__banner:has(.market-owned--banner) .market-shell__caption {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+  justify-self: end;
+}
+.market-shell__banner-tools {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+  align-self: stretch;
+}
+.market-shell__banner-tools > .market-owned--banner {
+  display: grid;
+  height: 100%;
+  max-height: none;
+  grid-template-columns: clamp(11rem, 13vw, 14rem) minmax(0, 1fr);
+  gap: 0.65rem;
+  padding: 0.38rem 0.55rem;
+  overflow: hidden;
+  border: 2px solid #6f5732;
+  background: linear-gradient(180deg, #1a1511, #0d0c0a);
+  box-shadow: inset 0 0 0 2px #090705, inset 0 0 1.4rem rgb(0 0 0 / 52%);
+}
+.market-owned--banner > header {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding-right: 0.4rem;
+  border-right: 1px solid #684728;
+  color: #f0ddb4;
+}
+.market-owned--banner > header strong { font-size: clamp(1.05rem, 1.35vw, 1.35rem); }
+.market-owned--banner > header span { color: #9c8c72; font-size: clamp(0.62rem, 0.7vw, 0.75rem); line-height: 1.45; }
+.market-owned--banner > header strong,
+.market-owned--banner > header span { white-space: nowrap; }
+.market-owned--banner > .market-owned__slots {
+  display: flex;
+  min-width: 0;
+  gap: 0.28rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.market-owned--banner .market-owned__slots > button {
+  position: relative;
+  display: grid;
+  width: 10rem;
+  min-width: 10rem;
+  height: 3.75rem;
+  min-height: 3.75rem !important;
+  grid-template-columns: 2.15rem minmax(0, 1fr);
+  gap: 0.3rem;
+  align-items: center;
+  padding: 0.22rem !important;
+  overflow: hidden;
+  border: 1px solid #73502d !important;
+  background: #dcc594 !important;
+  box-shadow: inset 0 0 0 2px rgb(255 244 206 / 22%) !important;
+  color: #28170f !important;
+  text-align: left;
+}
+.market-owned--banner .market-owned__slots > button:hover,
+.market-owned--banner .market-owned__slots > button:focus-visible {
+  z-index: 2;
+  border-color: #d59b4d !important;
+  filter: brightness(1.1);
+}
+.market-owned--banner .market-owned__slots > button > i {
+  position: absolute;
+  z-index: 2;
+  top: 0.08rem;
+  left: 0.08rem;
+  display: grid;
+  width: 1rem;
+  aspect-ratio: 1;
+  place-items: center;
+  background: #76251d;
+  color: #ffe5ad;
+  font-size: 0.55rem;
+  font-style: normal;
+}
+.market-owned--banner .market-owned__slots > button > span {
+  width: 2.15rem;
+  height: 3.2rem;
+  aspect-ratio: 2 / 3;
+  border: 1px solid #5c3a20;
+  background: #211811 center / contain no-repeat;
+}
+.market-owned--banner .market-owned__slots > button > b {
+  min-width: 0;
+  overflow: hidden;
+  font-size: clamp(0.62rem, 0.8vw, 0.76rem);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.market-owned--banner .market-owned__slots > p {
+  display: grid;
+  min-width: 8rem;
+  place-items: center;
+  margin: 0;
+  border: 1px dashed #5c4930;
+  color: #81745f;
+  font-size: 0.72rem;
+}
+.market-owned__hint { width: min(22rem, 86vw) !important; max-width: 22rem !important; }
+
+/* Merchandise should occupy its stall instead of looking like thumbnails
+   floating in an empty quadrant. The grid gives 1/2/3 offers equal columns,
+   while the card keeps the established 2:3 physical ratio. */
+.market-floor .market-dept__items {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  align-items: start;
+  justify-items: center;
+  gap: clamp(0.65rem, 1.2vw, 1.2rem) !important;
+  padding: clamp(0.7rem, 1.5vh, 1.15rem) 0.45rem 0.5rem !important;
+}
+.market-floor .market-card__wrap {
+  width: min(100%, clamp(7.2rem, 9vw, 10.5rem)) !important;
+}
+.market-floor .market-card__label {
+  padding: 0.55rem 0.42rem !important;
+  font-size: clamp(0.82rem, 0.92vw, 1rem) !important;
+}
+.market-floor .market-card__price {
+  font-size: clamp(0.78rem, 0.9vw, 0.95rem) !important;
+}
+
+.game-modal--pack:has(.pack-picks--burn) .game-modal__content { min-height: 0; }
+.pack-picks.pack-picks--burn {
+  grid-template-columns: repeat(auto-fill, minmax(4.2rem, 1fr)) !important;
+  gap: 0.35rem !important;
+  max-height: 58vh;
+  padding: 0.7rem !important;
+  overflow: auto !important;
+  border: 2px solid #5f3a26;
+  background: #18110d;
+}
+.pack-picks--burn .pack-picks__item { padding: 0.18rem; gap: 0; }
+.game-modal--pack .pack-picks--burn .pack-pick__card {
+  width: min(100%, 5.2rem) !important;
+  box-shadow: 2px 3px 0 rgb(0 0 0 / 52%) !important;
+}
+.pack-picks--burn .pack-picks__item--revealed { animation-duration: 180ms; }
+
+@media (max-width: 900px) {
+  .market-shell__banner:has(.market-owned--banner) { grid-template-rows: auto minmax(4.2rem, 1fr); }
+  .market-shell__banner:has(.market-owned--banner) .market-shell__caption { display: none; }
+  .market-shell__banner-tools > .market-owned--banner { grid-template-columns: 9rem minmax(0, 1fr); min-height: 4.2rem; }
+  .market-owned--banner > header span { white-space: normal; }
 }

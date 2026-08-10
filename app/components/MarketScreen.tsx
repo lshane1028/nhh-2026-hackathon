@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
   ContractDefinition,
@@ -8,6 +8,7 @@ import type {
 } from "@/game/types";
 
 import { getGeneratedAssetUrl } from "./generated-asset";
+import { getFloatingHintPosition } from "./tooltip-position";
 import { CollectionBoard, type CollectionBoardItem } from "./CollectionBoard";
 import { playRewardFinishSound, playRewardStepSound } from "../audio/game-sfx";
 import "./screen-ui.css";
@@ -42,6 +43,7 @@ export interface MarketOfferView {
 
 export interface MarketContractView {
   definition: ContractDefinition;
+  currentLevel?: number;
   disabled?: boolean;
 }
 
@@ -51,6 +53,113 @@ export interface OwnedTalismanView {
   description: string;
   assetTag: string;
   sellPrice: number;
+}
+
+export function OwnedTalismanBar({ items, onSell, onMove }: {
+  items: readonly OwnedTalismanView[];
+  onSell: (instanceId: string) => void;
+  onMove: (instanceId: string, targetInstanceId: string) => void;
+}) {
+  const [hint, setHint] = useState<{
+    item: OwnedTalismanView;
+    x: number;
+    y: number;
+    placement: "above" | "below";
+  } | null>(null);
+  const anchorRef = useRef<HTMLElement | null>(null);
+  const hintRef = useRef<HTMLElement | null>(null);
+  const hintVisible = hint !== null;
+
+  const updateHintPosition = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    const panel = hintRef.current;
+    const position = getMarketHintPosition(
+      anchor.getBoundingClientRect(),
+      window.innerWidth,
+      window.innerHeight,
+      panel?.offsetWidth ?? 352,
+      panel?.offsetHeight ?? 220,
+    );
+    setHint((current) => current ? { ...current, ...position } : current);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!hintVisible) return;
+    updateHintPosition();
+    window.addEventListener("resize", updateHintPosition);
+    window.addEventListener("scroll", updateHintPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateHintPosition);
+      window.removeEventListener("scroll", updateHintPosition, true);
+    };
+  }, [hintVisible, updateHintPosition]);
+
+  const showHint = (item: OwnedTalismanView, node: HTMLElement) => {
+    anchorRef.current = node;
+    setHint({ item, ...getMarketHintPosition(node.getBoundingClientRect(), window.innerWidth, window.innerHeight) });
+  };
+  const hideHint = () => {
+    anchorRef.current = null;
+    setHint(null);
+  };
+
+  return (
+    <section className="market-owned market-owned--banner" aria-label="보유 부적">
+      <header><strong>보유 부적</strong><span>끌어서 순서 변경 · 눌러서 판매</span></header>
+      <div className="market-owned__slots">
+        {items.length ? items.map((item, index) => {
+          const artUrl = getGeneratedAssetUrl(item.assetTag);
+          return (
+            <button
+              type="button"
+              key={item.instanceId}
+              aria-label={`${index + 1}번째 부적 ${item.name}. ${item.description}. 판매가 ${item.sellPrice}냥`}
+              draggable
+              onPointerEnter={(event) => showHint(item, event.currentTarget)}
+              onPointerLeave={hideHint}
+              onFocus={(event) => showHint(item, event.currentTarget)}
+              onBlur={hideHint}
+              onDragStart={(event) => {
+                hideHint();
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", item.instanceId);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                const sourceId = event.dataTransfer.getData("text/plain");
+                if (sourceId) onMove(sourceId, item.instanceId);
+              }}
+              onClick={() => onSell(item.instanceId)}
+            >
+              <i>{index + 1}</i>
+              <span style={artUrl ? { backgroundImage: `url("${artUrl}")` } : undefined} aria-hidden="true" />
+              <b>{item.name}</b>
+            </button>
+          );
+        }) : <p>비어 있음</p>}
+      </div>
+      {hint && typeof document !== "undefined"
+        ? createPortal(
+            <span
+              ref={hintRef}
+              className="market-card__hint market-card__hint--portal market-owned__hint"
+              data-placement={hint.placement}
+              role="tooltip"
+              style={{ left: hint.x, top: hint.y }}
+            >
+              <b>{hint.item.name}</b>
+              <em>보유 부적 · 자동 발동</em>
+              <p>{hint.item.description}</p>
+              <i>왼쪽 부적부터 차례대로 적용됩니다.</i>
+              <s>누르면 판매 +{hint.item.sellPrice}냥</s>
+            </span>,
+            document.body,
+          )
+        : null}
+    </section>
+  );
 }
 
 interface MarketScreenBaseProps {
@@ -80,10 +189,12 @@ export type MarketScreenProps =
       onReroll?: () => void;
       ownedTalismans: readonly OwnedTalismanView[];
       onSellTalisman: (instanceId: string) => void;
+      onMoveTalisman: (instanceId: string, targetInstanceId: string) => void;
       onOpenDeck: () => void;
     })
   | (MarketScreenBaseProps & {
       mode: "contract";
+      seasonMonth: 3 | 6 | 9 | 12;
       contracts: readonly MarketContractView[];
       selectedContractId?: string | null;
       onSelectContract: (contractId: string) => void;
@@ -113,6 +224,13 @@ const CATEGORY_NAMES: Record<ShopOffer["category"], string> = {
   forbidden: "금단",
   pack: "카드 묶음",
 };
+
+const SEASON_ENCOUNTERS = {
+  3: { name: "매화 장수", season: "봄", assetTag: "season:spring-stranger", line: "꽃이 지기 전에 약조 하나 묶어 두시지. 어느 쪽이든 값은 치르게 될 테니." },
+  6: { name: "장마 사공", season: "여름", assetTag: "season:summer-stranger", line: "물이 불면 건널 길도 바뀌는 법이오. 다음 석 달을 건널 노를 하나 고르시오." },
+  9: { name: "가면 쓴 서리", season: "가을", assetTag: "season:autumn-stranger", line: "잘 익은 패만 거두려다 빈손이 되기도 하지. 그대는 무엇을 남길 텐가?" },
+  12: { name: "눈밭의 장부꾼", season: "겨울", assetTag: "season:winter-stranger", line: "열두 달의 끝에도 빚과 약속은 남는다네. 마지막 줄에 어떤 이름을 적겠나?" },
+} as const;
 
 interface Department {
   categories: readonly ShopOffer["category"][];
@@ -179,11 +297,11 @@ export function getMarketHintPosition(
   rect: Pick<DOMRect, "left" | "top" | "right" | "bottom" | "width">,
   viewportWidth: number,
   viewportHeight: number,
+  tooltipWidth = 320,
+  tooltipHeight = 320,
 ) {
-  const halfWidth = Math.min(160, viewportWidth * 0.41);
-  const x = Math.max(halfWidth + 12, Math.min(viewportWidth - halfWidth - 12, rect.left + rect.width / 2));
-  const placement = rect.top >= 250 || viewportHeight - rect.bottom < 250 ? "above" as const : "below" as const;
-  return { x, y: placement === "above" ? rect.top - 10 : rect.bottom + 10, placement };
+  const position = getFloatingHintPosition(rect, viewportWidth, viewportHeight, tooltipWidth, tooltipHeight);
+  return { x: position.left, y: position.top, placement: position.placement };
 }
 
 function MarketCard({
@@ -210,10 +328,41 @@ function MarketCard({
     y: number;
     placement: "above" | "below";
   } | null>(null);
+  const anchorRef = useRef<HTMLElement | null>(null);
+  const hintRef = useRef<HTMLElement | null>(null);
+  const hintVisible = hintPosition !== null;
+
+  const updateHintPosition = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    const hint = hintRef.current;
+    setHintPosition(getMarketHintPosition(
+      anchor.getBoundingClientRect(),
+      window.innerWidth,
+      window.innerHeight,
+      hint?.offsetWidth ?? 320,
+      hint?.offsetHeight ?? 320,
+    ));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!hintVisible) return;
+    updateHintPosition();
+    window.addEventListener("resize", updateHintPosition);
+    window.addEventListener("scroll", updateHintPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateHintPosition);
+      window.removeEventListener("scroll", updateHintPosition, true);
+    };
+  }, [hintVisible, updateHintPosition]);
 
   const showHint = (node: HTMLElement) => {
-    const rect = node.getBoundingClientRect();
-    setHintPosition(getMarketHintPosition(rect, window.innerWidth, window.innerHeight));
+    anchorRef.current = node;
+    setHintPosition(getMarketHintPosition(node.getBoundingClientRect(), window.innerWidth, window.innerHeight));
+  };
+  const hideHint = () => {
+    anchorRef.current = null;
+    setHintPosition(null);
   };
 
   /* The picture is the whole tile; everything else lives in the hover panel,
@@ -236,9 +385,9 @@ function MarketCard({
         disabled={disabled}
         onClick={onClick}
         onPointerEnter={(event) => showHint(event.currentTarget)}
-        onPointerLeave={() => setHintPosition(null)}
+        onPointerLeave={hideHint}
         onFocus={(event) => showHint(event.currentTarget)}
-        onBlur={() => setHintPosition(null)}
+        onBlur={hideHint}
       >
         <span
           className={joinClassNames(
@@ -248,8 +397,7 @@ function MarketCard({
           data-asset-tag={assetTag}
           style={artUrl ? { "--market-card-art": `url("${artUrl}")` } as React.CSSProperties : undefined}
         >
-          <span className="market-card__art-mark" aria-hidden="true">IMG</span>
-          <code>{assetTag}</code>
+          <span className="market-card__art-mark" aria-hidden="true">花</span>
         </span>
 
         <span className="market-card__kind">{kindLabel}</span>
@@ -263,6 +411,7 @@ function MarketCard({
     {hintPosition && typeof document !== "undefined"
       ? createPortal(
           <span
+            ref={hintRef}
             className="market-card__hint market-card__hint--portal"
             data-placement={hintPosition.placement}
             role="tooltip"
@@ -506,21 +655,6 @@ export function MarketScreen(props: MarketScreenProps) {
               </Rack>
             ) : (
               <>
-              <section className="market-owned" aria-label="보유 부적">
-                <header><strong>보유 부적</strong><span>누르면 판매됩니다</span></header>
-                <div>
-                  {props.ownedTalismans.length ? props.ownedTalismans.map((item) => {
-                    const artUrl = getGeneratedAssetUrl(item.assetTag);
-                    return (
-                      <button type="button" key={item.instanceId} title={item.description} onClick={() => props.onSellTalisman(item.instanceId)}>
-                        <span style={artUrl ? { backgroundImage: `url("${artUrl}")` } : undefined} />
-                        <b>{item.name}</b>
-                        <small>판매 +{item.sellPrice}냥</small>
-                      </button>
-                    );
-                  }) : <p>아직 가진 부적이 없습니다.</p>}
-                </div>
-              </section>
               <div className="market-floor">
                 {DEPARTMENTS.map((dept) => {
                   const items = shopOffers.filter((item) => dept.categories.includes(item.offer.category));
@@ -532,7 +666,7 @@ export function MarketScreen(props: MarketScreenProps) {
                       data-tutorial={dept.tutorialId}
                     >
                       <header className="market-dept__sign" data-asset-tag={dept.assetTag}>
-                        <span className="market-dept__mark" aria-hidden="true">IMG</span>
+                        <span className="market-dept__mark" aria-hidden="true">花</span>
                         <div>
                           <strong>{dept.label}</strong>
                           <span>{dept.blurb}</span>
@@ -555,22 +689,38 @@ export function MarketScreen(props: MarketScreenProps) {
           ) : null}
 
           {props.mode === "contract" ? (
-            <Rack label="이번 판 동안 유지할 계약" hint="하나 선택">
-              {props.contracts.map(({ definition, disabled }) => (
-                <MarketCard
-                  key={definition.id}
-                  assetTag={definition.assetTag}
-                  name={definition.name}
-                  kindLabel="계약"
-                  guide={definition.description}
-                  description={`상위 · ${definition.upgradedName} — ${definition.upgradedDescription}`}
-                  ctaLabel={definition.id === props.selectedContractId ? "선택됨" : "선택"}
-                  selected={definition.id === props.selectedContractId}
-                  disabled={disabled}
-                  onClick={() => props.onSelectContract(definition.id)}
-                />
-              ))}
-            </Rack>
+            (() => {
+              const encounter = SEASON_ENCOUNTERS[props.seasonMonth];
+              const sceneUrl = getGeneratedAssetUrl(encounter.assetTag);
+              return (
+                <section className="season-contract" data-season={props.seasonMonth}>
+                  <div className="season-contract__scene" style={sceneUrl ? { backgroundImage: `linear-gradient(180deg, transparent 42%, rgb(8 7 6 / 92%)), url("${sceneUrl}")` } : undefined}>
+                    <span>{encounter.season} · {props.seasonMonth}월 결산</span>
+                    <strong>{encounter.name}</strong>
+                    <p>“{encounter.line}”</p>
+                  </div>
+                  <div className="season-contract__choices" role="group" aria-label="계약 대화 선택지">
+                    {props.contracts.map(({ definition, currentLevel = 0, disabled }, index) => {
+                      const rewardSentence = currentLevel > 0 ? definition.upgradedDescription : definition.description;
+                      const rewardName = currentLevel > 0 ? definition.upgradedName : definition.name;
+                      return (
+                        <button
+                          type="button"
+                          className={definition.id === props.selectedContractId ? "season-contract__choice season-contract__choice--selected" : "season-contract__choice"}
+                          disabled={disabled}
+                          aria-pressed={definition.id === props.selectedContractId}
+                          onClick={() => props.onSelectContract(definition.id)}
+                          key={definition.id}
+                        >
+                          <em>{index + 1}</em>
+                          <span><b>{rewardName}</b><small>“{rewardSentence}”</small></span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })()
           ) : null}
         </div>
       </div>

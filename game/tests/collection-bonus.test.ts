@@ -15,6 +15,21 @@ describe("Go-Stop collection scoring", () => {
     expect(calculateCollectionBonus(rainThree).goStopPoints).toBe(2);
   });
 
+  it("continues beyond five brights and three Godori birds", () => {
+    const brights = pick((card) => card.kind === "bright");
+    const extraBright = { ...brights[0], instanceId: "extra-bright", tags: [...brights[0].tags] };
+    expect(calculateCollectionBonus([...brights, extraBright]).scoreLines)
+      .toContainEqual(expect.objectContaining({ id: "six_brights", label: "육광", points: 22 }));
+
+    const godori = [2, 4, 8].map((month) => deck.find((card) => card.month === month && card.tags.includes("bird"))!);
+    const fourth = { ...godori[0], instanceId: "fourth-bird", tags: [...godori[0].tags] };
+    const fifth = { ...godori[1], instanceId: "fifth-bird", tags: [...godori[1].tags] };
+    expect(calculateCollectionBonus([...godori, fourth]).scoreLines)
+      .toContainEqual(expect.objectContaining({ id: "four_godori", label: "새떼", points: 8 }));
+    expect(calculateCollectionBonus([...godori, fourth, fifth]).scoreLines)
+      .toContainEqual(expect.objectContaining({ id: "five_godori", label: "큰 새떼", points: 12 }));
+  });
+
   it("scores animals, ribbons and pi from their real thresholds", () => {
     const animals = [
       ...pick((card) => card.kind === "animal" && !card.tags.includes("bird")),

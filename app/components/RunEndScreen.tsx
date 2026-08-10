@@ -59,7 +59,7 @@ export function RunEndScreen({
   className,
 }: RunEndScreenProps) {
   const won = result === "win";
-  const heading = title ?? (won ? "꽃판 완주!" : "이번 판은 나가리");
+  const heading = title ?? (won ? "경화수월 완주!" : "이번 판은 나가리");
   const goRate =
     stats.goAttempts > 0
       ? Math.round((stats.goSuccesses / stats.goAttempts) * 100)

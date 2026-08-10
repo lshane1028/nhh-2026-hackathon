@@ -116,12 +116,14 @@ export function calculateCollectionBonus(
   const counts = {
     bright: brightCards.reduce((sum, card) => sum + getCollectionKindValue(card, "bright", resolveCupRole(cupRoles, card)), 0),
     animal: animalCards.reduce((sum, card) => sum + getCollectionKindValue(card, "animal", resolveCupRole(cupRoles, card)), 0),
-    godori: matchedGodoriMonths.length,
+    godori: uniqueCards
+      .filter(isGodori)
+      .reduce((sum, card) => sum + getCollectionKindValue(card, "animal", resolveCupRole(cupRoles, card)), 0),
     ribbon: ribbonCards.reduce((sum, card) => sum + getCollectionKindValue(card, "ribbon", resolveCupRole(cupRoles, card)), 0),
     chaff: chaffCards.reduce((sum, card) => sum + getCollectionKindValue(card, "chaff", resolveCupRole(cupRoles, card)), 0),
   };
   const completedSets = {
-    godori: counts.godori === 3,
+    godori: matchedGodoriMonths.length === 3,
     hongdan: ribbonMonths("hong", [1, 2, 3]),
     chodan: ribbonMonths("cho", [4, 5, 7]),
     cheongdan: ribbonMonths("cheong", [6, 9, 10]),
@@ -134,21 +136,26 @@ export function calculateCollectionBonus(
   };
 
   const hasRainBright = brightCards.some((card) => card.month === 12 || card.tags.includes("rain"));
-  if (counts.bright >= 5) add("five_brights", "오광", 15 + level("five_brights") - 1);
+  if (counts.bright >= 6) add("six_brights", "육광", 22 + (counts.bright - 6) * 4 + level("six_brights") - 1);
+  else if (counts.bright >= 5) add("five_brights", "오광", 15 + level("five_brights") - 1);
   else if (counts.bright === 4) add("four_brights", "사광", 4 + level("four_brights") - 1);
   else if (counts.bright >= 3) {
     const id = hasRainBright ? "rain_three_brights" : "three_brights";
     add(id, hasRainBright ? "비삼광" : "삼광", (hasRainBright ? 2 : 3) + level(id) - 1);
   }
   add("animal", `열끗 ${counts.animal}장`, counts.animal >= 5 ? counts.animal - 4 : 0);
-  if (completedSets.godori) add("godori", "고도리", 5 + level("godori") - 1);
+  if (completedSets.godori) {
+    if (counts.godori >= 5) add("five_godori", "큰 새떼", 12 + (counts.godori - 5) * 3 + level("five_godori") - 1);
+    else if (counts.godori >= 4) add("four_godori", "새떼", 8 + level("four_godori") - 1);
+    else add("godori", "고도리", 5 + level("godori") - 1);
+  }
   add("ribbon", `띠 ${counts.ribbon}장`, counts.ribbon >= 5 ? counts.ribbon - 4 : 0);
   if (completedSets.hongdan) add("hongdan", "홍단", 3 + level("hongdan") - 1);
   if (completedSets.chodan) add("chodan", "초단", 3 + level("chodan") - 1);
   if (completedSets.cheongdan) add("cheongdan", "청단", 3 + level("cheongdan") - 1);
   add("chaff", `피 ${counts.chaff}점`, counts.chaff >= 10 ? counts.chaff - 9 : 0);
 
-  const brightUpgradeCount = ["rain_three_brights", "three_brights", "four_brights", "five_brights"]
+  const brightUpgradeCount = ["rain_three_brights", "three_brights", "four_brights", "five_brights", "six_brights"]
     .reduce((sum, id) => sum + Math.max(0, level(id) - 1), 0);
   const perks = {
     goThresholdFactor: Math.max(0.75, 1 - brightUpgradeCount * 0.05),
@@ -163,8 +170,11 @@ export function calculateCollectionBonus(
     { id: "bright-3", track: "bright", label: "삼광 3점 · 비삼광 2점", required: 3, achieved: counts.bright >= 3 },
     { id: "bright-4", track: "bright", label: "사광 4점", required: 4, achieved: counts.bright >= 4 },
     { id: "bright-5", track: "bright", label: "오광 15점", required: 5, achieved: counts.bright >= 5 },
+    { id: "bright-6", track: "bright", label: "육광 22점 · 이후 광당 +4", required: 6, achieved: counts.bright >= 6 },
     { id: "animal-5", track: "animal", label: "5장 1점 · 이후 장당 +1", required: 5, achieved: counts.animal >= 5 },
     { id: "godori", track: "godori", label: "완성 +5점", required: 3, achieved: completedSets.godori },
+    { id: "godori-4", track: "godori", label: "새떼 8점", required: 4, achieved: completedSets.godori && counts.godori >= 4 },
+    { id: "godori-5", track: "godori", label: "큰 새떼 12점 · 이후 새당 +3", required: 5, achieved: completedSets.godori && counts.godori >= 5 },
     { id: "ribbon-5", track: "ribbon", label: "5장 1점 · 이후 장당 +1", required: 5, achieved: counts.ribbon >= 5 },
     { id: "hongdan", track: "ribbon", label: "홍단 +3점", required: 3, achieved: completedSets.hongdan },
     { id: "chodan", track: "ribbon", label: "초단 +3점", required: 3, achieved: completedSets.chodan },

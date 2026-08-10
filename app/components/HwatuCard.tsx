@@ -1,5 +1,8 @@
 "use client";
 
+import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
 import type { CardInstance, CardKind } from "@/game/types";
 import { CardArt } from "./CardArt";
@@ -15,6 +18,7 @@ import {
   SURFACE_GLYPHS,
   SURFACE_LABELS,
 } from "./card-visuals";
+import { getFloatingHintPosition, type FloatingHintPosition } from "./tooltip-position";
 
 export type HwatuCupRole = "animal" | "double_chaff";
 
@@ -81,6 +85,11 @@ export function HwatuCard({
   dense = false,
   splitRole,
 }: HwatuCardProps) {
+  const tooltipId = useId();
+  const [hintPosition, setHintPosition] = useState<FloatingHintPosition | null>(null);
+  const anchorRef = useRef<HTMLElement | null>(null);
+  const hintRef = useRef<HTMLElement | null>(null);
+  const hintVisible = hintPosition !== null;
   const isDisabled = disabled || Boolean(card.disabledForRound);
   const kindLabel = getCardKindLabel(card, cupRole);
   const monthValue = card.month + card.permanentKkeutBonus;
@@ -99,6 +108,45 @@ export function HwatuCard({
   const surface = getCardSurface(card);
   const shine = getCardShine(card);
   const modifierLines = getCardModifierLines(card);
+
+  const updateHintPosition = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    const hint = hintRef.current;
+    setHintPosition(getFloatingHintPosition(
+      anchor.getBoundingClientRect(),
+      window.innerWidth,
+      window.innerHeight,
+      hint?.offsetWidth ?? 288,
+      hint?.offsetHeight ?? 180,
+    ));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!hintVisible) return;
+    updateHintPosition();
+    window.addEventListener("resize", updateHintPosition);
+    window.addEventListener("scroll", updateHintPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateHintPosition);
+      window.removeEventListener("scroll", updateHintPosition, true);
+    };
+  }, [hintVisible, updateHintPosition]);
+
+  const showHint = (node: HTMLElement) => {
+    anchorRef.current = node;
+    setHintPosition(getFloatingHintPosition(
+      node.getBoundingClientRect(),
+      window.innerWidth,
+      window.innerHeight,
+      288,
+      180,
+    ));
+  };
+  const hideHint = () => {
+    anchorRef.current = null;
+    setHintPosition(null);
+  };
 
   /*
    * Pointer tilt, the trading-card trick.
@@ -176,13 +224,6 @@ export function HwatuCard({
         <span className="hwatu-card__split" aria-hidden="true">{splitRole === "jit" ? "짓" : "끗"}</span>
       ) : null}
 
-      <span className="hwatu-card__hint" role="tooltip">
-        <b>{card.month}월 {monthValue > card.month ? `+${monthValue - card.month}` : ""}</b>
-        <em>{kindLabel}{ribbonLabel ? ` · ${ribbonLabel}` : ""}</em>
-        <i>월값 {monthValue}</i>
-        {modifierLines.map((line) => <u key={line}>{line}</u>)}
-        {isDisabled ? <s>이번 판 사용 불가</s> : null}
-      </span>
     </>
   );
 
@@ -220,33 +261,72 @@ export function HwatuCard({
     "data-edition": card.edition,
     "data-seal": card.seal,
     onPointerMove: tilt,
-    onPointerLeave: untilt,
+    onPointerEnter: (event: React.PointerEvent<HTMLElement>) => showHint(event.currentTarget),
+    onPointerLeave: (event: React.PointerEvent<HTMLElement>) => {
+      untilt(event);
+      hideHint();
+    },
   };
+
+  const hint = hintPosition && typeof document !== "undefined"
+    ? createPortal(
+        <span
+          ref={hintRef}
+          id={tooltipId}
+          className="hwatu-card__hint hwatu-card__hint--portal"
+          data-placement={hintPosition.placement}
+          role="tooltip"
+          style={{ left: hintPosition.left, top: hintPosition.top }}
+        >
+          <b>{card.month}월 {monthValue > card.month ? `+${monthValue - card.month}` : ""}</b>
+          <em>{kindLabel}{ribbonLabel ? ` · ${ribbonLabel}` : ""}</em>
+          <i>월값 {monthValue}</i>
+          {modifierLines.map((line) => <u key={line}>{line}</u>)}
+          {isDisabled ? <s>이번 판 사용 불가</s> : null}
+        </span>,
+        document.body,
+      )
+    : null;
 
   if (!onSelect) {
     return (
-      <article
-        className={rootClassName}
-        aria-label={accessibleLabel}
-        {...dataAttributes}
-      >
-        {content}
-      </article>
+      <>
+        <article
+          className={rootClassName}
+          aria-label={accessibleLabel}
+          aria-describedby={hintPosition ? tooltipId : undefined}
+          tabIndex={0}
+          onFocus={(event) => showHint(event.currentTarget)}
+          onBlur={hideHint}
+          {...dataAttributes}
+        >
+          {content}
+        </article>
+        {hint}
+      </>
     );
   }
 
   return (
-    <button
-      type="button"
-      className={rootClassName}
-      aria-label={accessibleLabel}
-      aria-pressed={selected}
-      disabled={isDisabled}
-      onClick={() => onSelect(card)}
-      onFocus={() => onCardFocus?.(card)}
-      {...dataAttributes}
-    >
-      {content}
-    </button>
+    <>
+      <button
+        type="button"
+        className={rootClassName}
+        aria-label={accessibleLabel}
+        aria-describedby={hintPosition ? tooltipId : undefined}
+        aria-pressed={selected}
+        disabled={isDisabled}
+        onClick={() => onSelect(card)}
+        onFocus={(event) => {
+          onCardFocus?.(card);
+          showHint(event.currentTarget);
+        }}
+        onBlur={hideHint}
+        {...dataAttributes}
+      >
+        {content}
+      </button>
+      {hint}
+    </>
   );
 }

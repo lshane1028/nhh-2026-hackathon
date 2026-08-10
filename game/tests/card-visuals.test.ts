@@ -49,7 +49,9 @@ describe("card visuals", () => {
 
     expect(leftEdge.x).toBeGreaterThanOrEqual(172);
     expect(bottomEdge.placement).toBe("above");
-    expect(bottomEdge.y).toBe(560);
+    expect(bottomEdge.y).toBe(240);
+    expect(bottomEdge.y).toBeGreaterThanOrEqual(12);
+    expect(bottomEdge.y + 320).toBeLessThanOrEqual(688);
   });
 
   it("gives a plain card nothing to show", () => {

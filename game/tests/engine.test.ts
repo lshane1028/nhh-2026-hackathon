@@ -89,11 +89,11 @@ describe("standard content registries", () => {
     expect(new Set(standardDeck.map((card) => card.assetTag)).size).toBe(48);
   });
 
-  it("contains 11 open, 3 secret, and 8 collection yaku with asset tags", () => {
+  it("contains 11 open, 3 secret, and 11 collection yaku with asset tags", () => {
     expect(IMMEDIATE_YAKU_DEFINITIONS).toHaveLength(11);
     expect(SECRET_YAKU_DEFINITIONS).toHaveLength(3);
     expect(ALL_IMMEDIATE_YAKU_DEFINITIONS).toHaveLength(14);
-    expect(COLLECTION_YAKU_DEFINITIONS).toHaveLength(8);
+    expect(COLLECTION_YAKU_DEFINITIONS).toHaveLength(11);
     expect(validateYakuDefinitions()).toEqual([]);
     expect([...ALL_IMMEDIATE_YAKU_DEFINITIONS, ...COLLECTION_YAKU_DEFINITIONS].every((entry) => entry.assetTag.length > 0)).toBe(true);
   });
@@ -145,12 +145,15 @@ describe("끗패 판정", () => {
     expect(pairId(chaff(3), chaff(5))).toBe("kkeut"); // 8끗
   });
 
-  it("counts 11월 and 12월 in the numeric ladder without inventing new named hands", () => {
+  it("counts 11월 and 12월 in the numeric ladder and recognizes their pairs as 땡", () => {
     const decemberSeven = judgeKkeutPair(chaff(12), chaff(7));
     expect(decemberSeven).toMatchObject({ yakuId: "gabo", rankLabel: "" });
 
     const novemberPair = judgeKkeutPair(chaff(11), cloneCard(chaff(11)));
-    expect(novemberPair).toMatchObject({ yakuId: "kkeut", rankLabel: "2끗" });
+    expect(novemberPair).toMatchObject({ yakuId: "ttaeng", rankLabel: "11땡" });
+
+    const decemberPair = judgeKkeutPair(chaff(12), cloneCard(chaff(12)));
+    expect(decemberPair).toMatchObject({ yakuId: "ttaeng", rankLabel: "12땡" });
 
     const decemberBright = takeKind(12, "bright");
     expect(judgeKkeutPair(decemberBright, takeKind(3, "bright")).yakuId).toBe("kkeut");
@@ -225,10 +228,17 @@ describe("짓 splitting", () => {
     expect(ids(findImmediateYakuCandidates(cards, { allowFiveMultipleJit: true }))).toContain("ali");
   });
 
-  it("treats a 돌패 as 12월 and a zero-base card as nothing", () => {
+  it("treats a 돌패 as 12월 and keeps retired zero-base cards on their printed month", () => {
     expect(getEffectiveMonth(cloneCard(takeKind(3, "bright"), { enhancement: "stone" }))).toBe(STONE_MONTH_VALUE);
-    expect(getEffectiveMonth(cloneCard(chaff(7), { tags: ["zero_base"] }))).toBe(0);
+    expect(getEffectiveMonth(cloneCard(chaff(7), { tags: ["zero_base"] }))).toBe(7);
     expect(getEffectiveMonth(cloneCard(chaff(7), { permanentKkeutBonus: 2 }))).toBe(9);
+  });
+
+  it("allows an 8월 팔방패 and 12월 card to make 짓 20", () => {
+    const legacyEightDirections = cloneCard(chaff(8), { enhancement: "wild", tags: ["zero_base"] });
+    const candidates = findImmediateYakuCandidates([chaff(1), chaff(2), legacyEightDirections, chaff(12)]);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({ jitSum: 20 });
   });
 });
 

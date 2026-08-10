@@ -211,12 +211,18 @@ button.hwatu-card:active:not(:disabled) { --lift: 0.08rem; --pop: 0.97; }
   transform: translateZ(2px);
 }
 
-.card-art-frame { overflow: hidden; }
+.card-art-frame {
+  box-sizing: border-box;
+  padding: 2px;
+  overflow: hidden;
+  background: #130d09;
+}
 .card-art-frame__image {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: fill;
+  object-fit: contain;
+  object-position: center;
   pointer-events: none;
 }
 .card-art-frame__image[hidden] { display: none; }

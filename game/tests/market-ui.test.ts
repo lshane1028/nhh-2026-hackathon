@@ -2,7 +2,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { MarketScreen, type MarketOfferView } from "../../app/components/MarketScreen";
+import { MarketScreen, OwnedTalismanBar, type MarketOfferView } from "../../app/components/MarketScreen";
+import { CONTRACTS } from "../content/meta";
 
 function renderOffer(item: MarketOfferView, money: number): string {
   return renderToStaticMarkup(createElement(MarketScreen, {
@@ -15,11 +16,30 @@ function renderOffer(item: MarketOfferView, money: number): string {
     onBuyOffer: () => undefined,
     ownedTalismans: [],
     onSellTalisman: () => undefined,
+    onMoveTalisman: () => undefined,
     onOpenDeck: () => undefined,
   }));
 }
 
 describe("market offer affordances", () => {
+  it("puts an owned talisman's effect and sale value in the top-bar slot", () => {
+    const html = renderToStaticMarkup(createElement(OwnedTalismanBar, {
+      items: [{
+        instanceId: "owned:first",
+        name: "첫 부적",
+        description: "첫 제출의 배수 +4.",
+        assetTag: "talisman:first-charm",
+        sellPrice: 2,
+      }],
+      onSell: () => undefined,
+      onMove: () => undefined,
+    }));
+
+    expect(html).toContain("보유 부적");
+    expect(html).toContain("첫 제출의 배수 +4.");
+    expect(html).toContain("판매가 2냥");
+  });
+
   it("shows 광내림's full 12+6냥 price and disables purchase below 18냥", () => {
     const html = renderOffer({
       offer: {
@@ -79,5 +99,29 @@ describe("market offer affordances", () => {
 
     expect(html).toContain("book:four-brights");
     expect(html).toContain("/assets/generated/books/four-brights.webp");
+  });
+
+  it("fills the seasonal scene above two direct one-sentence rewards", () => {
+    const first = CONTRACTS[0];
+    const second = CONTRACTS[1];
+    const html = renderToStaticMarkup(createElement(MarketScreen, {
+      mode: "contract",
+      seasonMonth: 3,
+      assetTag: "ui:test-contract",
+      money: 10,
+      contracts: [
+        { definition: first, currentLevel: 0 },
+        { definition: second, currentLevel: 1 },
+      ],
+      selectedContractId: null,
+      onSelectContract: () => undefined,
+      onConfirmContract: () => undefined,
+    }));
+
+    expect(html).toContain("season-contract__scene");
+    expect(html).toContain(`“${first.description}”`);
+    expect(html).toContain(`“${second.upgradedDescription}”`);
+    expect(html).not.toContain("조건을 듣겠습니다");
+    expect(html).not.toContain("더 깊은 약조");
   });
 });

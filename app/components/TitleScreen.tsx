@@ -29,10 +29,23 @@ function joinClassNames(...values: Array<string | false | undefined>): string {
   return values.filter(Boolean).join(" ");
 }
 
+const START_DECK_BACKS: Readonly<Record<string, string>> = {
+  deck_standard: "/assets/generated/start-decks/standard.webp",
+  deck_red: "/assets/generated/start-decks/red.webp",
+  deck_blue: "/assets/generated/start-decks/blue.webp",
+  deck_black: "/assets/generated/start-decks/black.webp",
+  deck_money: "/assets/generated/start-decks/money.webp",
+};
+
+// The generated frame deliberately contains no lettering. Keeping the game name
+// as real text makes the Korean wordmark sharp at every viewport size and keeps
+// the page accessible to screen readers.
+const GYEONGHWASUWOL_LOGO_BACKDROP = "/assets/generated/ui/gyeonghwasuwol-logo-backdrop.png";
+
 export function TitleScreen({
   assetTag,
-  title = "꽃판: GO!",
-  subtitle = "열두 달, 끝까지 판을 키워라",
+  title = "경화수월",
+  subtitle = "화투패로 끗을 만들고 목표 점수를 넘기세요.",
   description,
   versionLabel,
   startDecks,
@@ -51,20 +64,12 @@ export function TitleScreen({
 }: TitleScreenProps) {
   return (
     <main className={joinClassNames("title-screen", className)}>
-      <header className="title-screen__hero">
-        <div className="title-screen__hero-art" data-asset-tag={assetTag} aria-label={`${title} 대표 이미지`}>
-          <span className="title-screen__moon" aria-hidden="true" />
-          <div className="title-screen__card-fan" aria-hidden="true">
-            <span className="title-screen__hero-card title-screen__hero-card--pine" />
-            <span className="title-screen__hero-card title-screen__hero-card--cherry" />
-            <span className="title-screen__hero-card title-screen__hero-card--moon" />
-          </div>
-          <div className="title-screen__hero-seal" aria-hidden="true">花</div>
-          <p>패를 고르고 짓을 맞춰<br />열두 달을 버텨라</p>
-        </div>
+      <header className="title-screen__hero" data-asset-tag={assetTag}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="title-screen__logo-backdrop" src={GYEONGHWASUWOL_LOGO_BACKDROP} alt="" aria-hidden="true" />
         <div className="title-screen__intro">
-          <p className="title-screen__eyebrow">열두 달 화투 덱빌딩</p>
-          <h1>{title}</h1>
+          <p className="title-screen__eyebrow">화투 덱빌딩 로그라이크</p>
+          <h1 className="title-screen__logo">{title}</h1>
           <p className="title-screen__subtitle">{subtitle}</p>
           <p className="title-screen__description">{description}</p>
           {versionLabel ? (
@@ -92,9 +97,13 @@ export function TitleScreen({
                 data-deck-id={deck.id}
                 onClick={() => onSelectStartDeck(deck.id)}
               >
-                <span className="title-screen__deck-back" aria-hidden="true" />
+                <span className="title-screen__deck-back" aria-hidden="true">
+                  {/* Generated card backs are project assets; native img keeps their exact 2:3 crop. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={START_DECK_BACKS[deck.id]} alt="" draggable={false} />
+                </span>
                 <b>{deck.name}</b>
-                <small>{unlocked ? deck.description : `${deck.unlockStage}월 클리어 시 해금`}</small>
+                <small>{unlocked ? deck.description : `${deck.unlockStage}월 통과 시 개방`}</small>
               </button>
             );
           })}

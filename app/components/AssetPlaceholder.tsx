@@ -26,10 +26,7 @@ function joinClassNames(...values: Array<string | false | undefined>): string {
   return values.filter(Boolean).join(" ");
 }
 
-/**
- * Text-only stand-in for a future visual asset. The asset tag is deliberately
- * visible so screenshots and accessibility trees never hide provenance IDs.
- */
+/** Visual fallback that never leaks internal asset identifiers to players. */
 export function AssetPlaceholder({
   assetTag,
   label = "텍스트 에셋",
@@ -52,12 +49,12 @@ export function AssetPlaceholder({
         className,
       )}
       role={role}
-      aria-label={`${label}, 에셋 태그 ${assetTag}${description ? `, ${description}` : ""}`}
+      aria-label={`${label}${description ? `, ${description}` : ""}`}
       data-asset-tag={assetTag}
       style={generatedArtUrl ? { "--generated-art": `url("${generatedArtUrl}")` } as React.CSSProperties : undefined}
     >
       <span className="asset-placeholder__marker" aria-hidden="true">
-        ASSET
+        花
       </span>
       <span className="asset-placeholder__copy">
         <strong className="asset-placeholder__label">{label}</strong>
@@ -65,7 +62,6 @@ export function AssetPlaceholder({
           <span className="asset-placeholder__description">{description}</span>
         ) : null}
       </span>
-      <code className="asset-placeholder__tag">{assetTag}</code>
     </div>
   );
 }

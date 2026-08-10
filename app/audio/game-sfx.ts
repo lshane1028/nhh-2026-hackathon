@@ -161,6 +161,20 @@ export function playYakuRevealSound() {
   sweptTone(context, 585, 930, 0.24, 0.032, "triangle", 0.11);
 }
 
+/** Heavier ceremonial cadence for 땡 and 광땡. Higher tiers add buk-like hits and a longer chime. */
+export function playHighYakuRevealSound(tier: 1 | 2 | 3) {
+  const context = getContext();
+  if (!context) return;
+  playYakuRevealSound();
+  const hits = tier + 1;
+  for (let index = 0; index < hits; index += 1) {
+    const delay = 0.2 + index * 0.12;
+    filteredNoise(context, 0.07, 0.075 + tier * 0.015, delay, "lowpass", 780, 170, 0.85);
+    sweptTone(context, 132 - tier * 8, 58, 0.15, 0.085, "sine", delay);
+    sweptTone(context, 620 + tier * 130 + index * 90, 880 + tier * 180, 0.22, 0.032, "triangle", delay + 0.025);
+  }
+}
+
 /** A compact, pitched impact for each of the two scoring kkeut cards. */
 export function playKkeutHitSound(index = 0) {
   const context = getContext();
@@ -250,4 +264,25 @@ export function playSubmissionFinaleSound() {
   sweptTone(context, 440, 408, 0.2, 0.038, "triangle", 0.105);
   sweptTone(context, 587, 545, 0.24, 0.036, "triangle", 0.175);
   sweptTone(context, 880, 815, 0.32, 0.03, "triangle", 0.255);
+}
+
+/** A rising wooden chime for permanent talisman growth after scoring settles. */
+export function playTalismanGrowthSound() {
+  const context = getContext();
+  if (!context) return;
+  filteredNoise(context, 0.055, 0.045, 0, "bandpass", 2_600, 880, 0.8);
+  sweptTone(context, 196, 392, 0.18, 0.055, "triangle");
+  sweptTone(context, 392, 784, 0.26, 0.045, "triangle", 0.09);
+  sweptTone(context, 587, 1_174, 0.34, 0.035, "sine", 0.18);
+}
+
+/** Low ceremonial strike followed by a sharp reveal for irreversible rituals. */
+export function playForbiddenRitualSound() {
+  const context = getContext();
+  if (!context) return;
+  filteredNoise(context, 0.24, 0.085, 0, "lowpass", 760, 120, 1.1);
+  sweptTone(context, 118, 42, 0.38, 0.095, "sawtooth");
+  filteredNoise(context, 0.055, 0.09, 0.2, "highpass", 6_800, 2_900, 0.55);
+  sweptTone(context, 330, 660, 0.22, 0.048, "triangle", 0.21);
+  sweptTone(context, 495, 990, 0.34, 0.036, "sine", 0.3);
 }

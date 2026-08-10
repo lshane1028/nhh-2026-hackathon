@@ -15,8 +15,15 @@ describe("generated content art resolver", () => {
     });
   });
 
-  it("keeps labelled fallbacks visible for catalog art that has not been drawn", () => {
-    expect(getGeneratedAssetUrl("forbidden:eight-directions")).toBeNull();
-    expect(getGeneratedAssetUrl("boss:go-bond")).toBeNull();
+  it("resolves newly drawn current-rule forbidden and boss art", () => {
+    expect(getGeneratedAssetUrl("forbidden:eight-directions")).toBe("/assets/generated/forbidden/eight-directions.webp");
+    expect(getGeneratedAssetUrl("boss:go-bond")).toBe("/assets/generated/bosses/go-bond.webp");
+  });
+
+  it("keeps all four seasonal encounter scenes available", () => {
+    for (const slug of ["spring-stranger", "summer-stranger", "autumn-stranger", "winter-stranger"]) {
+      const url = getGeneratedAssetUrl(`season:${slug}`)!;
+      expect(existsSync(fileURLToPath(new URL(`../../public${url}`, import.meta.url))), url).toBe(true);
+    }
   });
 });

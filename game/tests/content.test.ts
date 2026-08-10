@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { CollectionYakuId } from "../types";
 import {
   ALL_CONTENT_ASSET_TAGS,
   BOSSES,
@@ -20,9 +21,10 @@ import {
   assertContentCatalogComplete,
 } from "../content";
 import { createStandardHwatuDeck } from "../engine/deck";
+import { calculateCollectionBonus } from "../engine/collection-bonus";
 import { getBookLevelPreview } from "../engine/book-preview";
 import { findImmediateYakuCandidates } from "../engine/yaku";
-import { getYakuDisplayName } from "../content/yaku";
+import { ALL_IMMEDIATE_YAKU_DEFINITIONS, getYakuDisplayName } from "../content/yaku";
 import {
   CARD_EFFECT_TAGS,
   isCardEffectCompatible,
@@ -45,7 +47,7 @@ import {
   calculateTalismanRoundRuleModifiers,
   evaluateTalismanEffects,
 } from "../engine/talismans";
-import type { CardInstance, TalismanInstance, YakuCandidate } from "../types";
+import type { CardInstance, TalismanDefinition, TalismanInstance, YakuCandidate } from "../types";
 
 const catalogEntries = [
   ...TALISMANS,
@@ -86,6 +88,22 @@ function januaryPair(): { cards: CardInstance[]; candidate: YakuCandidate } {
 }
 
 describe("complete content catalog", () => {
+  it("keeps workshop pack sizes and prices on the requested tiers", () => {
+    const category = (name: "card" | "book" | "talisman") => PACKS.filter((pack) => pack.category === name);
+    for (const name of ["card", "book", "talisman"] as const) {
+      expect(category(name).map((pack) => [pack.choices, pack.picks])).toEqual([[3, 1], [5, 2], [7, 3]]);
+      const prices = category(name).map((pack) => pack.price);
+      expect(prices[2] - prices[1]).toBeGreaterThan(prices[1] - prices[0]);
+    }
+    expect(PACKS.filter((pack) => pack.category === "burn").map((pack) => [pack.choices, pack.picks]))
+      .toEqual([[2, 2], [4, 4]]);
+    const burnPrices = PACKS.filter((pack) => pack.category === "burn").map((pack) => pack.price);
+    expect(burnPrices[1]).toBeGreaterThan(burnPrices[0] * 2);
+    category("talisman").forEach((pack, index) => {
+      expect(pack.price).toBeGreaterThan(category("book")[index].price);
+      expect(category("book")[index].price).toBeGreaterThan(category("card")[index].price);
+    });
+  });
   it("never exposes internal English ids as 끗패 names", () => {
     expect(getYakuDisplayName("ttaeng")).toBe("땡");
     expect(getYakuDisplayName("jangttaeng")).toBe("장땡");
@@ -93,14 +111,16 @@ describe("complete content catalog", () => {
   });
 
   it("matches every required catalog count", () => {
+    const expectedTotal = Object.values(CONTENT_EXPECTED_COUNTS).reduce((sum, count) => sum + count, 0);
     expect(CONTENT_ACTUAL_COUNTS).toEqual(CONTENT_EXPECTED_COUNTS);
-    expect(CONTENT_CATALOG_VALIDATION.totalEntries).toBe(152);
+    expect(CONTENT_CATALOG_VALIDATION.totalEntries).toBe(expectedTotal);
     expect(CONTENT_CATALOG_COMPLETE).toBe(true);
     expect(assertContentCatalogComplete()).toBe(true);
   });
 
   it("has globally unique IDs and asset tags with usable descriptions", () => {
-    expect(catalogEntries).toHaveLength(152);
+    const expectedTotal = Object.values(CONTENT_EXPECTED_COUNTS).reduce((sum, count) => sum + count, 0);
+    expect(catalogEntries).toHaveLength(expectedTotal);
     expect(new Set(catalogEntries.map((entry) => entry.id)).size).toBe(catalogEntries.length);
     expect(new Set(ALL_CONTENT_ASSET_TAGS).size).toBe(ALL_CONTENT_ASSET_TAGS.length);
     for (const entry of catalogEntries) {
@@ -131,6 +151,47 @@ describe("complete content catalog", () => {
     expect(getBookLevelPreview("godori", 1).next).toContain("짓 5의 배수 허용");
   });
 
+  it("makes every 비결서 change the live scoring rule it describes", () => {
+    const deck = createStandardHwatuDeck();
+    const immediateIds = new Set<string>(ALL_IMMEDIATE_YAKU_DEFINITIONS.map((entry) => entry.id));
+    const sampleCards = deck.slice(0, 2);
+
+    for (const book of BOOKS.filter((entry) => immediateIds.has(entry.yakuId))) {
+      const definition = ALL_IMMEDIATE_YAKU_DEFINITIONS.find((entry) => entry.id === book.yakuId)!;
+      const candidate: YakuCandidate = {
+        yakuId: definition.id,
+        scoringCardIds: sampleCards.map((card) => card.instanceId),
+        jitCardIds: [],
+        jitSum: 0,
+        label: definition.name,
+      };
+      const before = calculateHandScore({ candidate, submittedCards: sampleCards, yakuLevels: { [book.yakuId]: 1 } });
+      const after = calculateHandScore({ candidate, submittedCards: sampleCards, yakuLevels: { [book.yakuId]: 2 } });
+      expect(after.startingHeung, book.name).toBeGreaterThan(before.startingHeung);
+    }
+
+    const bright = deck.filter((card) => card.kind === "bright");
+    const collectionCards: Record<string, CardInstance[]> = {
+      hongdan: deck.filter((card) => card.kind === "ribbon" && card.ribbonGroup === "hong"),
+      chodan: deck.filter((card) => card.kind === "ribbon" && card.ribbonGroup === "cho"),
+      cheongdan: deck.filter((card) => card.kind === "ribbon" && card.ribbonGroup === "cheong"),
+      godori: deck.filter((card) => card.kind === "animal" && card.tags.includes("bird") && [2, 4, 8].includes(card.month)),
+      rain_three_brights: [bright.find((card) => card.month === 12)!, ...bright.filter((card) => card.month !== 12).slice(0, 2)],
+      three_brights: bright.filter((card) => card.month !== 12).slice(0, 3),
+      four_brights: bright.slice(0, 4),
+      five_brights: bright.slice(0, 5),
+    };
+    for (const book of BOOKS.filter((entry) => !immediateIds.has(entry.yakuId))) {
+      const cards = collectionCards[book.yakuId];
+      expect(cards, `${book.name} audit fixture`).toBeTruthy();
+      const before = calculateCollectionBonus(cards, {}, { [book.yakuId]: { level: 1, mastery: 0 } });
+      const after = calculateCollectionBonus(cards, {}, { [book.yakuId]: { level: 2, mastery: 0 } });
+      const beforeLine = before.scoreLines.find((line) => line.id === book.yakuId);
+      const afterLine = after.scoreLines.find((line) => line.id === book.yakuId);
+      expect(afterLine?.points, book.name).toBe((beforeLine?.points ?? 0) + 1);
+    }
+  });
+
   it("declares exact, data-driven targeting for every forbidden card", () => {
     expect(Object.fromEntries(FORBIDDEN_CARDS.map((entry) => [
       entry.id,
@@ -140,7 +201,7 @@ describe("complete content catalog", () => {
       f_clone_ritual: ["card", 1, 1, 0],
       f_bright_descent: ["card", 1, 1, 6],
       f_white_chaff: ["card", 1, 5, 0],
-      f_monthless: ["card", 1, 1, 0],
+      f_monthless: ["card", 1, 1, 4],
       f_great_burn: ["none", 0, 0, 0],
       f_talisman_possession: ["talisman", 1, 1, 0],
       f_twelve_ritual: ["none", 0, 0, 0],
@@ -393,6 +454,79 @@ describe("talisman engine", () => {
     )).toBe(true);
     expect(evaluated.structuralEffects.some((effect) => effect.effectKey === "economy")).toBe(true);
     expect(evaluated.structuralEffects.some((effect) => effect.effectKey === "five_multiple_jit")).toBe(true);
+  });
+
+  it("gives every individual 부적 either a live score operation or a live rule hook", () => {
+    const deck = createStandardHwatuDeck();
+    const bright = deck.find((card) => card.kind === "bright")!;
+    const bird = deck.find((card) => card.kind === "animal" && card.tags.includes("bird"))!;
+    const ribbon = deck.find((card) => card.kind === "ribbon")!;
+    const doubleChaff = deck.find((card) => card.kind === "chaff" && card.chaffValue === 2)!;
+    const cup = deck.find((card) => card.tags.includes("cup"))!;
+    const baseCards = [
+      { ...bright, enhancement: "inked" as const },
+      bird,
+      ribbon,
+      doubleChaff,
+      cup,
+    ].map((card) => ({ ...card, tags: [...card.tags] }));
+
+    for (const definition of TALISMANS as readonly TalismanDefinition[]) {
+      const params = definition.params ?? {};
+      const count = definition.effectKey === "exact_submit_add"
+        ? Number(params.cardCount ?? 5)
+        : 5;
+      let submitted = baseCards.slice(0, Math.max(2, Math.min(5, count)));
+      if (definition.effectKey === "season_cards_add_kkeut") {
+        const month = Number(params.monthFrom ?? 1);
+        submitted = [deck.find((card) => card.month === month)!, ...baseCards.slice(1, 2)];
+      } else if (definition.effectKey === "kind_cards_add_kkeut") {
+        const match = deck.find((card) => card.kind === params.kind) ?? bright;
+        submitted = [match, bird];
+      } else if (definition.effectKey === "double_chaff_boost") {
+        submitted = [doubleChaff, bird];
+      } else if (definition.effectKey === "bird_retrigger") {
+        submitted = [bird, bright];
+      } else if (definition.effectKey === "cup_dual_role") {
+        submitted = [cup, bright];
+      } else if (definition.effectKey === "all_distinct_months_add") {
+        submitted = [1, 2, 3, 4, 5].map((month) => deck.find((card) => card.month === month)!);
+      }
+      const yakuId = typeof params.yakuIds === "string"
+        ? params.yakuIds.split(",")[0]
+        : "ttaeng";
+      const jitCount = definition.effectKey === "jit_add_heung" ? 3
+        : definition.effectKey === "jit_sum_multiply_heung" || definition.effectKey === "yaku_multiply_kkeut" ? 2
+          : 0;
+      const candidate: YakuCandidate = {
+        yakuId: yakuId as YakuCandidate["yakuId"],
+        scoringCardIds: submitted.map((card) => card.instanceId),
+        jitCardIds: jitCount > 0 ? submitted.slice(-jitCount).map((card) => card.instanceId) : [],
+        jitSum: definition.effectKey === "jit_sum_multiply_heung" ? 30 : jitCount > 0 ? 20 : 0,
+        label: yakuId,
+      };
+      const instance = owned(definition.id, 1);
+      const helpers = ["copy_left_score", "copy_neighbors", "talisman_value_add_heung"].includes(definition.effectKey)
+        ? [owned("t_first_charm"), instance]
+        : [instance];
+      const result = evaluateTalismanEffects({
+        talismans: helpers,
+        candidate,
+        submittedCards: submitted,
+        scoringCards: submitted,
+        heldCards: [bright],
+        newCollectionYakuIds: [typeof params.yakuId === "string" ? params.yakuId as CollectionYakuId : "hongdan"],
+        money: 20,
+        emptyTalismanSlots: definition.effectKey === "full_slots_multiply_heung" ? 0 : 2,
+        successfulGoCount: 1,
+        scoredMonthsThisRound: [1, 2, 3],
+        discardsRemaining: 2,
+        yakusPlayed: {},
+      });
+      const scoreOperations = result.orderedScoreEffects.filter((effect) => effect.sourceId === instance.instanceId);
+      const ruleHooks = result.structuralEffects.filter((effect) => effect.sourceId === instance.instanceId);
+      expect(scoreOperations.length + ruleHooks.length, definition.name).toBeGreaterThan(0);
+    }
   });
 
   it("provides round reward, Go-failure, and structural rule adjustments", () => {

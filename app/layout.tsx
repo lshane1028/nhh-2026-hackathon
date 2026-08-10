@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "꽃판: GO! — 화투 로그라이크",
-  description: "짓고땡과 고·스톱, 열두 달 부적 빌드를 결합한 화투 로그라이크",
-  applicationName: "꽃판: GO!",
+  title: "경화수월 — 화투 로그라이크",
+  description: "패 두 장으로 끗을 만들고 수집 점수를 쌓아 목표를 넘기는 화투 로그라이크",
+  applicationName: "경화수월",
 };
 
 export const viewport: Viewport = {

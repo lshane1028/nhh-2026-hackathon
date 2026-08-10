@@ -35,15 +35,30 @@ describe("submission theater timeline", () => {
     expect(beats.at(-1)).toMatchObject({ kind: "finale", runningJit: breakdown.finalKkeut });
   });
 
-  it("places a card's own score operation directly after that card", () => {
+  it("holds and intensifies rare or highly upgraded yaku reveals", () => {
+    const pair = [card(11), { ...card(11), instanceId: "november-pair", tags: [...card(11).tags] }];
+    const ttaeng = buildSubmissionBeats(calculateBestHandScore({ submittedCards: pair }), pair)
+      .find((beat) => beat.kind === "yaku")!;
+    expect(ttaeng).toMatchObject({ title: "11땡", emphasisTier: 1 });
+    expect(ttaeng.duration).toBeGreaterThan(1_500);
+
+    const upgradedCards = [card(3), card(5)];
+    const upgraded = buildSubmissionBeats(calculateBestHandScore({
+      submittedCards: upgradedCards,
+      yakuLevels: { kkeut: 5 },
+    }), upgradedCards).find((beat) => beat.kind === "yaku")!;
+    expect(upgraded.emphasisTier).toBe(2);
+  });
+
+  it("shows a kkeut card's score operation after the yaku emphasis", () => {
     const enhanced = { ...card(7), tags: [...card(7).tags], enhancement: "scarlet" as const };
     const submitted = [card(12), enhanced];
     const breakdown = calculateBestHandScore({ submittedCards: submitted });
     const beats = buildSubmissionBeats(breakdown, submitted);
-    const cardIndex = beats.findIndex((beat) => beat.kind === "kkeut-card" && beat.activeCardIds[0] === enhanced.instanceId);
+    const yakuIndex = beats.findIndex((beat) => beat.kind === "yaku");
     const effectIndex = beats.findIndex((beat) => beat.kind === "effect" && beat.operation?.sourceId === enhanced.instanceId);
 
-    expect(effectIndex).toBe(cardIndex + 1);
+    expect(effectIndex).toBeGreaterThan(yakuIndex);
     expect(beats[effectIndex].detail).toContain("배수 +3");
   });
 
@@ -114,7 +129,7 @@ describe("submission theater timeline", () => {
     const effect = beats.find((beat) => beat.operation === weatherOperation)!;
 
     expect(effect.activeCardIds).toEqual([affected.instanceId]);
-    expect(beats.indexOf(effect)).toBe(beats.findIndex((beat) => beat.kind === "kkeut-card" && beat.activeCardIds[0] === affected.instanceId) + 1);
+    expect(beats.indexOf(effect)).toBeGreaterThan(beats.findIndex((beat) => beat.kind === "yaku"));
   });
 
   it("keeps card-effect bonuses while visibly building the jit total", () => {
@@ -125,7 +140,7 @@ describe("submission theater timeline", () => {
     const jit = beats.filter((beat) => beat.kind === "jit-card");
 
     expect(jit.map((beat) => beat.title)).toEqual(["+4", "+6"]);
-    expect(jit.map((beat) => beat.runningJit)).toEqual([54, 60]);
+    expect(jit.map((beat) => beat.runningJit)).toEqual([4, 10]);
     expect(jit.at(-1)?.detail).toContain("짓 10 완성");
     expect(beats.at(-1)?.runningJit).toBe(breakdown.finalKkeut);
   });
@@ -153,6 +168,29 @@ describe("submission theater timeline", () => {
       heung: breakdown.finalHeung,
       total: breakdown.score,
     });
+  });
+
+  it("puts permanent talisman growth after the score finale and keeps its source visible", () => {
+    const submitted = [card(12), card(7)];
+    const breakdown = calculateBestHandScore({ submittedCards: submitted });
+    const beats = buildSubmissionBeats(breakdown, submitted, submitted, undefined, [{
+      sourceId: "owned:dark-practice",
+      label: "무광 연습",
+      delta: 0.35,
+      total: 1.05,
+    }]);
+    const finaleIndex = beats.findIndex((beat) => beat.kind === "finale");
+    const growth = beats.at(-1)!;
+
+    expect(finaleIndex).toBe(beats.length - 2);
+    expect(growth).toMatchObject({
+      kind: "growth",
+      sourceId: "owned:dark-practice",
+      title: "무광 연습 · 성장 +0.35",
+      detail: "영구 성장 누적 +1.05",
+    });
+    expect(submissionBeatToReveal(growth, beats.length - 1, beats.length, breakdown.score))
+      .toMatchObject({ playing: true, total: breakdown.score, current: null });
   });
 
   it("keeps discard ghosts in the hand fan, then swaps to the real drawn hand", () => {

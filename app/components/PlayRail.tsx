@@ -90,8 +90,7 @@ export function PlayRail({
     >
       <header className="play-rail__stage">
         <div className="play-rail__stage-plate" data-asset-tag={stageAssetTag}>
-          <span aria-hidden="true">IMG</span>
-          <code>{stageAssetTag}</code>
+          <span aria-hidden="true">月</span>
         </div>
         <div className="play-rail__stage-copy">
           <strong>{stageLabel}</strong>

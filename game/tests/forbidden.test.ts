@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FORBIDDEN_BY_ID } from "../content/upgrades";
+import { FORBIDDEN_BY_ID, FORBIDDEN_CARDS } from "../content/upgrades";
 import {
   applyForbiddenEffect,
   isForbiddenTargetEligible,
@@ -29,6 +29,68 @@ function runSlice(overrides: Partial<ForbiddenRunSlice> = {}): ForbiddenRunSlice
 }
 
 describe("forbidden consumables", () => {
+  it("executes every 금단장 definition instead of leaving a catalog-only effect", () => {
+    for (const definition of FORBIDDEN_CARDS) {
+      const state = runSlice({
+        money: 30,
+        talismanSlots: 5,
+        talismans: [
+          { instanceId: "audit-left", definitionId: "t_first_charm", growth: 0 },
+          { instanceId: "audit-target", definitionId: "t_empty_shrine", growth: 0 },
+        ],
+        yakuLevels: { ttaeng: { level: 1, mastery: 0 } },
+      });
+      const nonBright = state.deck.find((card) => card.kind !== "bright")!;
+      const cardTargets = definition.effectKey === "all_to_january"
+        ? state.deck.slice(0, 2).map((card) => card.instanceId)
+        : [nonBright.instanceId];
+      const targets = definition.effectKey === "random_burn_for_money"
+        ? state.deck.map((card) => card.instanceId)
+        : definition.targetKind === "card"
+          ? cardTargets
+          : definition.targetKind === "talisman"
+            ? ["audit-target"]
+            : [];
+      let sequence = 0;
+      const result = applyForbiddenEffect(state, definition, targets, (prefix) => `${prefix}:${sequence++}`);
+
+      expect(result.applied, definition.name).toBe(true);
+      expect({
+        deck: result.deck,
+        handSize: result.handSize,
+        money: result.money,
+        talismans: result.talismans,
+        yakuLevels: result.yakuLevels,
+        legendary: result.grantLegendaryTalisman,
+      }, `${definition.name} produced no state change`).not.toEqual({
+        deck: state.deck,
+        handSize: state.handSize,
+        money: state.money,
+        talismans: state.talismans,
+        yakuLevels: state.yakuLevels,
+        legendary: false,
+      });
+    }
+  });
+
+  it("turns 팔방패 into a collection wildcard without erasing its printed month", () => {
+    const definition = forbidden("f_monthless");
+    const deck = createStandardHwatuDeck();
+    const target = { ...deck.find((card) => card.month === 8)!, tags: ["zero_base"] };
+    const state = runSlice({ deck: [target, ...deck.filter((card) => card.instanceId !== target.instanceId)], money: 4 });
+
+    const applied = applyForbiddenEffect(state, definition, [target.instanceId], () => "unused");
+
+    expect(applied.applied).toBe(true);
+    expect(applied.money).toBe(0);
+    expect(applied.deck.find((card) => card.instanceId === target.instanceId)).toMatchObject({
+      month: 8,
+      enhancement: "wild",
+    });
+    expect(applied.deck.find((card) => card.instanceId === target.instanceId)?.tags).not.toContain("zero_base");
+    expect(isForbiddenTargetEligible(applied, definition, target.instanceId)).toBe(false);
+  });
+
   it("requires exactly one non-bright target for 광내림 and charges its 6냥 ritual cost", () => {
     const definition = forbidden("f_bright_descent");
     const state = runSlice({ money: 6 });

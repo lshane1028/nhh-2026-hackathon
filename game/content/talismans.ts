@@ -270,7 +270,7 @@ export const TALISMANS = [
   {
     id: "t_migratory_map",
     name: "철새 지도",
-    description: "득점하는 새 태그 카드의 득점 효과를 1회 재발동.",
+    description: "득점하는 새 그림패의 득점 효과를 1회 재발동.",
     rarity: "uncommon",
     price: 8,
     weight: 12,
@@ -305,7 +305,7 @@ export const TALISMANS = [
   {
     id: "t_empty_pouch",
     name: "빈 부적집",
-    description: "비어 있는 부적 슬롯마다 배수 +1.",
+    description: "비어 있는 부적 칸마다 배수 +1.",
     rarity: "uncommon",
     price: 7,
     weight: 12,
@@ -421,7 +421,7 @@ export const TALISMANS = [
   {
     id: "t_cremation_deed",
     name: "화형 문서",
-    description: "손마다 첫 득점 피 1장을 종료 후 소각하고, 라운드당 한 번 배수가 영구적으로 +0.08 성장.",
+    description: "손마다 첫 득점 피 1장을 끝난 뒤 소각하고, 판마다 한 번 배수가 영구적으로 +0.08 성장.",
     rarity: "rare",
     price: 11,
     weight: 5,
@@ -433,7 +433,7 @@ export const TALISMANS = [
   {
     id: "t_twelve_panel_calendar",
     name: "열두 폭 달력",
-    description: "이번 라운드에 처음 득점한 서로 다른 월마다 배수가 +0.15 성장하고 라운드마다 초기화.",
+    description: "이번 판에 처음 득점한 서로 다른 월마다 배수가 +0.15 성장하고 다음 판에 초기화.",
     rarity: "rare",
     price: 11,
     weight: 5,
@@ -467,31 +467,9 @@ export const TALISMANS = [
   },
 
   {
-    id: "t_twelve_month_painter",
-    name: "열두 달의 화공",
-    description: "라운드당 1회, 제출 카드의 월을 이번 판정에서 하나의 선택 월로 통일.",
-    rarity: "legendary",
-    price: 15,
-    weight: 1,
-    effectKey: "unify_month_once",
-    params: { usesPerRound: 1 },
-    assetTag: "talisman:twelve-month-painter",
-  },
-  {
-    id: "t_five_direction_goblin",
-    name: "오방 도깨비",
-    description: "제출 카드는 족보 판정에서 모든 종류로 취급하지만 점수는 각 카드의 원래 월값으로 계산.",
-    rarity: "legendary",
-    price: 16,
-    weight: 1,
-    effectKey: "all_kind_wild",
-    params: { naturalKkeutOnly: true },
-    assetTag: "talisman:five-direction-goblin",
-  },
-  {
     id: "t_phoenix_seal",
     name: "불사조의 인장",
-    description: "라운드에서 처음 소각된 일반 카드가 무작위 판본을 얻은 복사본 2장으로 돌아옴.",
+    description: "판에서 처음 소각된 일반 패가 무작위 판본을 얻은 복사본 2장으로 돌아옴.",
     rarity: "legendary",
     price: 16,
     weight: 1,
@@ -716,3 +694,35 @@ export const TALISMANS = [
 export const TALISMAN_BY_ID = Object.fromEntries(
   TALISMANS.map((definition) => [definition.id, definition]),
 ) as Record<string, (typeof TALISMANS)[number]>;
+
+/** Tooltip/shop copy kept separate from the numeric description so every charm
+ * states exactly when the rule is evaluated. */
+export function getTalismanTimingText(definition: TalismanDefinition): string {
+  switch (definition.effectKey) {
+    case "devour_neighbor":
+      return "발동 시점 · 다음 달 시작 시";
+    case "threshold_relief":
+      return "적용 시점 · 판 목표를 정할 때 상시";
+    case "settlement_multiplier":
+      return "발동 시점 · 판 승리 정산 시";
+    case "fail_rescue":
+      return "발동 시점 · 고 실패가 확정될 때";
+    case "economy":
+      return "적용 시점 · 장터 또는 판 정산 조건을 만족할 때";
+    case "five_multiple_jit":
+    case "cup_dual_role":
+    case "month_counts_as_bright":
+    case "all_kind_wild":
+    case "borrow_yaku_level":
+      return "적용 시점 · 보유 중 모든 제출 판정에 상시";
+    case "unify_month_once":
+      return "발동 시점 · 매 판 첫 제출 1회, 가장 유리한 월을 자동 선택";
+    case "score_then_burn":
+      return "발동 시점 · 제출 점수를 낸 직후 복사본을 소각";
+    case "bright_drought_growth":
+    case "burn_chaff_growth":
+      return "발동 시점 · 제출 조건을 만족하면 점수 적용 후 영구 성장";
+    default:
+      return "발동 시점 · 핸드 제출 점수 계산 중";
+  }
+}

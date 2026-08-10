@@ -2,13 +2,43 @@ import { describe, expect, it } from "vitest";
 
 import { TALISMANS } from "../content/talismans";
 import { FORBIDDEN_CARDS } from "../content/upgrades";
-import type { GameState, TalismanDefinition } from "../types";
+import type { TalismanDefinition } from "../types";
 import { createStandardHwatuDeck } from "../engine/deck";
 import { createGoChainState } from "../engine/go";
 import { randomAt } from "../engine/rng";
 import { createInitialGameState, evaluateSelectedHand, gameReducer, sortHand } from "../state/game";
 
 describe("playable run reducer", () => {
+  it("applies 고리 장부 from the live purse to both preview and submitted score", () => {
+    const deck = createStandardHwatuDeck();
+    const pair = deck.filter((card) => card.month === 1).slice(0, 2);
+    const state = {
+      ...createInitialGameState("RING-LEDGER"),
+      runId: "ring-ledger",
+      screen: "play" as const,
+      deck,
+      hand: pair,
+      drawPile: deck.filter((card) => !pair.some((selected) => selected.instanceId === card.instanceId)),
+      selectedCardIds: pair.map((card) => card.instanceId),
+      yard: { cards: [], sweptCount: 0 },
+      money: 12,
+      targetScore: 1_000_000,
+      talismans: [{ instanceId: "owned:ring-ledger", definitionId: "t_ring_ledger", growth: 0 }],
+    };
+
+    const preview = evaluateSelectedHand(state);
+    const ledger = preview?.breakdown.operations.find((operation) => operation.sourceId === "owned:ring-ledger");
+    expect(ledger).toMatchObject({ label: "고리 장부", operation: "add_heung", value: 2 });
+
+    const submitted = gameReducer(state, { type: "SUBMIT_HAND" });
+    expect(submitted.lastScore?.operations).toContainEqual(expect.objectContaining({
+      sourceId: "owned:ring-ledger",
+      operation: "add_heung",
+      value: 2,
+    }));
+    expect(submitted.lastScore?.finalHeung).toBe(preview?.breakdown.finalHeung);
+  });
+
   it("preserves the exact two kkeut cards and the remaining jit cards for presentation", () => {
     const deck = createStandardHwatuDeck();
     const card = (month: number) => deck.find((entry) => entry.month === month && entry.kind === "chaff")
@@ -142,8 +172,8 @@ describe("playable run reducer", () => {
       shopOffers: [{
         offerId: "offer-pack",
         category: "pack" as const,
-        definitionId: "pack_hwatu_large",
-        price: 7,
+        definitionId: "pack_hwatu_medium",
+        price: 8,
         sold: false,
       }],
     };
@@ -156,19 +186,16 @@ describe("playable run reducer", () => {
     // same pick flow and both land in the deck intact.
     expect(opened.pendingPack?.candidates.every((card) => card.effectTagId === undefined || typeof card.effectTagId === "string")).toBe(true);
     expect(opened.deck).toHaveLength(deckBefore);
-    expect(opened.money).toBe(92);
+    expect(opened.money).toBe(91);
 
-    const first = opened.pendingPack!.candidates[0];
-    const afterFirst = gameReducer(opened, { type: "PICK_PACK_CARD", instanceId: first.instanceId });
-    expect(afterFirst.deck).toHaveLength(deckBefore + 1);
-    expect(afterFirst.pendingPack?.picksLeft).toBe(1);
-    expect(afterFirst.pendingPack?.candidates).toHaveLength(4);
-
-    const second = afterFirst.pendingPack!.candidates[0];
-    const afterSecond = gameReducer(afterFirst, { type: "PICK_PACK_CARD", instanceId: second.instanceId });
-    expect(afterSecond.deck).toHaveLength(deckBefore + 2);
-    // Picks exhausted, so the prompt closes on its own.
-    expect(afterSecond.pendingPack).toBeNull();
+    const selected = opened.pendingPack!.candidates.slice(0, 2);
+    const confirmed = gameReducer(opened, {
+      type: "CONFIRM_PACK_SELECTION",
+      candidateIds: selected.map((card) => card.instanceId),
+    });
+    expect(confirmed.deck).toHaveLength(deckBefore + 2);
+    expect(confirmed.deck.slice(-2).map((card) => card.instanceId)).toEqual(selected.map((card) => card.instanceId));
+    expect(confirmed.pendingPack).toBeNull();
   });
 
   it("keeps plain cards in the pack pool for deck balance", () => {
@@ -207,6 +234,101 @@ describe("playable run reducer", () => {
     expect(plainCards).toBeGreaterThan(0);
     expect(effectCards).toBeGreaterThan(plainCards);
     expect(redundantKindEffects).toBe(0);
+  });
+
+  it("opens burn and book packs with their own pick flows", () => {
+    const base = { ...createInitialGameState("PACK-CATEGORIES"), runId: "pack-categories", screen: "shop" as const, money: 99 };
+    const burnShop = { ...base, shopOffers: [{ offerId: "burn", category: "pack" as const, definitionId: "pack_burn_large", price: 14, sold: false }] };
+    const burn = gameReducer(burnShop, { type: "BUY_OFFER", offerId: "burn" });
+    expect(burn.pendingPack).toMatchObject({ category: "burn", picksLeft: 4 });
+    expect(burn.pendingPack?.candidates).toHaveLength(base.deck.length);
+    expect(new Set(burn.pendingPack?.candidates.map((card) => card.instanceId)).size).toBe(base.deck.length);
+    const burnTargets = burn.pendingPack!.candidates.slice(0, 4);
+    const rejectedPartialBurn = gameReducer(burn, {
+      type: "CONFIRM_PACK_SELECTION",
+      candidateIds: burnTargets.slice(0, 1).map((card) => card.instanceId),
+    });
+    expect(rejectedPartialBurn).toBe(burn);
+    const afterBurn = gameReducer(burn, {
+      type: "CONFIRM_PACK_SELECTION",
+      candidateIds: burnTargets.map((card) => card.instanceId),
+    });
+    expect(burnTargets.every((target) => !afterBurn.deck.some((card) => card.instanceId === target.instanceId))).toBe(true);
+    expect(afterBurn.pendingPack).toBeNull();
+
+    const bookShop = { ...base, shopOffers: [{ offerId: "book", category: "pack" as const, definitionId: "pack_book_small", price: 6, sold: false }] };
+    const book = gameReducer(bookShop, { type: "BUY_OFFER", offerId: "book" });
+    expect(book.pendingPack).toMatchObject({ category: "book", picksLeft: 1, candidates: [] });
+    expect(book.pendingPack?.rewardCandidates).toHaveLength(3);
+    const reward = book.pendingPack!.rewardCandidates![0];
+    const afterBook = gameReducer(book, { type: "CONFIRM_PACK_SELECTION", candidateIds: [reward.candidateId] });
+    expect(afterBook.pendingPack).toBeNull();
+    expect(Object.values(afterBook.yakuLevels).some((entry) => entry.level > 1)).toBe(true);
+  });
+
+  it("guarantees the most-used yaku book in a book pack with the upgraded bookshop contract", () => {
+    const base = {
+      ...createInitialGameState("BOOKSHOP-GUARANTEE"),
+      runId: "bookshop-guarantee",
+      screen: "shop" as const,
+      money: 99,
+      contracts: ["contract_bookshop", "contract_bookshop"],
+      stats: {
+        ...createInitialGameState("BOOKSHOP-GUARANTEE").stats,
+        yakusPlayed: { gabo: 9, ttaeng: 4, kkeut: 2 },
+      },
+      shopOffers: [{
+        offerId: "book-pack",
+        category: "pack" as const,
+        definitionId: "pack_book_small",
+        price: 6,
+        sold: false,
+      }],
+    };
+
+    const opened = gameReducer(base, { type: "BUY_OFFER", offerId: "book-pack" });
+    expect(opened.pendingPack?.rewardCandidates).toHaveLength(3);
+    expect(opened.pendingPack?.rewardCandidates?.some((candidate) => candidate.definitionId === "b_gabo")).toBe(true);
+  });
+
+  it("adds a third book offer for 동네 책방 and finished cards for 명장 조합", () => {
+    const bookshop = gameReducer({
+      ...createInitialGameState("BOOKSHOP-SHELF"),
+      runId: "bookshop-shelf",
+      screen: "reward",
+      contracts: ["contract_bookshop"],
+    }, { type: "CONTINUE_AFTER_REWARD" });
+    expect(bookshop.shopOffers.filter((offer) => offer.category === "book")).toHaveLength(3);
+
+    const guildShop = {
+      ...createInitialGameState("MASTER-PAINTER-PACK"),
+      runId: "master-painter-pack",
+      screen: "shop" as const,
+      money: 99,
+      contracts: ["contract_painter_guild", "contract_painter_guild"],
+      shopOffers: [{
+        offerId: "guild-pack",
+        category: "pack" as const,
+        definitionId: "pack_hwatu_large",
+        price: 16,
+        sold: false,
+      }],
+    };
+    const opened = gameReducer(guildShop, { type: "BUY_OFFER", offerId: "guild-pack" });
+    expect(opened.pendingPack?.candidates.some((card) => card.edition || card.seal)).toBe(true);
+  });
+
+  it("reorders talismans by dragged destination", () => {
+    const state = {
+      ...createInitialGameState("TALISMAN-DRAG"),
+      talismans: ["t_first_charm", "t_empty_shrine", "t_gambler_gut"].map((definitionId, index) => ({
+        instanceId: `owned:${index}`,
+        definitionId,
+        growth: 0,
+      })),
+    };
+    const moved = gameReducer(state, { type: "MOVE_TALISMAN_TO", instanceId: "owned:2", targetInstanceId: "owned:0" });
+    expect(moved.talismans.map((item) => item.instanceId)).toEqual(["owned:2", "owned:0", "owned:1"]);
   });
 
   it("keeps tutorial month one fixed but uses run entropy when tutorial is skipped", () => {
@@ -879,47 +1001,6 @@ describe("playable run reducer", () => {
     expect(purchased.money).toBe(92);
   });
 
-  it("tracks each duplicated 열두 달의 화공 use instead of granting infinite unifications", () => {
-    const deck = createStandardHwatuDeck();
-    const pairs = [
-      [deck.find((card) => card.month === 2)!, deck.find((card) => card.month === 3)!],
-      [deck.find((card) => card.month === 4)!, deck.find((card) => card.month === 5)!],
-      [deck.find((card) => card.month === 6)!, deck.find((card) => card.month === 7)!],
-    ];
-    const talismans = [
-      { instanceId: "painter-a", definitionId: "t_twelve_month_painter", growth: 0 },
-      { instanceId: "painter-b", definitionId: "t_twelve_month_painter", growth: 0 },
-    ];
-    let state: GameState = {
-      ...createInitialGameState("DOUBLE-PAINTER"),
-      runId: "double-painter",
-      screen: "play" as const,
-      deck,
-      targetScore: 1_000_000,
-      talismans,
-      chain: createGoChainState(),
-      handsRemaining: 4,
-    };
-
-    for (let index = 0; index < pairs.length; index += 1) {
-      const pair = pairs[index];
-      state = {
-        ...state,
-        screen: "play" as const,
-        hand: pair,
-        drawPile: deck.filter((card) => !pair.some((selected) => selected.instanceId === card.instanceId)),
-        selectedCardIds: pair.map((card) => card.instanceId),
-        handsRemaining: 4 - index,
-      };
-      const scored = evaluateSelectedHand(state);
-      expect(scored).not.toBeNull();
-      if (index < 2) expect(scored?.usedUnifyMonth).not.toBeNull();
-      else expect(scored?.usedUnifyMonth).toBeNull();
-      state = gameReducer(state, { type: "SUBMIT_HAND" });
-      expect(state.roundTalismanUses.t_twelve_month_painter ?? 0).toBe(Math.min(index + 1, 2));
-    }
-  });
-
   it("stacks duplicated 화형 문서 and 불사조 triggers by owned instance", () => {
     const deck = createStandardHwatuDeck();
     const januaryChaff = deck.filter((card) => card.month === 1 && card.kind === "chaff");
@@ -1146,11 +1227,8 @@ describe("playable run reducer", () => {
       counts[offer.category] = (counts[offer.category] ?? 0) + 1;
       return counts;
     }, {});
-    expect(byCategory).toEqual({ talisman: 2, book: 2, forbidden: 1, pack: 2, painter: 1 });
-    // The workshop only ever stocks the burn painter, never the month edits.
-    expect(
-      shop.shopOffers.filter((offer) => offer.category === "painter").map((offer) => offer.definitionId),
-    ).toEqual(["p_burn"]);
+    expect(byCategory).toEqual({ talisman: 2, book: 2, forbidden: 1, pack: 3 });
+    expect(shop.shopOffers.filter((offer) => offer.category === "pack")).toHaveLength(3);
     const contract = gameReducer(shop, { type: "NEXT_STAGE" });
     expect(contract.screen).toBe("contract");
     expect(contract.contractChoices).toHaveLength(2);

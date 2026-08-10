@@ -12,7 +12,7 @@ export const BOSSES = [
   {
     id: "boss_drought",
     name: "가뭄",
-    description: "비 태그 카드와 12월 카드는 이번 판에 득점하지 않음.",
+    description: "비 그림이 있는 패와 12월 패는 이번 판에 득점하지 않음.",
     ruleKey: "no_rain",
     counterplay: "다른 월을 중심으로 득점하거나 두목 교체를 사용.",
     assetTag: "boss:drought",
@@ -20,9 +20,9 @@ export const BOSSES = [
   {
     id: "boss_monsoon",
     name: "장마",
-    description: "비 태그가 아닌 광 카드의 월값이 0이 됨.",
+    description: "비 그림이 없는 광 카드의 월값이 0이 됨.",
     ruleKey: "dry_bright",
-    counterplay: "월 족보와 비 태그 카드로 우회.",
+    counterplay: "월 족보와 비 그림이 있는 패로 우회.",
     assetTag: "boss:monsoon",
   },
   {
@@ -68,7 +68,7 @@ export const BOSSES = [
   {
     id: "boss_stubborn",
     name: "고집쟁이",
-    description: "성공한 고가 포함된 안전 정산을 최소 1회 해야 클리어 가능.",
+    description: "고를 한 번 성공시킨 뒤 스톱해야 이 판을 통과할 수 있음.",
     ruleKey: "requires_go",
     counterplay: "이번 승부 점수가 작을 때 먼저 1고를 시도해 조건을 확보.",
     assetTag: "boss:stubborn",
@@ -87,7 +87,7 @@ export const BOSSES = [
     description: "패를 보충할 때마다 새로 들어온 카드 두 장이 뒷면으로 놓임.",
     ruleKey: "two_face_down",
     counterplay: "뒷면 패를 먼저 눌러 확인한 뒤 끗패 두 장의 선택 순서를 정함.",
-    assetTag: "boss:reverse-calendar",
+    assetTag: "boss:fog-screen",
   },
   {
     id: "boss_nagari_king",

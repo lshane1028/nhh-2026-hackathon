@@ -28,6 +28,7 @@ export interface GameModalProps {
   onClose: () => void;
   closeLabel?: string;
   closeOnBackdrop?: boolean;
+  dismissible?: boolean;
   className?: string;
 }
 
@@ -46,6 +47,7 @@ export function GameModal({
   onClose,
   closeLabel = "닫기",
   closeOnBackdrop = true,
+  dismissible = true,
   className,
 }: GameModalProps) {
   if (!open) {
@@ -56,14 +58,14 @@ export function GameModal({
   const descriptionId = description ? `${id}-description` : undefined;
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
+    if (dismissible && event.key === "Escape") {
       event.stopPropagation();
       onClose();
     }
   };
 
   const handleBackdropClick = (event: MouseEvent<HTMLDivElement>) => {
-    if (closeOnBackdrop && event.target === event.currentTarget) {
+    if (dismissible && closeOnBackdrop && event.target === event.currentTarget) {
       onClose();
     }
   };
@@ -91,16 +93,18 @@ export function GameModal({
             tone="neutral"
             compact
           />
-          <button
-            type="button"
-            className="game-modal__close"
-            onClick={onClose}
-            aria-label={closeLabel}
-            autoFocus
-          >
-            <span aria-hidden="true">×</span>
-            <span className="game-modal__close-text">{closeLabel}</span>
-          </button>
+          {dismissible ? (
+            <button
+              type="button"
+              className="game-modal__close"
+              onClick={onClose}
+              aria-label={closeLabel}
+              autoFocus
+            >
+              <span aria-hidden="true">×</span>
+              <span className="game-modal__close-text">{closeLabel}</span>
+            </button>
+          ) : null}
         </header>
 
         <div className="game-modal__body">
@@ -121,7 +125,6 @@ export function GameModal({
                 data-asset-tag={action.assetTag}
               >
                 <span>{action.label}</span>
-                {action.assetTag ? <code>{action.assetTag}</code> : null}
               </button>
             ))}
           </footer>

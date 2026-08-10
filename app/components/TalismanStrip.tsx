@@ -7,8 +7,10 @@ import type {
   TalismanDefinition,
   TalismanInstance,
 } from "@/game/types";
+import { getTalismanTimingText } from "@/game/content/talismans";
 
 import { getGeneratedAssetUrl } from "./generated-asset";
+import { getFloatingHintPosition } from "./tooltip-position";
 
 export interface TalismanStripItem {
   instance: TalismanInstance;
@@ -32,6 +34,7 @@ export interface TalismanStripProps {
    */
   firingInstanceId?: string | null;
   onSelect?: (item: TalismanStripItem) => void;
+  onReorder?: (instanceId: string, targetInstanceId: string) => void;
   className?: string;
 }
 
@@ -66,27 +69,7 @@ export function getTalismanHintPosition(
   tooltipWidth = 320,
   tooltipHeight = 180,
 ): TalismanHintPosition {
-  const margin = 12;
-  const gap = 10;
-  const width = Math.min(tooltipWidth, Math.max(0, viewportWidth - margin * 2));
-  const height = Math.min(tooltipHeight, Math.max(0, viewportHeight - margin * 2));
-  const minimumLeft = margin + width / 2;
-  const maximumLeft = Math.max(minimumLeft, viewportWidth - margin - width / 2);
-  const availableBelow = viewportHeight - margin - rect.bottom - gap;
-  const availableAbove = rect.top - gap - margin;
-  const placement = availableBelow >= height || availableBelow >= availableAbove
-    ? "below"
-    : "above";
-  const preferredTop = placement === "below"
-    ? rect.bottom + gap
-    : rect.top - gap - height;
-  const maximumTop = Math.max(margin, viewportHeight - margin - height);
-
-  return {
-    left: Math.min(maximumLeft, Math.max(minimumLeft, rect.left + rect.width / 2)),
-    top: Math.min(maximumTop, Math.max(margin, preferredTop)),
-    placement,
-  };
+  return getFloatingHintPosition(rect, viewportWidth, viewportHeight, tooltipWidth, tooltipHeight);
 }
 
 interface TalismanSlotProps {
@@ -95,9 +78,10 @@ interface TalismanSlotProps {
   sacrifice: boolean;
   firing: boolean;
   onSelect?: (item: TalismanStripItem) => void;
+  onReorder?: (instanceId: string, targetInstanceId: string) => void;
 }
 
-function TalismanSlot({ item, selected, sacrifice, firing, onSelect }: TalismanSlotProps) {
+function TalismanSlot({ item, selected, sacrifice, firing, onSelect, onReorder }: TalismanSlotProps) {
   const tooltipId = useId();
   const [hintPosition, setHintPosition] = useState<TalismanHintPosition | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
@@ -182,8 +166,7 @@ function TalismanSlot({ item, selected, sacrifice, firing, onSelect }: TalismanS
           <img src={artUrl} alt="" draggable={false} aria-hidden="true" />
         ) : (
           <>
-            <span aria-hidden="true">IMG</span>
-            <code>{item.definition.assetTag}</code>
+            <span aria-hidden="true">符</span>
           </>
         )}
       </span>
@@ -194,14 +177,30 @@ function TalismanSlot({ item, selected, sacrifice, firing, onSelect }: TalismanS
 
   return (
     <>
-      {onSelect ? (
+      {onSelect || onReorder ? (
         <button
           type="button"
           {...commonProps}
           aria-pressed={selected}
           aria-label={`${item.definition.name}${sacrifice ? ", 전승 제물로 영구 파괴 예정" : ""}`}
           disabled={item.disabled}
-          onClick={() => onSelect(item)}
+          draggable={Boolean(onReorder) && !item.disabled}
+          onDragStart={(event) => {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", item.instance.instanceId);
+          }}
+          onDragOver={(event) => {
+            if (!onReorder) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          }}
+          onDrop={(event) => {
+            if (!onReorder) return;
+            event.preventDefault();
+            const sourceId = event.dataTransfer.getData("text/plain");
+            if (sourceId) onReorder(sourceId, item.instance.instanceId);
+          }}
+          onClick={() => onSelect?.(item)}
         >
           {content}
         </button>
@@ -231,6 +230,7 @@ function TalismanSlot({ item, selected, sacrifice, firing, onSelect }: TalismanS
             <b>{item.definition.name}</b>
             <em>{RARITY_LABELS[item.definition.rarity]} · {item.definition.price}냥</em>
             <p>{item.definition.description}</p>
+            <small className="talisman-strip__hint-timing">{getTalismanTimingText(item.definition)}</small>
             {item.instance.growth !== 0 ? <i>성장 +{item.instance.growth}</i> : null}
             {item.contributionLabel ? <u>{item.contributionLabel}</u> : null}
           </aside>,
@@ -249,6 +249,7 @@ export function TalismanStrip({
   sacrificeInstanceId,
   firingInstanceId,
   onSelect,
+  onReorder,
   className,
 }: TalismanStripProps) {
   const slotCount = Math.max(slots, items.length);
@@ -288,6 +289,7 @@ export function TalismanStrip({
               sacrifice={sacrificeInstanceId === item.instance.instanceId}
               firing={firingInstanceId === item.instance.instanceId}
               onSelect={onSelect}
+              onReorder={onReorder}
             />
           );
         })}

@@ -17,6 +17,8 @@ import {
   CONTRACTS,
   PACKS,
   PACK_BY_ID,
+  START_DECK_BY_ID,
+  WEATHER_BY_ID,
 } from "../content/meta";
 import {
   bossAllowsCardToScore,
@@ -83,6 +85,7 @@ import type {
   ImmediateYakuId,
   ForbiddenDefinition,
   PainterDefinition,
+  PackDefinition,
   RoundLogEntry,
   ScoreBreakdown,
   ShopOffer,
@@ -351,7 +354,7 @@ function startRun(state: GameState, startDeckId: string, tutorialMode: boolean, 
         id: `${runId}:start`,
         kind: "system",
         title: "새 달력 펼침",
-        detail: `${startDeckId} · 시드 ${state.seed}`,
+        detail: `${START_DECK_BY_ID[startDeckId]?.name ?? "정석패"} · 시드 ${state.seed}`,
       },
     ],
   };
@@ -480,7 +483,7 @@ function scoreEffectsForState(
     if (weather !== 0) {
       effects.push({
         sourceId: `weather:${state.weatherId}:${card.instanceId}`,
-        label: `날씨 · ${state.weatherId}`,
+        label: `날씨 · ${WEATHER_BY_ID[state.weatherId]?.name ?? "맑음"}`,
         operation: "add_kkeut",
         value: weather,
       });
@@ -1195,9 +1198,8 @@ function categoryPool(state: GameState, shopType: ShopCategory) {
 
 /**
  * The market is one screen with four fixed departments:
- *   부적전 2장 · 비결서점 2장 · 꾸러미 2장 · 금단장 1장
- * Painters are deliberately not a department — a card that turns 1월 into 2월
- * is not worth a quarter of the screen. They still appear inside 화공 묶음.
+ *   부적전 2장 · 비결서점 2장 · 무작위 손질 꾸러미 3장 · 금단장 1장.
+ * 화공패 단품 대신 카드·비결서·부적·소각 꾸러미가 덱 손질방을 채운다.
  * The tutorial round leads with the flat-multiplier charm so the first purchase
  * has an effect a new player can actually read.
  */
@@ -1205,13 +1207,10 @@ const SHOP_DEPARTMENT_SIZES: Record<ShopCategory | "pack", number> = {
   talisman: 2,
   book: 2,
   forbidden: 1,
-  // The deck workshop sells card packs plus one 소각 painter.
-  painter: 1,
-  pack: 2,
+  // 덱 손질방은 네 종류와 세 크기 가운데 서로 다른 꾸러미 셋을 뽑는다.
+  painter: 0,
+  pack: 3,
 };
-
-/** The workshop only ever stocks the burn painter, never the fiddly month edits. */
-const WORKSHOP_PAINTER_IDS = ["p_burn"];
 
 function generateShopOffers(state: GameState): { offers: ShopOffer[]; cursor: number } {
   let cursor = state.rngCursor;
@@ -1244,11 +1243,10 @@ function generateShopOffers(state: GameState): { offers: ShopOffer[]; cursor: nu
   };
 
   for (const category of SHOP_CATEGORIES) {
-    const size = SHOP_DEPARTMENT_SIZES[category];
+    const size = SHOP_DEPARTMENT_SIZES[category]
+      + (category === "book" && countContract(state, "book_weight") >= 1 ? 1 : 0);
     if (size <= 0) continue;
-    const basePool = category === "painter"
-      ? categoryPool(state, category).filter((entry) => WORKSHOP_PAINTER_IDS.includes(entry.id))
-      : categoryPool(state, category);
+    const basePool = categoryPool(state, category);
     const pool = category === "forbidden" && basePool.length > 1
       ? basePool.filter((entry) => entry.id !== state.lastForbiddenOfferId)
       : basePool;
@@ -1287,30 +1285,107 @@ function generateOffers(state: GameState, shopType: ShopCategory, free = false):
  * may carry a random effect tag. Plain cards are deliberate: a pack full of
  * guaranteed powers removes the decision and inflates the deck too quickly.
  */
-function openCardPack(state: GameState, pack: { id: string; name: string; choices: number; picks: number }): {
+function openCardPack(state: GameState, pack: PackDefinition): {
   pendingPack: NonNullable<GameState["pendingPack"]>;
   cursor: number;
 } {
   let cursor = state.rngCursor;
+  if (pack.category === "burn") {
+    const candidates = state.deck
+      .filter((card) => !card.disabledForRound)
+      .map((card) => ({ ...card, tags: [...card.tags] }));
+    return {
+      pendingPack: {
+        packId: pack.id,
+        name: pack.name,
+        category: pack.category,
+        picksLeft: Math.min(pack.picks, candidates.length),
+        candidates,
+      },
+      cursor,
+    };
+  }
+
   const templates = createStandardHwatuDeck();
   const candidates: CardInstance[] = [];
   for (let index = 0; index < pack.choices; index += 1) {
-    const template = templates[Math.floor(randomAt(`${state.seed}:${state.runId}:pack-card:${state.stage}:${pack.id}`, cursor++) * templates.length)];
+    const templateIndex = Math.floor(randomAt(`${state.seed}:${state.runId}:pack-card:${state.stage}:${pack.id}`, cursor++) * templates.length);
+    const template = templates[templateIndex];
     if (!template) continue;
     const effectRoll = randomAt(`${state.seed}:${state.runId}:pack-tag:${state.stage}:${pack.id}`, cursor++);
-    const plainChance = pack.id === "pack_hwatu_large" ? 0.2 : 0.3;
+    const painterGuildLevel = countContract(state, "modified_card_weight");
+    const plainChance = painterGuildLevel >= 1 ? 0.1 : pack.id === "pack_hwatu_large" ? 0.2 : 0.3;
     const tag = effectRoll < plainChance
       ? undefined
       : rollCardEffectTagForCard((effectRoll - plainChance) / (1 - plainChance), template);
-    candidates.push({
+    const candidate: CardInstance = {
       ...template,
       tags: [...template.tags],
       instanceId: `pack:${state.runId}:${state.stage}:${pack.id}:${index}:${cursor}`,
       effectTagId: tag?.id,
+    };
+    if (painterGuildLevel >= 2) {
+      const finishRoll = randomAt(`${state.seed}:${state.runId}:pack-finish:${state.stage}:${pack.id}`, cursor++);
+      const editions = ["gold_leaf", "mother_of_pearl", "five_color"] as const;
+      const seals = ["yellow", "red", "blue", "purple"] as const;
+      if (finishRoll < 0.3) candidate.edition = editions[Math.floor((finishRoll / 0.3) * editions.length)];
+      else if (finishRoll < 0.6) candidate.seal = seals[Math.floor(((finishRoll - 0.3) / 0.3) * seals.length)];
+    }
+    candidates.push(candidate);
+  }
+  return {
+    pendingPack: { packId: pack.id, name: pack.name, category: pack.category, picksLeft: Math.min(pack.picks, candidates.length), candidates },
+    cursor,
+  };
+}
+
+function openRewardPack(state: GameState, pack: PackDefinition): {
+  pendingPack: NonNullable<GameState["pendingPack"]>;
+  cursor: number;
+} {
+  let cursor = state.rngCursor;
+  const pool = pack.category === "book"
+    ? [...BOOKS]
+    : [...categoryPool(state, "talisman")];
+  const rewardCandidates: NonNullable<NonNullable<GameState["pendingPack"]>["rewardCandidates"]> = [];
+
+  // 대서고(동네 책방 계약 2회)는 플레이 기록을 실제 비결서 후보로
+  // 바꾼다. 기존 구현은 설명만 있었고 묶음 추첨에는 전혀 관여하지
+  // 않았기 때문에, 여기서 가장 많이 낸 족보의 책을 첫 칸에 고정한다.
+  if (pack.category === "book" && countContract(state, "book_weight") >= 2) {
+    const favorite = BOOKS
+      .map((book, index) => ({ book, index, count: state.stats.yakusPlayed[book.yakuId] ?? 0 }))
+      .filter((entry) => entry.count > 0)
+      .sort((a, b) => b.count - a.count || a.index - b.index)[0]?.book;
+    if (favorite) {
+      const poolIndex = pool.findIndex((entry) => entry.id === favorite.id);
+      if (poolIndex >= 0) pool.splice(poolIndex, 1);
+      rewardCandidates.push({
+        candidateId: `${pack.id}:${state.stage}:favorite:${cursor}`,
+        definitionId: favorite.id,
+        category: "book",
+      });
+    }
+  }
+
+  for (let index = rewardCandidates.length; index < pack.choices && pool.length > 0; index += 1) {
+    const at = Math.floor(randomAt(`${state.seed}:${state.runId}:pack-reward:${state.stage}:${pack.id}`, cursor++) * pool.length);
+    const [definition] = pool.splice(at, 1);
+    rewardCandidates.push({
+      candidateId: `${pack.id}:${state.stage}:${index}:${cursor}`,
+      definitionId: definition.id,
+      category: pack.category as "book" | "talisman",
     });
   }
   return {
-    pendingPack: { packId: pack.id, name: pack.name, picksLeft: Math.min(pack.picks, candidates.length), candidates },
+    pendingPack: {
+      packId: pack.id,
+      name: pack.name,
+      category: pack.category,
+      picksLeft: Math.min(pack.picks, rewardCandidates.length),
+      candidates: [],
+      rewardCandidates,
+    },
     cursor,
   };
 }
@@ -1321,14 +1396,16 @@ function buyOffer(state: GameState, offerId: string): GameState {
   if (offer.category === "pack") {
     const pack = PACK_BY_ID[offer.definitionId];
     if (!pack) return state;
-    const opened = openCardPack(state, pack);
+    const opened = pack.category === "book" || pack.category === "talisman"
+      ? openRewardPack(state, pack)
+      : openCardPack(state, pack);
     return {
       ...state,
       rngCursor: opened.cursor,
       money: state.money - offer.price,
       pendingPack: opened.pendingPack,
       shopOffers: state.shopOffers.map((entry) => entry.offerId === offer.offerId ? { ...entry, sold: true } : entry),
-      logs: logEntry(state, "reward", `${pack.name} 개봉`, `후보 ${opened.pendingPack.candidates.length}장 중 ${opened.pendingPack.picksLeft}장을 고르세요.`),
+      logs: logEntry(state, "reward", `${pack.name} 개봉`, `후보 ${opened.pendingPack.candidates.length + (opened.pendingPack.rewardCandidates?.length ?? 0)}개 중 ${opened.pendingPack.picksLeft}개를 고르세요.`),
     };
   }
   if (offer.category === "talisman") {
@@ -1468,17 +1545,19 @@ function applyConsumable(state: GameState, option?: string): GameState {
   };
 }
 
-function nextFromShop(state: GameState): GameState {
-  if (state.stage % 3 === 0) {
-    let cursor = state.rngCursor;
-    const pool = [...CONTRACTS];
-    const choices: string[] = [];
-    while (choices.length < 2 && pool.length) {
-      const index = Math.floor(randomAt(`${state.seed}:contract:${state.stage}`, cursor++) * pool.length);
-      choices.push(pool.splice(index, 1)[0].id);
-    }
-    return { ...state, screen: "contract", contractChoices: choices, rngCursor: cursor };
+function openSeasonContract(state: GameState): GameState {
+  let cursor = state.rngCursor;
+  const pool = [...CONTRACTS];
+  const choices: string[] = [];
+  while (choices.length < 2 && pool.length) {
+    const index = Math.floor(randomAt(`${state.seed}:contract:${state.stage}`, cursor++) * pool.length);
+    choices.push(pool.splice(index, 1)[0].id);
   }
+  return { ...state, screen: "contract", contractChoices: choices, rngCursor: cursor };
+}
+
+function nextFromShop(state: GameState): GameState {
+  if (state.stage % 3 === 0) return openSeasonContract(state);
   return {
     ...state,
     stage: state.stage + 1,
@@ -1576,7 +1655,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return finishRound(state);
     }
     case "CONTINUE_AFTER_REWARD": {
-      if (state.stage === 12 && state.infiniteLap === 0) return { ...state, screen: "run_win" };
+      if (state.stage === 12 && state.infiniteLap === 0) return openSeasonContract(state);
       const generated = generateShopOffers(state);
       const baseReroll = Math.max(0, 2 - Math.min(1, countContract(state, "reroll_cost")));
       const firstFree = state.talismans.some((item) => item.definitionId === "t_market_rumor");
@@ -1616,20 +1695,59 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         rerollCost: nextCost,
       };
     }
-    case "PICK_PACK_CARD": {
+    case "CONFIRM_PACK_SELECTION": {
       const pack = state.pendingPack;
       if (!pack || pack.picksLeft <= 0) return state;
-      const card = pack.candidates.find((entry) => entry.instanceId === action.instanceId);
-      if (!card) return state;
-      const picksLeft = pack.picksLeft - 1;
-      const candidates = pack.candidates.filter((entry) => entry.instanceId !== card.instanceId);
+      const selectedIds = [...new Set(action.candidateIds)];
+      const selectedCards = pack.candidates.filter((card) => selectedIds.includes(card.instanceId));
+      const selectedRewards = (pack.rewardCandidates ?? []).filter((candidate) => selectedIds.includes(candidate.candidateId));
+      const selectedCount = selectedCards.length + selectedRewards.length;
+      if (selectedCount === 0 || selectedCount !== selectedIds.length || selectedCount > pack.picksLeft) return state;
+      if (pack.category === "burn" && selectedCount !== pack.picksLeft) return state;
+
+      const selectedTalismanRewards = selectedRewards.filter((candidate) => candidate.category === "talisman");
+      if (state.talismans.length + selectedTalismanRewards.length > getEffectiveTalismanSlots(state)) return state;
+
+      const selectedCardIds = new Set(selectedCards.map((card) => card.instanceId));
+      const burn = pack.category === "burn";
+      let yakuLevels = { ...state.yakuLevels };
+      const talismans = [...state.talismans];
+      let lastConsumableId = state.lastConsumableId;
+      const rewardNames: string[] = [];
+
+      for (const candidate of selectedRewards) {
+        if (candidate.category === "book") {
+          const book = BOOK_BY_ID[candidate.definitionId];
+          if (!book) return state;
+          const current = yakuLevels[book.yakuId] ?? { level: 1, mastery: 0 };
+          yakuLevels = { ...yakuLevels, [book.yakuId]: { ...current, level: current.level + 1 } };
+          lastConsumableId = book.id;
+          rewardNames.push(book.name);
+        } else {
+          const definition = TALISMAN_BY_ID[candidate.definitionId];
+          if (!definition) return state;
+          talismans.push({ instanceId: `${candidate.candidateId}:owned`, definitionId: definition.id, growth: 0 });
+          rewardNames.push(definition.name);
+        }
+      }
+
+      const cardNames = selectedCards.map((card) => `${card.month}월 ${card.name}`);
+      const names = [...cardNames, ...rewardNames];
       return {
         ...state,
-        deck: [...state.deck, card],
-        pendingPack: picksLeft > 0 && candidates.length > 0
-          ? { ...pack, picksLeft, candidates }
-          : null,
-        logs: logEntry(state, "reward", `${card.name} 획득`, `덱이 ${state.deck.length + 1}장이 되었습니다.`),
+        deck: burn
+          ? state.deck.filter((card) => !selectedCardIds.has(card.instanceId))
+          : [...state.deck, ...selectedCards],
+        yakuLevels,
+        talismans,
+        lastConsumableId,
+        pendingPack: null,
+        logs: logEntry(
+          state,
+          "reward",
+          burn ? `${selectedCount}장 소각 확정` : `${selectedCount}개 획득 확정`,
+          names.join(" · "),
+        ),
       };
     }
     case "CLOSE_PACK":
@@ -1692,10 +1810,22 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       [talismans[index], talismans[target]] = [talismans[target], talismans[index]];
       return { ...state, talismans };
     }
+    case "MOVE_TALISMAN_TO": {
+      const from = state.talismans.findIndex((entry) => entry.instanceId === action.instanceId);
+      const to = state.talismans.findIndex((entry) => entry.instanceId === action.targetInstanceId);
+      if (from < 0 || to < 0 || from === to) return state;
+      const talismans = [...state.talismans];
+      const [moved] = talismans.splice(from, 1);
+      talismans.splice(to, 0, moved);
+      return { ...state, talismans };
+    }
     case "CHOOSE_CONTRACT": {
       if (!state.contractChoices.includes(action.contractId)) return state;
       const contracts = [...state.contracts, action.contractId];
       const definition = CONTRACTS.find((entry) => entry.id === action.contractId);
+      if (state.stage === 12 && state.infiniteLap === 0) {
+        return { ...state, contracts, screen: "run_win", contractChoices: [], shopOffers: [], shopType: null };
+      }
       return {
         ...state,
         contracts,

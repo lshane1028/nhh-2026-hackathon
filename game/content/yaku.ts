@@ -28,7 +28,7 @@ export const IMMEDIATE_YAKU_DEFINITIONS: readonly ImmediateYakuDefinition[] = [
   { id: "doksa", name: "독사", description: "1월과 4월", baseKkeut: 0, baseHeung: 6.5, growthKkeut: 0, growthHeung: 0.35, assetTag: "yaku-doksa" },
   { id: "ali", name: "알리", description: "1월과 2월", baseKkeut: 0, baseHeung: 7, growthKkeut: 0, growthHeung: 0.4, assetTag: "yaku-ali" },
   { id: "ttaeng", name: "땡", description: "같은 월 두 장. 월이 높을수록 배수가 큼", baseKkeut: 0, baseHeung: 8, growthKkeut: 0, growthHeung: 0.5, assetTag: "yaku-ttaeng" },
-  { id: "jangttaeng", name: "장땡", description: "10월 두 장. 광땡을 빼면 최고 끗패", baseKkeut: 0, baseHeung: 14, growthKkeut: 0, growthHeung: 0.6, assetTag: "yaku-jangttaeng" },
+  { id: "jangttaeng", name: "장땡", description: "10월 두 장으로 만드는 고유한 땡", baseKkeut: 0, baseHeung: 14, growthKkeut: 0, growthHeung: 0.6, assetTag: "yaku-jangttaeng" },
 ];
 
 /** Bright pairs. Rare enough to stay hidden until the player finds one. */
@@ -43,7 +43,7 @@ export const ALL_IMMEDIATE_YAKU_DEFINITIONS: readonly ImmediateYakuDefinition[] 
   ...SECRET_YAKU_DEFINITIONS,
 ];
 
-/** The collection board. Unchanged by the 짓고땡 switch. */
+/** 판에 낸 패가 왼쪽 수집판에 쌓이며 완성되는 수집 족보. */
 export const COLLECTION_YAKU_DEFINITIONS: readonly CollectionYakuDefinition[] = [
   { id: "hongdan", name: "홍단", description: "1·2·3월 홍단", completionKkeut: 0, completionHeung: 4, growthKkeut: 0, growthHeung: 0.25, required: 3, assetTag: "yaku-collection-hongdan" },
   { id: "chodan", name: "초단", description: "4·5·7월 초단", completionKkeut: 0, completionHeung: 4, growthKkeut: 0, growthHeung: 0.25, required: 3, assetTag: "yaku-collection-chodan" },
@@ -53,6 +53,9 @@ export const COLLECTION_YAKU_DEFINITIONS: readonly CollectionYakuDefinition[] = 
   { id: "three_brights", name: "삼광", description: "비광 없는 광 세 장", completionKkeut: 0, completionHeung: 5, growthKkeut: 0, growthHeung: 0.25, required: 3, assetTag: "yaku-collection-three-brights" },
   { id: "four_brights", name: "사광", description: "광 네 장", completionKkeut: 0, completionHeung: 6, growthKkeut: 0, growthHeung: 0.25, required: 4, assetTag: "yaku-collection-four-brights" },
   { id: "five_brights", name: "오광", description: "광 다섯 장", completionKkeut: 0, completionHeung: 8, growthKkeut: 0, growthHeung: 0.25, required: 5, assetTag: "yaku-collection-five-brights" },
+  { id: "six_brights", name: "육광", description: "광 취급 효과와 복제 패를 포함해 광 여섯 장", completionKkeut: 0, completionHeung: 10, growthKkeut: 0, growthHeung: 0.3, required: 6, assetTag: "yaku-collection-six-brights" },
+  { id: "four_godori", name: "새떼", description: "고도리를 완성하고 새 동물 네 장 수집", completionKkeut: 0, completionHeung: 7, growthKkeut: 0, growthHeung: 0.3, required: 4, assetTag: "yaku-collection-four-godori" },
+  { id: "five_godori", name: "큰 새떼", description: "새 동물 다섯 장 수집", completionKkeut: 0, completionHeung: 10, growthKkeut: 0, growthHeung: 0.35, required: 5, assetTag: "yaku-collection-five-godori" },
 ];
 
 const immediateById = new Map(ALL_IMMEDIATE_YAKU_DEFINITIONS.map((definition) => [definition.id, definition]));

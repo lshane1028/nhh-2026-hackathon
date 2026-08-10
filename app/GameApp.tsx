@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { BOSS_BY_ID } from "@/game/content/bosses";
 import { CONTRACTS, START_DECKS, WEATHER_BY_ID } from "@/game/content/meta";
 import { getStageDefinition } from "@/game/content/stages";
-import { TALISMAN_BY_ID } from "@/game/content/talismans";
+import { getTalismanTimingText, TALISMAN_BY_ID } from "@/game/content/talismans";
 import { BOOK_BY_ID, FORBIDDEN_BY_ID } from "@/game/content/upgrades";
 import { ALL_IMMEDIATE_YAKU_DEFINITIONS, getYakuDisplayName } from "@/game/content/yaku";
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
@@ -63,12 +63,19 @@ import {
   submissionBeatToReveal,
   type DiscardBeat,
   type SubmissionBeat,
+  type TalismanGrowthEvent,
 } from "./components/CardActionTheater";
 import { GameModal } from "./components/GameModal";
+import {
+  buildForbiddenRitualPresentation,
+  createForbiddenRitualSnapshot,
+  ForbiddenRitualTheater,
+  type ForbiddenRitualPresentation,
+} from "./components/ForbiddenRitualTheater";
 import { getGeneratedAssetUrl } from "./components/generated-asset";
 import { HwatuCard } from "./components/HwatuCard";
 import { getAtlasPosition } from "./components/hwatu-atlas";
-import { MarketScreen } from "./components/MarketScreen";
+import { MarketScreen, OwnedTalismanBar } from "./components/MarketScreen";
 import { PlayRail } from "./components/PlayRail";
 import { RunEndScreen } from "./components/RunEndScreen";
 import { TalismanStrip } from "./components/TalismanStrip";
@@ -93,6 +100,10 @@ interface CardPresentationSnapshot {
   collectionCardIdsBefore: string[];
   handBefore: CardInstance[];
   keptCardIds: string[];
+  submissionScoreBefore: number;
+  collectionScoreBefore: number;
+  roundScoreBefore: number;
+  talismanGrowthBefore: Record<string, number>;
 }
 
 interface SubmissionPlayback {
@@ -245,7 +256,8 @@ function collectionItems(
     ribbon: collectionResultForTrack(state, "ribbon", confirmedCardIdsByTrack),
     chaff: collectionResultForTrack(state, "chaff", confirmedCardIdsByTrack),
   };
-  const upgraded = (id: string) => (state.yakuLevels[id]?.level ?? 1) > 1;
+  const yakuLevel = (id: string) => Math.max(1, state.yakuLevels[id]?.level ?? 1);
+  const upgraded = (id: string) => yakuLevel(id) > 1;
 
   // Picture rows come from the deck, so burning a card removes its slot and a
   // joker that turns 8월 into a 광 adds one.
@@ -268,13 +280,14 @@ function collectionItems(
       kind: "bright",
       assetTag: "collection:bright-five-slots",
       iconUrl: "/assets/cards/hwatu/card-08-bright-moon.webp",
-      description: `삼광 3점 · 비삼광 2점${["rain_three_brights", "three_brights", "four_brights", "five_brights"].some(upgraded) ? " · 비결: 고 문턱 감소" : ""}`,
+      description: `삼광 ${2 + yakuLevel("three_brights")}점 · 비삼광 ${1 + yakuLevel("rain_three_brights")}점 · 사광 ${3 + yakuLevel("four_brights")}점 · 오광 ${14 + yakuLevel("five_brights")}점 · 육광 ${21 + yakuLevel("six_brights")}점${["rain_three_brights", "three_brights", "four_brights", "five_brights", "six_brights"].some(upgraded) ? " · 광 비결 1레벨마다 고 문턱 -5%" : ""}`,
       cards: slotsFor("bright"),
       confirmedCount: results.bright.counts.bright,
       milestones: [
         { at: 3, label: "삼광", reward: "3점 · 비광 포함 2점" },
         { at: 4, label: "사광", reward: "4점" },
         { at: 5, label: "오광", reward: "15점" },
+        { at: 6, label: "육광", reward: "22점 · 이후 광당 +4" },
       ],
     },
     {
@@ -298,12 +311,14 @@ function collectionItems(
       kind: "godori",
       assetTag: "collection:godori-track",
       iconUrl: "/assets/cards/hwatu/card-08-animal-bird.webp",
-      description: `완성 +5점${upgraded("godori") ? " · 비결: 짓 5배수 허용" : ""}`,
+      description: `고도리 ${4 + yakuLevel("godori")}점 · 새떼 ${7 + yakuLevel("four_godori")}점 · 큰 새떼 ${11 + yakuLevel("five_godori")}점${upgraded("godori") ? " · 현재 짓 5배수 허용" : " · 비결 2레벨에 짓 5배수 허용"}`,
       cards: slotsFor("godori"),
       confirmedCount: results.godori.counts.godori,
       slotLabels: GODORI_MONTHS.map((month) => `${month}월`),
       milestones: [
         { at: 3, label: "세 마리", reward: upgraded("godori") ? "+5점 · 짓 5배수" : "+5점", active: results.godori.completedSets.godori },
+        { at: 4, label: "새떼", reward: "8점", active: results.godori.completedSets.godori && results.godori.counts.godori >= 4 },
+        { at: 5, label: "큰 새떼", reward: "12점 · 이후 새당 +3", active: results.godori.completedSets.godori && results.godori.counts.godori >= 5 },
       ],
     },
     {
@@ -343,9 +358,9 @@ function collectionItems(
 }
 
 const COLLECTION_SCORE_LINE_IDS: Record<CollectionTrack, ReadonlySet<string>> = {
-  bright: new Set(["rain_three_brights", "three_brights", "four_brights", "five_brights"]),
+  bright: new Set(["rain_three_brights", "three_brights", "four_brights", "five_brights", "six_brights"]),
   animal: new Set(["animal"]),
-  godori: new Set(["godori"]),
+  godori: new Set(["godori", "four_godori", "five_godori"]),
   ribbon: new Set(["ribbon", "hongdan", "chodan", "cheongdan"]),
   chaff: new Set(["chaff"]),
 };
@@ -392,8 +407,21 @@ function IntroScreen({ state, onStart, onDeck, onRules }: {
   const boss = stage.bossId ? BOSS_BY_ID[stage.bossId] : null;
   const bossArtUrl = boss ? getGeneratedAssetUrl(boss.assetTag) : null;
   const weather = WEATHER_BY_ID[state.experimentalRules.weather ? stage.weatherId : "clear"];
+  useEffect(() => {
+    const timers = [0, 1].map((index) => window.setTimeout(() => playCardRevealSound(index + 1), 360 + index * 260));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [stage.stage]);
   return (
-    <main className="intro-screen">
+    <main
+      className={`intro-screen intro-screen--ritual${boss ? " intro-screen--boss" : ""}`}
+      data-month={stage.month}
+      data-boss-id={boss?.id}
+    >
+      <div className="intro-screen__stage-curtain" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </div>
       <header className="intro-screen__heading" data-asset-tag={stage.assetTag}>
         <div className="intro-screen__month" aria-hidden="true">
           <strong>{String(stage.month).padStart(2, "0")}</strong>
@@ -411,24 +439,47 @@ function IntroScreen({ state, onStart, onDeck, onRules }: {
           <small>점</small>
         </div>
       </header>
-      <div className="intro-screen__rules">
-        <h2>이번 판에 적용되는 규칙</h2>
-        <article data-asset-tag={weather.assetTag}>
-          <span className="intro-screen__rule-mark" aria-hidden="true">天</span>
-          <div><strong>날씨 · {weather.name}</strong><small>{weather.description}</small></div>
-        </article>
-        <article
-          data-asset-tag={boss?.assetTag ?? "boss:none"}
-          style={bossArtUrl ? { "--boss-art": `url("${bossArtUrl}")` } as React.CSSProperties : undefined}
-        >
-          <span className="intro-screen__rule-mark" aria-hidden="true">將</span>
-          <div>
-            <strong>{boss ? `두목 · ${boss.name}` : "일반 판"}</strong>
-            <small>{boss?.description ?? "이번 달에는 두목 규칙이 없습니다."}</small>
-            {boss ? <em>대응법 · {boss.counterplay}</em> : null}
+      {boss ? (
+        <section className="intro-screen__boss-encounter" aria-label={`우두머리 ${boss.name} 등장`}>
+          <div
+            className="intro-screen__boss-art"
+            role="img"
+            aria-label={`${boss.name} 우두머리`}
+            style={bossArtUrl ? { "--boss-portrait": `url("${bossArtUrl}")` } as React.CSSProperties : undefined}
+          >
+            <span aria-hidden="true">우두머리 출현</span>
           </div>
-        </article>
-      </div>
+          <div className="intro-screen__boss-copy">
+            <p>이번 판을 막아선 자</p>
+            <h2>{boss.name}</h2>
+            <strong>{boss.description}</strong>
+            <div className="intro-screen__boss-rules">
+              <article>
+                <em>날씨</em>
+                <b>{weather.name}</b>
+                <span>{weather.description}</span>
+              </article>
+              <article>
+                <em>승부의 실마리</em>
+                <b>{boss.counterplay}</b>
+              </article>
+            </div>
+          </div>
+        </section>
+      ) : null}
+      {!boss ? (
+        <div className="intro-screen__rules">
+          <h2><span>이번 판의 규칙</span><small>패를 돌리기 전에 두 규칙을 확인하세요</small></h2>
+          <article className="intro-screen__rule intro-screen__rule--weather" data-asset-tag={weather.assetTag}>
+            <span className="intro-screen__rule-mark" aria-hidden="true">天</span>
+            <div><em>첫째 규칙</em><strong>날씨 · {weather.name}</strong><small>{weather.description}</small></div>
+          </article>
+          <article className="intro-screen__rule intro-screen__rule--plain" data-asset-tag="boss:none">
+            <span className="intro-screen__rule-mark" aria-hidden="true">將</span>
+            <div><em>둘째 규칙</em><strong>일반 판</strong><small>이번 달에는 우두머리 규칙이 없습니다.</small><b>별도의 방해 없이 기본 규칙으로 진행됩니다.</b></div>
+          </article>
+        </div>
+      ) : null}
       {state.calendarStamps.length ? (
         <div className="calendar-strip" aria-label="완료한 달력 도장">
           {state.calendarStamps.map((stamp) => <code key={`${stamp.stage}-${stamp.yakuId}`}>{stamp.month}월 · {getYakuDisplayName(stamp.yakuId)}</code>)}
@@ -443,9 +494,10 @@ function IntroScreen({ state, onStart, onDeck, onRules }: {
   );
 }
 
-function DeckEditor({ state, dispatch }: {
+function DeckEditor({ state, dispatch, onApplyConsumable }: {
   state: GameState;
   dispatch: React.Dispatch<import("@/game/state/actions").GameAction>;
+  onApplyConsumable: (option?: string) => void;
 }) {
   const definition = getPendingConsumableDefinition(state);
   const optionConfig = cardEditorOption(definition);
@@ -473,7 +525,7 @@ function DeckEditor({ state, dispatch }: {
     : forbidden?.effectKey === "make_bright_pay"
       ? "패의 그림은 유지 · 종류만 광으로 승격"
       : forbidden?.effectKey === "wild_month_zero_base"
-        ? "모든 월에 연결 · 이 패의 월값은 0"
+        ? "모든 종류에 연결 · 적힌 월값은 짓에 그대로 적용"
         : null;
   const talismanItems = state.talismans.flatMap((instance) => {
     const talisman = TALISMAN_BY_ID[instance.definitionId];
@@ -482,7 +534,7 @@ function DeckEditor({ state, dispatch }: {
       definition: talisman,
       disabled: !eligibleTargetIds.has(instance.instanceId),
       contributionLabel: !eligibleTargetIds.has(instance.instanceId) && forbidden?.effectKey === "sacrifice_copy"
-        ? "전승 불가 · 중첩되지 않거나 제물/슬롯 조건을 충족하지 못함"
+        ? "전승 불가 · 중첩되지 않거나 제물·부적 칸 조건을 충족하지 못함"
         : undefined,
     }] : [];
   });
@@ -633,7 +685,7 @@ function DeckEditor({ state, dispatch }: {
           <>
             <span>{selectionStatus}</span>
             <button type="button" onClick={() => dispatch({ type: "CANCEL_CONSUMABLE" })}>구매 취소</button>
-            <button className="primary-action" disabled={!canApply} type="button" onClick={() => dispatch({ type: "APPLY_CONSUMABLE", option })}>{applyLabel}</button>
+            <button className="primary-action" disabled={!canApply} type="button" onClick={() => onApplyConsumable(option)}>{applyLabel}</button>
           </>
         ) : (
           <button className="primary-action" type="button" onClick={() => dispatch({ type: "RETURN_TO_PLAY" })}>돌아가기</button>
@@ -648,17 +700,27 @@ export default function GameApp() {
   const [savedState, setSavedState] = useState<GameState | null>(null);
   const [tutorialMode, setTutorialMode] = useState(true);
   const [selectedStartDeckId, setSelectedStartDeckId] = useState("deck_standard");
-  const [storedStartDeckIds] = useState<string[]>(() => {
-    if (typeof window === "undefined") return ["deck_standard"];
-    try {
-      const stored = JSON.parse(window.localStorage.getItem(DECK_UNLOCK_STORAGE_KEY) ?? "[]");
-      if (!Array.isArray(stored)) return ["deck_standard"];
-      const valid = START_DECKS.map((deck) => deck.id).filter((id) => stored.includes(id));
-      return [...new Set(["deck_standard", ...valid])];
-    } catch {
-      return ["deck_standard"];
-    }
-  });
+  // Keep the server render and the browser's first render identical. Reading
+  // localStorage in a state initializer changes the title-screen text before
+  // React hydrates it, which produces a hydration mismatch on every refresh.
+  const [storedStartDeckIds, setStoredStartDeckIds] = useState<string[]>(["deck_standard"]);
+  const [startDeckUnlocksLoaded, setStartDeckUnlocksLoaded] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const stored = JSON.parse(window.localStorage.getItem(DECK_UNLOCK_STORAGE_KEY) ?? "[]");
+        const valid = Array.isArray(stored)
+          ? START_DECKS.map((deck) => deck.id).filter((id) => stored.includes(id))
+          : [];
+        setStoredStartDeckIds([...new Set(["deck_standard", ...valid])]);
+      } catch {
+        setStoredStartDeckIds(["deck_standard"]);
+      } finally {
+        setStartDeckUnlocksLoaded(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   const runEntropy = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
   const [selectedContract, setSelectedContract] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -666,6 +728,7 @@ export default function GameApp() {
   const [tutorialIndex, setTutorialIndex] = useState(0);
   const [tutorialOff, setTutorialOff] = useState(false);
   const [cardPresentation, setCardPresentation] = useState<CardPresentationSnapshot | null>(null);
+  const [forbiddenPresentation, setForbiddenPresentation] = useState<ForbiddenRitualPresentation | null>(null);
   const [submissionPlayback, setSubmissionPlayback] = useState<SubmissionPlayback | null>(null);
   const [discardPlayback, setDiscardPlayback] = useState<DiscardBeat | null>(null);
   const [collectionLanding, setCollectionLanding] = useState<{ originId: string; kind: CollectionTrack } | null>(null);
@@ -688,6 +751,19 @@ export default function GameApp() {
     setSubmissionPlayback({ beat, index, count });
   }, []);
   const handleDiscardBeat = useCallback((beat: DiscardBeat) => setDiscardPlayback(beat), []);
+  const applyConsumableWithPresentation = useCallback((option?: string) => {
+    const definition = getPendingConsumableDefinition(state);
+    const action = { type: "APPLY_CONSUMABLE", option } as const;
+    if (definition && "benefit" in definition) {
+      const snapshot = createForbiddenRitualSnapshot(state, definition);
+      const nextState = gameReducer(state, action);
+      if (nextState !== state && nextState.lastConsumableId === definition.id) {
+        primeGameAudio();
+        setForbiddenPresentation(buildForbiddenRitualPresentation(snapshot, nextState));
+      }
+    }
+    dispatch(action);
+  }, [state]);
   const handleCollectionLand = useCallback((card: CardInstance, _index: number, track: CollectionTrack) => {
     setLandedCollectionTargets((current) => {
       const next = new Set(current);
@@ -718,8 +794,9 @@ export default function GameApp() {
     [highestClearedStage, storedStartDeckIds],
   );
   useEffect(() => {
+    if (!startDeckUnlocksLoaded) return;
     window.localStorage.setItem(DECK_UNLOCK_STORAGE_KEY, JSON.stringify(unlockedStartDeckIds));
-  }, [unlockedStartDeckIds]);
+  }, [startDeckUnlocksLoaded, unlockedStartDeckIds]);
 
   useEffect(() => {
     if (state.runId !== "not-started" && state.screen !== "title") {
@@ -791,6 +868,10 @@ export default function GameApp() {
       collectionCardIdsBefore: [...state.chain.collection.cardIds],
       handBefore: state.hand.map((card) => ({ ...card, tags: [...card.tags] })),
       keptCardIds: state.hand.filter((card) => !selectedIds.has(card.instanceId)).map((card) => card.instanceId),
+      submissionScoreBefore: state.chain.submissionScore,
+      collectionScoreBefore: state.chain.collectionScore,
+      roundScoreBefore: state.chain.roundScore,
+      talismanGrowthBefore: Object.fromEntries(state.talismans.map((item) => [item.instanceId, item.growth])),
     });
     dispatch({ type: "SUBMIT_HAND" });
   };
@@ -812,6 +893,10 @@ export default function GameApp() {
         collectionCardIdsBefore: [...state.chain.collection.cardIds],
         handBefore: state.hand.map((card) => ({ ...card, tags: [...card.tags] })),
         keptCardIds: state.hand.filter((card) => !discardedIds.has(card.instanceId)).map((card) => card.instanceId),
+        submissionScoreBefore: state.chain.submissionScore,
+        collectionScoreBefore: state.chain.collectionScore,
+        roundScoreBefore: state.chain.roundScore,
+        talismanGrowthBefore: Object.fromEntries(state.talismans.map((item) => [item.instanceId, item.growth])),
       });
       const first = orderedDiscarded[0];
       setDiscardPlayback(first ? {
@@ -890,6 +975,18 @@ export default function GameApp() {
   );
   const visibleCollectionScore = visibleCollectionPoints * 20;
   const visibleRoundScore = state.chain.submissionScore + visibleCollectionScore;
+  const submitSnapshot = cardPresentation?.kind === "submit" ? cardPresentation : null;
+  const talismanGrowthEvents = useMemo<TalismanGrowthEvent[]>(() => {
+    if (!submitSnapshot) return [];
+    return state.talismans.flatMap((instance) => {
+      const before = submitSnapshot.talismanGrowthBefore[instance.instanceId] ?? instance.growth;
+      const delta = instance.growth - before;
+      const definition = TALISMAN_BY_ID[instance.definitionId];
+      return definition && delta > 0
+        ? [{ sourceId: instance.instanceId, label: definition.name, delta, total: instance.growth }]
+        : [];
+    });
+  }, [state.talismans, submitSnapshot]);
   const talismanItems = state.talismans.flatMap((instance) => {
     const definition = TALISMAN_BY_ID[instance.definitionId];
     return definition ? [{ instance, definition }] : [];
@@ -901,6 +998,7 @@ export default function GameApp() {
       submittedCards={cardPresentation.cards}
       collectionCards={presentationCollectionCards}
       cupRoles={cardPresentation.collectionCupRoles}
+      growthEvents={talismanGrowthEvents}
       onBeatChange={handleSubmissionBeat}
       onCollectionLand={handleCollectionLand}
       onComplete={clearCardPresentation}
@@ -947,22 +1045,30 @@ export default function GameApp() {
    * Market screens drop both rails. There is no hand to score and no
    * collection to grow here, so the panel gets the whole viewport.
    */
-  const marketShell = (banner: MarketBanner, caption: string, children: React.ReactNode) => (
+  const marketShell = (
+    banner: MarketBanner,
+    caption: string,
+    children: React.ReactNode,
+    bannerTools?: React.ReactNode,
+  ) => (
     <div className="market-shell">
       <header className={`market-shell__banner market-shell__banner--${banner.tone ?? "shop"}`} data-asset-tag={banner.assetTag}>
-        <span className="market-shell__banner-mark" aria-hidden="true">IMG</span>
+        <span className="market-shell__banner-mark" aria-hidden="true">花</span>
         <div>
           <strong>{banner.title}</strong>
           {banner.subtitle ? <span>{banner.subtitle}</span> : null}
         </div>
-        <code>{banner.assetTag}</code>
+        {bannerTools ? <div className="market-shell__banner-tools">{bannerTools}</div> : null}
         <p className="market-shell__caption">{caption}</p>
       </header>
       <main className="market-shell__body">{children}</main>
       <PackPickModal
         key={state.pendingPack?.packId ?? "no-pack"}
         pack={state.pendingPack}
-        onPick={(instanceId) => dispatch({ type: "PICK_PACK_CARD", instanceId })}
+        maxSelections={state.pendingPack?.category === "talisman"
+          ? Math.min(state.pendingPack.picksLeft, Math.max(0, getEffectiveTalismanSlots(state) - state.talismans.length))
+          : state.pendingPack?.picksLeft ?? 0}
+        onConfirm={(candidateIds) => dispatch({ type: "CONFIRM_PACK_SELECTION", candidateIds })}
         onClose={() => dispatch({ type: "CLOSE_PACK" })}
       />
       {tutorialStep ? (
@@ -991,6 +1097,12 @@ export default function GameApp() {
           { id: "reset", label: "제목으로", variant: "danger", onClick: resetToTitle },
         ]}
       />
+      {forbiddenPresentation ? (
+        <ForbiddenRitualTheater
+          presentation={forbiddenPresentation}
+          onClose={() => setForbiddenPresentation(null)}
+        />
+      ) : null}
     </div>
   );
 
@@ -1002,10 +1114,10 @@ export default function GameApp() {
           <label className="tutorial-toggle"><input type="checkbox" checked={tutorialMode} onChange={(event) => setTutorialMode(event.target.checked)} /><span>처음이라면 단계별 안내 켜기</span></label>
         </section>
         <TitleScreen
-          assetTag="ui:title:flower-board-go"
-          title="꽃판: GO!"
-          subtitle="열두 달, 끝까지 판을 키워라"
-          description="손패에서 짓을 맞추고 남은 패로 끗을 세웁니다. 족보와 부적으로 점수를 불린 뒤, 목표를 넘기면 스톱할지 고할지 선택하세요."
+          assetTag="ui:gyeonghwasuwol-logo-backdrop"
+          title="경화수월"
+          subtitle="화투패로 끗을 만들고 목표 점수를 넘기세요."
+          description="두 장으로 끗을 만들고, 남은 패와 수집 족보로 점수를 쌓아 판을 이기세요."
           startDecks={START_DECKS}
           selectedStartDeckId={selectedStartDeckId}
           unlockedStartDeckIds={unlockedStartDeckIds}
@@ -1036,7 +1148,7 @@ export default function GameApp() {
   }
 
   if (state.screen === "deck_editor" || state.screen === "codex") {
-    return <div className="game-root"><DeckEditor state={state} dispatch={dispatch} /></div>;
+    return <div className="game-root"><DeckEditor state={state} dispatch={dispatch} onApplyConsumable={applyConsumableWithPresentation} /></div>;
   }
 
   if (state.screen === "reward" && !cardPresentation) {
@@ -1074,6 +1186,13 @@ export default function GameApp() {
   }
 
   if (state.screen === "shop") {
+    const ownedTalismanViews = talismanItems.map(({ instance, definition }) => ({
+      instanceId: instance.instanceId,
+      name: definition.name,
+      description: `${definition.description} ${getTalismanTimingText(definition)}`,
+      assetTag: definition.assetTag,
+      sellPrice: Math.max(1, Math.floor(definition.price / 2)),
+    }));
     const offers = state.shopOffers.flatMap((offer) => {
       const definition = getDefinitionForOffer(offer);
       let description: string = definition?.description ?? "";
@@ -1090,8 +1209,10 @@ export default function GameApp() {
         : offer.category === "talisman" && state.talismans.length >= getEffectiveTalismanSlots(state)
           ? `부적 주머니가 가득 참 · ${state.talismans.length}/${getEffectiveTalismanSlots(state)}칸`
           : undefined;
-      let detailLabel = offer.category === "pack"
-        ? "개봉하면 무료 후보 3장"
+      let detailLabel = offer.category === "pack" && definition && "choices" in definition
+        ? definition.category === "burn"
+          ? `덱 전체에서 ${definition.picks}장 확정 소각`
+          : `후보 ${definition.choices}개 중 ${definition.picks}개 선택`
         : offer.category === "talisman"
           ? "빈 부적 칸에 바로 장착"
           : offer.category === "book"
@@ -1099,6 +1220,14 @@ export default function GameApp() {
             : offer.category === "painter"
               ? "구매 후 바꿀 카드를 고름"
               : "대가를 확인하고 사용";
+
+      if (offer.category === "talisman") {
+        const talisman = TALISMAN_BY_ID[offer.definitionId];
+        if (talisman) {
+          description = `${talisman.description} ${getTalismanTimingText(talisman)}`;
+          detailLabel = "빈 부적 칸에 바로 장착 · 왼쪽부터 순서대로 발동";
+        }
+      }
 
       if (offer.category === "book") {
         const book = BOOK_BY_ID[offer.definitionId];
@@ -1150,18 +1279,18 @@ export default function GameApp() {
         openedPack={openedPack}
         rerollCost={state.rerollCost}
         canReroll={true}
-        ownedTalismans={talismanItems.map(({ instance, definition }) => ({
-          instanceId: instance.instanceId,
-          name: definition.name,
-          description: definition.description,
-          assetTag: definition.assetTag,
-          sellPrice: Math.max(1, Math.floor(definition.price / 2)),
-        }))}
+        ownedTalismans={ownedTalismanViews}
         onSellTalisman={(instanceId) => dispatch({ type: "SELL_TALISMAN", instanceId })}
+        onMoveTalisman={(instanceId, targetInstanceId) => dispatch({ type: "MOVE_TALISMAN_TO", instanceId, targetInstanceId })}
         onOpenDeck={() => dispatch({ type: "OPEN_SCREEN", screen: "deck_editor" })}
         onBuyOffer={(offerId) => dispatch({ type: "BUY_OFFER", offerId })}
         onReroll={() => dispatch({ type: "REROLL_SHOP" })}
         onLeave={() => dispatch({ type: "NEXT_STAGE" })}
+      />,
+      <OwnedTalismanBar
+        items={ownedTalismanViews}
+        onSell={(instanceId) => dispatch({ type: "SELL_TALISMAN", instanceId })}
+        onMove={(instanceId, targetInstanceId) => dispatch({ type: "MOVE_TALISMAN_TO", instanceId, targetInstanceId })}
       />,
     );
   }
@@ -1169,13 +1298,15 @@ export default function GameApp() {
   if (state.screen === "contract") {
     const contracts = state.contractChoices.flatMap((id) => {
       const definition = CONTRACTS.find((entry) => entry.id === id);
-      return definition ? [{ definition }] : [];
+      const currentLevel = state.contracts.filter((contractId) => contractId.split("@")[0] === id).length;
+      return definition ? [{ definition, currentLevel }] : [];
     });
     return marketShell(
       { assetTag: "ui:contract:season-scroll", title: "계절 결산", subtitle: "열두 달 내내 남는 계약", tone: "contract" },
       `${state.stage}월 계절 결산`,
       <MarketScreen
         mode="contract"
+        seasonMonth={((((state.stage - 1) % 12) + 1) as 3 | 6 | 9 | 12)}
         className="market-panel--contract"
         assetTag="ui:contract:season-scroll"
         stageLabel={`${state.stage}월 계절 결산`}
@@ -1252,6 +1383,9 @@ export default function GameApp() {
     : undefined;
   const activeReveal = theaterReveal
     ?? (shownBreakdown === state.lastScore ? reveal : undefined);
+  const firingTalismanId = submissionPlayback?.beat.kind === "growth"
+    ? submissionPlayback.beat.sourceId ?? null
+    : activeReveal?.playing ? activeReveal.current?.sourceId ?? null : null;
   const discardSnapshot = cardPresentation?.kind === "discard" ? cardPresentation : null;
   const inlineHand = getInlineHandPresentation(
     discardSnapshot?.handBefore ?? state.hand,
@@ -1286,7 +1420,8 @@ export default function GameApp() {
             assetTag="ui:talisman-strip"
             items={talismanItems}
             slots={getEffectiveTalismanSlots(state)}
-            firingInstanceId={activeReveal?.playing ? activeReveal.current?.sourceId ?? null : null}
+            firingInstanceId={firingTalismanId}
+            onReorder={(instanceId, targetInstanceId) => dispatch({ type: "MOVE_TALISMAN_TO", instanceId, targetInstanceId })}
           />
         </div>
 
@@ -1300,6 +1435,7 @@ export default function GameApp() {
         ) : null}
 
         <div className="play-board__felt">
+          {cardTheater}
           <p className="play-board__prompt">
             {isDecision
               ? `${format(state.chain.roundScore)}점 · 문턱 ${format(requirement)}점을 넘겼습니다`
@@ -1364,9 +1500,9 @@ export default function GameApp() {
                   {" · "}
                   {preview.breakdown.rankLabel || appliedYaku?.name || "끗패"}
                 </>
-              ) : (
+              ) : state.screen === "play" && state.selectedCardIds.length >= 2 ? (
                 "짓이 맞지 않습니다"
-              )}
+              ) : null}
               {yakuChoices.length > 1 ? (
                 <em>
                   다른 갈래 {yakuChoices.length - 1}가지
@@ -1377,9 +1513,9 @@ export default function GameApp() {
           </div>
         </div>
 
-        {state.screen === "play" ? (
-          <footer className="hand-actions">
-            <button type="button" disabled={!state.selectedCardIds.length} onClick={() => dispatch({ type: "CLEAR_SELECTION" })}>선택 해제</button>
+        {state.screen === "play" || Boolean(submitSnapshot) ? (
+          <footer className="hand-actions" aria-busy={Boolean(cardPresentation)}>
+            <button type="button" disabled={!state.selectedCardIds.length || Boolean(cardPresentation)} onClick={() => dispatch({ type: "CLEAR_SELECTION" })}>선택 해제</button>
             <button type="button" className="primary-action" disabled={!preview || state.handsRemaining <= 0 || Boolean(cardPresentation) || Boolean(state.pendingCupCardId)} data-tutorial="submit" onClick={beginSubmitPresentation}><strong>제출</strong><span>{`${state.handsRemaining}회 남음`}</span></button>
             <button type="button" className="discard-action" disabled={!state.selectedCardIds.length || state.discardsRemaining <= 0 || Boolean(cardPresentation) || Boolean(state.pendingCupCardId)} data-tutorial="discard" onClick={beginDiscardPresentation}><strong>버리기</strong><span>{state.discardsRemaining}회 남음</span></button>
           </footer>
@@ -1389,7 +1525,7 @@ export default function GameApp() {
               type="button"
               className="stop-action"
               data-tutorial="stop"
-              disabled={goRequired}
+              disabled={goRequired || Boolean(cardPresentation)}
               onClick={() => {
                 primeGameAudio();
                 dispatch({ type: "STOP_ROUND" });
@@ -1406,7 +1542,7 @@ export default function GameApp() {
               type="button"
               className="go-action"
               data-tutorial="go"
-              disabled={!goAvailable}
+              disabled={!goAvailable || Boolean(cardPresentation)}
               onClick={() => dispatch({ type: "DECLARE_GO" })}
             >
               <strong>{state.chain.goCount + 1}고</strong>
@@ -1431,9 +1567,9 @@ export default function GameApp() {
         bossLabel={boss?.name ?? null}
         targetScore={requirement}
         rewardLabel={`${baseReward}냥`}
-        roundScore={visibleRoundScore}
-        submissionScore={state.chain.submissionScore}
-        collectionScore={visibleCollectionScore}
+        roundScore={submitSnapshot?.roundScoreBefore ?? visibleRoundScore}
+        submissionScore={submitSnapshot?.submissionScoreBefore ?? state.chain.submissionScore}
+        collectionScore={submitSnapshot?.collectionScoreBefore ?? visibleCollectionScore}
         goCount={state.chain.goCount}
         breakdown={shownBreakdown}
         reveal={activeReveal}
@@ -1494,15 +1630,15 @@ export default function GameApp() {
       ) : null}
       <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />
       <GameModal id="restart-run" open={restartOpen} assetTag="ui:warning:restart" title="현재 판을 끝낼까요?" description="저장된 달력과 덱이 초기화됩니다." onClose={() => setRestartOpen(false)} actions={[{ id: "cancel", label: "계속 플레이", onClick: () => setRestartOpen(false) }, { id: "reset", label: "제목으로", variant: "danger", onClick: resetToTitle }]} />
-      {cardTheater}
     </div>
   );
 }
 
-/** Card pack payout: pick N of the candidates, each carrying an effect tag. */
-function PackPickModal({ pack, onPick, onClose }: {
+/** Card pack payout: mark choices locally, then take them in one transaction. */
+function PackPickModal({ pack, maxSelections, onConfirm, onClose }: {
   pack: GameState["pendingPack"];
-  onPick: (instanceId: string) => void;
+  maxSelections: number;
+  onConfirm: (candidateIds: string[]) => void;
   onClose: () => void;
 }) {
   const packKindLabel = (card: CardInstance) => {
@@ -1515,19 +1651,27 @@ function PackPickModal({ pack, onPick, onClose }: {
   const [opened, setOpened] = useState(false);
   const [opening, setOpening] = useState(false);
   const [revealedCount, setRevealedCount] = useState(0);
-  const [initialRevealCount] = useState(() => pack?.candidates.length ?? 0);
-  const packSlug = pack?.packId === "pack_hwatu_large" ? "hwatu-large" : "hwatu-small";
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [initialRevealCount] = useState(() => (pack?.candidates.length ?? 0) + (pack?.rewardCandidates?.length ?? 0));
+  const packSlug = pack?.packId.replace(/^pack_/, "").replaceAll("_", "-") ?? "hwatu-small";
   const packAssetTag = `pack:${packSlug}`;
   const packArtUrl = getGeneratedAssetUrl(packAssetTag);
 
   useEffect(() => {
     if (!opened) return;
+    if (pack?.category === "burn") {
+      const timer = window.setTimeout(() => {
+        setRevealedCount(pack.candidates.length);
+        playCardRevealSound(0);
+      }, 180);
+      return () => window.clearTimeout(timer);
+    }
     const timers = Array.from({ length: initialRevealCount }, (_, index) => window.setTimeout(() => {
       setRevealedCount(index + 1);
       playCardRevealSound(index);
     }, 180 + index * 145));
     return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [initialRevealCount, opened]);
+  }, [initialRevealCount, opened, pack]);
 
   const handleOpen = () => {
     if (opening) return;
@@ -1538,24 +1682,49 @@ function PackPickModal({ pack, onPick, onClose }: {
     window.setTimeout(() => setOpened(true), 520);
   };
 
-  const handlePick = (instanceId: string) => {
+  const toggleSelection = (candidateId: string) => {
     playCardPickSound();
     window.navigator.vibrate?.(18);
-    onPick(instanceId);
+    setSelectedIds((current) => current.includes(candidateId)
+      ? current.filter((id) => id !== candidateId)
+      : current.length < maxSelections
+        ? [...current, candidateId]
+        : current);
   };
+  const packDescription = pack?.category === "burn"
+    ? `태울 패 ${maxSelections}장을 먼저 표시한 뒤 소각 확정을 누르세요. 확정 전에는 덱이 바뀌지 않습니다.`
+    : pack?.category === "book"
+      ? `독파할 비결서를 최대 ${maxSelections}권까지 표시한 뒤 획득 확정을 누르세요.`
+      : pack?.category === "talisman"
+        ? `가져갈 부적을 최대 ${maxSelections}개까지 표시한 뒤 획득 확정을 누르세요. 왼쪽부터 발동합니다.`
+        : `가져갈 패를 최대 ${maxSelections}장까지 표시한 뒤 획득 확정을 누르세요. 확정 전에는 덱이 바뀌지 않습니다.`;
 
   return (
     <GameModal
       id="pack-pick"
       open={Boolean(pack)}
       assetTag={packAssetTag}
-      title={pack ? (opened ? `${pack.name} · ${pack.picksLeft}장 고르기` : `${pack.name} 개봉`) : "화투 묶음"}
-      description={opened ? "가져갈 패를 고르세요. 패에 붙은 효과도 덱에 그대로 들어갑니다." : "매듭을 풀고 봉인을 뜯어 안에 든 패를 확인하세요."}
+      title={pack ? (opened
+        ? `${pack.name} · ${selectedIds.length}/${maxSelections}${pack.category === "burn" ? "장 소각 선택" : "개 선택"}`
+        : `${pack.name} 개봉`) : "화투 묶음"}
+      description={opened ? packDescription : "매듭을 풀고 봉인을 뜯어 안에 든 것을 확인하세요."}
       closeOnBackdrop={false}
+      dismissible={pack?.category !== "burn"}
       closeLabel="그만 고르기"
       onClose={onClose}
       className="game-modal--pack"
-      actions={opened ? [{ id: "close", label: "그만 고르기", onClick: onClose }] : []}
+      actions={opened && pack ? [
+        {
+          id: "confirm",
+          label: pack.category === "burn" ? `${selectedIds.length}장 소각 확정` : `${selectedIds.length}개 획득 확정`,
+          variant: "primary",
+          disabled: pack.category === "burn"
+            ? selectedIds.length !== maxSelections || maxSelections === 0
+            : selectedIds.length === 0,
+          onClick: () => onConfirm(selectedIds),
+        },
+        ...(pack.category !== "burn" ? [{ id: "close", label: "그만 고르기", onClick: onClose } as const] : []),
+      ] : []}
     >
       {!opened ? (
         <div className="pack-opening" data-tutorial="pack-picks">
@@ -1568,18 +1737,21 @@ function PackPickModal({ pack, onPick, onClose }: {
           <p>눌러서 묶음을 개봉하세요</p>
         </div>
       ) : (
-        <ul className="pack-picks pack-picks--revealing" data-tutorial="pack-picks">
+        <ul className={pack?.category === "burn" ? "pack-picks pack-picks--revealing pack-picks--burn" : "pack-picks pack-picks--revealing"} data-tutorial="pack-picks">
           {pack?.candidates.map((card, index) => {
             const tag = card.effectTagId ? CARD_EFFECT_TAG_BY_ID[card.effectTagId] : undefined;
+            const selected = selectedIds.includes(card.instanceId);
             return (
-              <li className={index < revealedCount ? "pack-picks__item pack-picks__item--revealed" : "pack-picks__item"} key={card.instanceId}>
+              <li className={`${index < revealedCount ? "pack-picks__item pack-picks__item--revealed" : "pack-picks__item"}${selected ? " pack-picks__item--selected" : ""}`} key={card.instanceId}>
                 <HwatuCard
                   card={card}
                   className="pack-pick__card"
-                  onSelect={() => handlePick(card.instanceId)}
-                  ariaLabel={`${card.month}월 ${card.name}${tag ? `, ${tag.name}` : ""}`}
+                  selected={selected}
+                  onSelect={() => toggleSelection(card.instanceId)}
+                  ariaLabel={`${card.month}월 ${card.name}${tag ? `, ${tag.name}` : ""}${pack.category === "burn" ? ", 소각 후보" : ""}`}
                 />
-                <div className={tag ? `pack-pick__details pack-pick__details--${tag.id.replaceAll("_", "-")}` : "pack-pick__details pack-pick__details--plain"}>
+                {selected ? <span className="pack-pick__selected-mark">선택 {selectedIds.indexOf(card.instanceId) + 1}</span> : null}
+                {pack.category !== "burn" ? <div className={tag ? `pack-pick__details pack-pick__details--${tag.id.replaceAll("_", "-")}` : "pack-pick__details pack-pick__details--plain"}>
                   <div className="pack-pick__identity">
                     <span><b>{card.month}월</b> · {packKindLabel(card)}</span>
                     <small>{card.monthName}</small>
@@ -1595,7 +1767,27 @@ function PackPickModal({ pack, onPick, onClose }: {
                       <span><b>기본패</b><small>추가 효과 없음</small></span>
                     </div>
                   )}
-                </div>
+                </div> : null}
+              </li>
+            );
+          })}
+          {pack?.rewardCandidates?.map((candidate, rewardIndex) => {
+            const definition = candidate.category === "book"
+              ? BOOK_BY_ID[candidate.definitionId]
+              : TALISMAN_BY_ID[candidate.definitionId];
+            if (!definition) return null;
+            const artUrl = getGeneratedAssetUrl(definition.assetTag);
+            const index = pack.candidates.length + rewardIndex;
+            const selected = selectedIds.includes(candidate.candidateId);
+            return (
+              <li className={`${index < revealedCount ? "pack-picks__item pack-picks__item--revealed" : "pack-picks__item"}${selected ? " pack-picks__item--selected" : ""}`} key={candidate.candidateId}>
+                <button type="button" className="pack-reward-pick" aria-pressed={selected} onClick={() => toggleSelection(candidate.candidateId)}>
+                  <span className="pack-reward-pick__art" style={artUrl ? { backgroundImage: `url("${artUrl}")` } : undefined} aria-hidden="true" />
+                  <strong>{definition.name}</strong>
+                  <small>{definition.description}</small>
+                  <b>{candidate.category === "book" ? "족보 레벨 +1" : "부적 획득"}</b>
+                </button>
+                {selected ? <span className="pack-pick__selected-mark">선택 {selectedIds.indexOf(candidate.candidateId) + 1}</span> : null}
               </li>
             );
           })}

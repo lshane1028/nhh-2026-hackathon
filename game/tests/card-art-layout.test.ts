@@ -63,5 +63,7 @@ describe("uncropped card art", () => {
     expect(css).toMatch(/\.collection-card__art\s*\{[^}]*object-fit:\s*contain/);
     expect(css).toMatch(/\.talisman-strip__art\s*>\s*img\s*\{[^}]*object-fit:\s*contain/);
     expect(css).toMatch(/\.talisman-strip__hint-art\s*\{[^}]*object-fit:\s*contain/);
+    expect(css).toMatch(/\.card-art-frame\s*\{[^}]*padding:\s*2px/);
+    expect(css).toMatch(/\.talisman-strip__art--generated\s*\{[^}]*padding:\s*0\.12rem/);
   });
 });

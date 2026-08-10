@@ -7,6 +7,7 @@ import {
   type CollectionTrack,
   type CupRoleLookup,
 } from "@/game/engine/collection-board";
+import { getImmediateYakuDefinition } from "@/game/content/yaku";
 import type { CardInstance, ScoreBreakdown, ScoreOperation } from "@/game/types";
 import {
   playCardPickSound,
@@ -16,10 +17,11 @@ import {
   playDrawSnapSound,
   playJitAdditionSound,
   playKkeutHitSound,
+  playHighYakuRevealSound,
   playSubmissionFinaleSound,
+  playTalismanGrowthSound,
   playYakuRevealSound,
 } from "../audio/game-sfx";
-import { getCardModifierLines } from "./card-visuals";
 import { HwatuCard } from "./HwatuCard";
 import type { ScoreRevealState } from "./useScoreReveal";
 
@@ -31,7 +33,15 @@ export type SubmissionBeatKind =
   | "jit-card"
   | "effect"
   | "collect"
-  | "finale";
+  | "finale"
+  | "growth";
+
+export interface TalismanGrowthEvent {
+  sourceId: string;
+  label: string;
+  delta: number;
+  total: number;
+}
 
 export interface SubmissionBeat {
   kind: SubmissionBeatKind;
@@ -43,8 +53,25 @@ export interface SubmissionBeat {
   runningJit: number;
   runningHeung: number;
   operation?: ScoreOperation;
+  /** Talisman instance highlighted above the felt for non-score growth beats. */
+  sourceId?: string;
   /** Exact collection row this beat files the card into. */
   collectionTrack?: CollectionTrack;
+  /** 0=일반, 1=땡/고레벨, 2=광땡, 3=38광땡. */
+  emphasisTier?: 0 | 1 | 2 | 3;
+}
+
+function yakuEmphasisTier(breakdown: ScoreBreakdown): 0 | 1 | 2 | 3 {
+  if (breakdown.yakuId === "gwangttaeng_38") return 3;
+  if (breakdown.yakuId.startsWith("gwangttaeng_")) return 2;
+  const definition = getImmediateYakuDefinition(breakdown.yakuId);
+  const estimatedLevel = definition.growthHeung > 0
+    ? Math.max(1, Math.floor((breakdown.startingHeung - definition.baseHeung) / definition.growthHeung) + 1)
+    : 1;
+  if (estimatedLevel >= 5) return 2;
+  if (estimatedLevel >= 3) return 1;
+  if (breakdown.yakuId === "ttaeng" || breakdown.yakuId === "jangttaeng" || breakdown.startingHeung >= 10) return 1;
+  return 0;
 }
 
 export function submissionBeatToReveal(
@@ -53,10 +80,10 @@ export function submissionBeatToReveal(
   count: number,
   finalScore: number,
 ): ScoreRevealState {
-  const finale = beat.kind === "finale";
+  const finale = beat.kind === "finale" || beat.kind === "growth";
   return {
     visible: true,
-    playing: !finale,
+    playing: beat.kind !== "finale",
     kkeut: beat.runningJit,
     heung: beat.runningHeung,
     total: finale ? finalScore : null,
@@ -85,6 +112,7 @@ export function buildSubmissionBeats(
   submittedCards: readonly CardInstance[],
   collectionCards: readonly CardInstance[] = submittedCards,
   cupRoles?: CupRoleLookup,
+  growthEvents: readonly TalismanGrowthEvent[] = [],
 ): SubmissionBeat[] {
   const scoringIds = new Set(breakdown.scoringCardIds);
   const scoringCards = submittedCards.filter((card) => scoringIds.has(card.instanceId));
@@ -113,9 +141,10 @@ export function buildSubmissionBeats(
     eyebrow: "끗패 족보",
     title: breakdown.rankLabel || breakdown.yakuName,
     detail: `두 장이 만나 기본 배수 ×${breakdown.startingHeung}`,
-    duration: 820,
+    duration: 1_260 + yakuEmphasisTier(breakdown) * 360,
     runningJit,
     runningHeung,
+    emphasisTier: yakuEmphasisTier(breakdown),
   });
 
   const consumedOperations = new Set<number>();
@@ -145,22 +174,8 @@ export function buildSubmissionBeats(
     if (operation.sourceId === `${breakdown.yakuId}:rank`) appendOperation(operation, index);
   });
 
-  kkeutCards.forEach((card, cardIndex) => {
-    const modifiers = getCardModifierLines(card);
-    beats.push({
-      kind: "kkeut-card",
-      activeCardIds: [card.instanceId],
-      eyebrow: `끗패 ${cardIndex + 1}/${kkeutCards.length}`,
-      title: `${card.month}월 ${card.name}`,
-      detail: modifiers.length ? modifiers.join(" · ") : `${breakdown.rankLabel || breakdown.yakuName}에 참여`,
-      duration: 500,
-      runningJit,
-      runningHeung,
-    });
-    breakdown.operations.forEach((operation, index) => {
-      if (!consumedOperations.has(index) && operationCardIds(operation).includes(card.instanceId)) appendOperation(operation, index);
-    });
-  });
+  // 끗패 두 장은 족보 이름과 함께 한 번에 강조한다. 카드 이름을 한 장씩
+  // 읽는 장면은 같은 월을 두 번 반복해 흐름을 끊었고, 정작 족보가 짧았다.
 
   if (jitCards.length > 0) {
     beats.push({
@@ -247,16 +262,38 @@ export function buildSubmissionBeats(
     runningJit: breakdown.finalKkeut,
     runningHeung: breakdown.finalHeung,
   });
+  const growthNumber = (value: number) => new Intl.NumberFormat("ko-KR", {
+    maximumFractionDigits: 2,
+  }).format(value);
+  growthEvents
+    .filter((event) => event.delta > 0)
+    .forEach((event) => {
+      beats.push({
+        kind: "growth",
+        activeCardIds: [],
+        eyebrow: "부적이 힘을 얻습니다",
+        title: `${event.label} · 성장 +${growthNumber(event.delta)}`,
+        detail: `영구 성장 누적 +${growthNumber(event.total)}`,
+        duration: 920,
+        runningJit: breakdown.finalKkeut,
+        runningHeung: breakdown.finalHeung,
+        sourceId: event.sourceId,
+      });
+    });
   return beats;
 }
 
 function playSubmissionBeat(beat: SubmissionBeat, index: number) {
   if (beat.kind === "intro") playCardRevealSound(0);
-  else if (beat.kind === "yaku") playYakuRevealSound();
+  else if (beat.kind === "yaku") {
+    if (beat.emphasisTier) playHighYakuRevealSound(beat.emphasisTier);
+    else playYakuRevealSound();
+  }
   else if (beat.kind === "kkeut-card" || beat.kind === "effect") playKkeutHitSound(index);
   else if (beat.kind === "jit-start") playCardPickSound();
   else if (beat.kind === "jit-card") playJitAdditionSound(index);
   else if (beat.kind === "finale") playSubmissionFinaleSound();
+  else if (beat.kind === "growth") playTalismanGrowthSound();
 }
 
 interface CollectionFlight {
@@ -333,6 +370,7 @@ interface SubmissionTheaterProps {
   submittedCards: readonly CardInstance[];
   collectionCards?: readonly CardInstance[];
   cupRoles?: CupRoleLookup;
+  growthEvents?: readonly TalismanGrowthEvent[];
   onBeatChange?: (beat: SubmissionBeat, index: number, count: number) => void;
   onCollectionLand?: (card: CardInstance, index: number, track: CollectionTrack) => void;
   onComplete: () => void;
@@ -343,13 +381,14 @@ export function SubmissionTheater({
   submittedCards,
   collectionCards = submittedCards,
   cupRoles,
+  growthEvents = [],
   onBeatChange,
   onCollectionLand,
   onComplete,
 }: SubmissionTheaterProps) {
   const beats = useMemo(
-    () => buildSubmissionBeats(breakdown, submittedCards, collectionCards, cupRoles),
-    [breakdown, collectionCards, cupRoles, submittedCards],
+    () => buildSubmissionBeats(breakdown, submittedCards, collectionCards, cupRoles, growthEvents),
+    [breakdown, collectionCards, cupRoles, growthEvents, submittedCards],
   );
   const [index, setIndex] = useState(0);
   const soundedIndex = useRef(-1);
@@ -416,7 +455,7 @@ export function SubmissionTheater({
   const active = new Set(beat.activeCardIds);
 
   return (
-    <section className={`card-theater submission-theater submission-theater--${beat.kind}`} aria-live="assertive" aria-label="제출 득점 연출">
+    <section className={`card-theater submission-theater submission-theater--${beat.kind} submission-theater--tier-${beat.emphasisTier ?? 0}`} aria-live="assertive" aria-label="제출 득점 연출">
       <div className="card-theater__backdrop" />
       <div className="card-theater__stage">
         <header className="card-theater__headline">

@@ -18,13 +18,14 @@ export type GameAction =
   | { type: "CONTINUE_AFTER_REWARD" }
   | { type: "BUY_OFFER"; offerId: string }
   | { type: "REROLL_SHOP" }
-  | { type: "PICK_PACK_CARD"; instanceId: string }
+  | { type: "CONFIRM_PACK_SELECTION"; candidateIds: string[] }
   | { type: "CLOSE_PACK" }
   | { type: "SELECT_CONSUMABLE_TARGET"; cardId: string }
   | { type: "APPLY_CONSUMABLE"; option?: string }
   | { type: "CANCEL_CONSUMABLE" }
   | { type: "SELL_TALISMAN"; instanceId: string }
   | { type: "MOVE_TALISMAN"; instanceId: string; direction: -1 | 1 }
+  | { type: "MOVE_TALISMAN_TO"; instanceId: string; targetInstanceId: string }
   | { type: "CHOOSE_CONTRACT"; contractId: string }
   | { type: "OPEN_SCREEN"; screen: ScreenId }
   | { type: "RETURN_TO_PLAY" }

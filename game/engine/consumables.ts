@@ -164,7 +164,10 @@ export function isForbiddenTargetEligible(
     if (!card) return false;
     if (definition.effectKey === "make_bright_pay") return card.kind !== "bright";
     if (definition.effectKey === "wild_month_zero_base") {
-      return !(card.tags.includes("wild_month") && card.tags.includes("zero_base"));
+      // 팔방패의 현재 규칙은 월을 지우는 낡은 태그가 아니라 `wild`
+      // 손질 하나로 표현된다. 이미 만능화된 패를 다시 골라 돈만 잃게
+      // 두지 않는다.
+      return card.enhancement !== "wild";
     }
     return true;
   }
@@ -302,7 +305,7 @@ export function applyForbiddenEffect(
       break;
     case "wild_month_zero_base":
       deck = deck.map((card) => selected[0] === card.instanceId
-        ? { ...card, enhancement: "wild", tags: unique([...card.tags, "zero_base"]) }
+        ? { ...card, enhancement: "wild", tags: card.tags.filter((tag) => tag !== "zero_base") }
         : card);
       break;
     case "random_burn_for_money":

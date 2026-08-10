@@ -30,7 +30,7 @@
       "notes": "Four 4x4 atlases cropped into 256x384 (2:3) Korean hanji talisman cards."
     },
     {
-      "assetTags": "book:* (14 cards), painter:* (15), forbidden:* (10), pack:* (2) and boss:* (4)",
+      "assetTags": "book:* (14 cards), painter:* (15), forbidden:* (10), legacy pack:* (2 source illustrations) and boss:* (4)",
       "file": "public/assets/generated/{books,painters,forbidden,packs,bosses}/*.webp",
       "generatedAt": "2026-08-07",
       "tool": "OpenAI image generation",
@@ -44,6 +44,22 @@
       "tool": "OpenAI image generation",
       "mode": "text-to-image atlas generation",
       "notes": "28 compact square overlay seals cropped to 256x256."
+    },
+    {
+      "assetTags": "start-deck:* (5 card backs), forbidden:eight-directions and boss:fog-screen",
+      "file": "public/assets/generated/{start-decks,forbidden,bosses}/*.webp",
+      "generatedAt": "2026-08-10",
+      "tool": "OpenAI image generation",
+      "mode": "individual text-to-image generation",
+      "notes": "Five distinct 320x480 starter-deck backs plus two 512x768 current-rule card illustrations. Red deck uses repeating plum-blossom and neung-hwa motifs with no radial ray composition."
+    },
+    {
+      "assetTags": "season:* (4 contract encounters), pack:* (11 bundles), boss:* (8 completed boss portraits)",
+      "file": "public/assets/generated/{seasons,packs,bosses}/*.webp",
+      "generatedAt": "2026-08-10",
+      "tool": "OpenAI image generation",
+      "mode": "individual text-to-image generation and WebP normalization",
+      "notes": "Four season-specific Joseon encounter scenes, category-readable card/book/talisman/burn bundles, and the eight previously missing current-rule boss portraits. All prompts prohibited text, flags, radial ray motifs, and Japanese visual symbols."
     }
   ],
   "userProvidedImages": [

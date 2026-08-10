@@ -34,7 +34,6 @@ export const MAX_SUBMISSION = 5;
 
 /** 돌패 always counts as twelve; everything else is its printed month plus edits. */
 export function getEffectiveMonth(card: CardInstance): number {
-  if (card.tags.includes("zero_base")) return 0;
   if (card.enhancement === "stone") return 12;
   return card.month + card.permanentKkeutBonus;
 }
@@ -94,7 +93,9 @@ export function judgeKkeutPair(
     if (key === "1-3") return { yakuId: "gwangttaeng_13", rankBonusHeung: 0, rankLabel: "" };
   }
 
-  if (hasOnlyClassicSeotdaMonths && a === b) {
+  // 11·12월도 이 게임에서는 정식 월패다. 광땡과 섯다 고유 조합만
+  // 1~10월로 제한하고, 같은 월 두 장은 열두 달 모두 땡으로 읽는다.
+  if (a === b) {
     if (a === 10) return { yakuId: "jangttaeng", rankBonusHeung: 0, rankLabel: "" };
     // 1땡 is the floor; every month above it adds 0.6.
     return {
@@ -218,6 +219,12 @@ export function getCollectionProgress(input: CollectionEvaluationInput): Collect
     { yakuId: "three_brights", matchedCardIds: dryBrights.slice(0, 3).map((card) => card.instanceId), required: 3, completed: dryBrights.length >= 3 },
     { yakuId: "four_brights", matchedCardIds: brights.slice(0, 4).map((card) => card.instanceId), required: 4, completed: brights.length >= 4 },
     { yakuId: "five_brights", matchedCardIds: brights.slice(0, 5).map((card) => card.instanceId), required: 5, completed: brights.length >= 5 },
+    { yakuId: "six_brights", matchedCardIds: brights.slice(0, 6).map((card) => card.instanceId), required: 6, completed: brights.length >= 6 },
+  );
+  const godoriCards = cards.filter((card) => hasKind(card, "animal", cupRole) && card.tags.includes("bird"));
+  progress.push(
+    { yakuId: "four_godori", matchedCardIds: godoriCards.slice(0, 4).map((card) => card.instanceId), required: 4, completed: godoriCards.length >= 4 },
+    { yakuId: "five_godori", matchedCardIds: godoriCards.slice(0, 5).map((card) => card.instanceId), required: 5, completed: godoriCards.length >= 5 },
   );
   return COLLECTION_YAKU_DEFINITIONS.map((definition) => progress.find((entry) => entry.yakuId === definition.id) as CollectionProgress);
 }
@@ -238,10 +245,16 @@ export function detectNewCollectionCompletions(input: CollectionEvaluationInput)
     three_brights: 3,
     four_brights: 4,
     five_brights: 5,
+    six_brights: 6,
   };
   const highestBrightRank = Math.max(0, ...newlyCompleted.map((id) => brightRanks[id] ?? 0));
   if (highestBrightRank > 0) {
     newlyCompleted = newlyCompleted.filter((id) => !(id in brightRanks) || brightRanks[id] === highestBrightRank);
+  }
+  const godoriRanks: Partial<Record<CollectionYakuId, number>> = { godori: 3, four_godori: 4, five_godori: 5 };
+  const highestGodoriRank = Math.max(0, ...newlyCompleted.map((id) => godoriRanks[id] ?? 0));
+  if (highestGodoriRank > 0) {
+    newlyCompleted = newlyCompleted.filter((id) => !(id in godoriRanks) || godoriRanks[id] === highestGodoriRank);
   }
   const order = new Map(COLLECTION_YAKU_DEFINITIONS.map((definition, index) => [definition.id, index]));
   return newlyCompleted.sort((left, right) => (order.get(left) ?? 0) - (order.get(right) ?? 0));
@@ -253,7 +266,7 @@ export function validateYakuDefinitions(): string[] {
   if (ALL_IMMEDIATE_YAKU_DEFINITIONS.length !== expectedImmediate) {
     issues.push(`expected ${expectedImmediate} immediate/secret definitions, got ${ALL_IMMEDIATE_YAKU_DEFINITIONS.length}`);
   }
-  if (COLLECTION_YAKU_DEFINITIONS.length !== 8) issues.push(`expected 8 collection definitions, got ${COLLECTION_YAKU_DEFINITIONS.length}`);
+  if (COLLECTION_YAKU_DEFINITIONS.length !== 11) issues.push(`expected 11 collection definitions, got ${COLLECTION_YAKU_DEFINITIONS.length}`);
   for (const definition of [...ALL_IMMEDIATE_YAKU_DEFINITIONS, ...COLLECTION_YAKU_DEFINITIONS]) {
     if (!definition.assetTag) issues.push(`missing assetTag: ${definition.id}`);
   }

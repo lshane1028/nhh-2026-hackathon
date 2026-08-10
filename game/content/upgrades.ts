@@ -14,7 +14,7 @@ export type CatalogForbiddenDefinition = ForbiddenDefinition;
 export const PAINTER_CARDS = [
   {
     id: "p_month_plus",
-    name: "이월",
+    name: "달 넘김",
     description: "선택 카드 최대 2장의 월을 +1. 12월 다음은 1월.",
     rarity: "common",
     price: 4,
@@ -26,7 +26,7 @@ export const PAINTER_CARDS = [
   },
   {
     id: "p_month_minus",
-    name: "역월",
+    name: "달 되짚기",
     description: "선택 카드 최대 2장의 월을 -1. 1월 전은 12월.",
     rarity: "common",
     price: 4,
@@ -135,7 +135,7 @@ export const PAINTER_CARDS = [
   {
     id: "p_rain_mark",
     name: "빗금",
-    description: "선택 카드 1장에 비 태그를 추가.",
+    description: "선택한 패 1장에 비 그림 취급을 추가.",
     rarity: "uncommon",
     price: 5,
     weight: 12,
@@ -255,14 +255,15 @@ export const FORBIDDEN_CARDS = [
   {
     id: "f_monthless",
     name: "팔방패",
-    description: "광·동물·띠·피 어느 수집줄에도 들어가지만 짓의 월 합에는 보탬이 되지 않는 패.",
+    description: "광·동물·띠·피 어느 수집줄에도 들어가며, 적힌 월은 짓 계산에 그대로 쓰는 패.",
     benefit: "선택 카드 1장을 모든 종류로 취급.",
-    cost: "그 카드의 월값을 0으로 설정.",
+    cost: "의식 비용으로 4냥을 추가 지불.",
     price: 12,
     targetKind: "card",
     minTargets: 1,
     maxTargets: 1,
-    targetPrompt: "모든 월을 잇게 할 패 1장을 고르세요.",
+    targetPrompt: "광·동물·띠·피 네 수집줄에 동시에 넣을 패 1장을 고르세요.",
+    additionalCost: 4,
     effectKey: "wild_month_zero_base",
     assetTag: "forbidden:eight-directions",
   },
@@ -343,7 +344,7 @@ export const BOOKS = [
   {
     id: "b_mangtong",
     name: "망통 비결",
-    description: "이번 판 동안 망통 레벨 +1.",
+    description: "망통의 기본 배수를 영구적으로 한 단계 강화.",
     yakuId: "mangtong",
     price: 3,
     rarity: "common",
@@ -353,7 +354,7 @@ export const BOOKS = [
   {
     id: "b_kkeut",
     name: "끗 비결",
-    description: "이번 판 동안 끗 레벨 +1.",
+    description: "끗의 기본 배수를 영구적으로 한 단계 강화.",
     yakuId: "kkeut",
     price: 3,
     rarity: "common",
@@ -363,7 +364,7 @@ export const BOOKS = [
   {
     id: "b_gabo",
     name: "갑오 비결",
-    description: "이번 판 동안 갑오 레벨 +1.",
+    description: "갑오의 기본 배수를 영구적으로 한 단계 강화.",
     yakuId: "gabo",
     price: 4,
     rarity: "common",
@@ -373,7 +374,7 @@ export const BOOKS = [
   {
     id: "b_seryuk",
     name: "세륙 비결",
-    description: "이번 판 동안 세륙 레벨 +1.",
+    description: "세륙의 기본 배수를 영구적으로 한 단계 강화.",
     yakuId: "seryuk",
     price: 4,
     rarity: "common",
@@ -383,7 +384,7 @@ export const BOOKS = [
   {
     id: "b_jangsa",
     name: "장사 비결",
-    description: "이번 판 동안 장사 레벨 +1.",
+    description: "장사의 기본 배수를 영구적으로 한 단계 강화.",
     yakuId: "jangsa",
     price: 5,
     rarity: "common",
@@ -393,7 +394,7 @@ export const BOOKS = [
   {
     id: "b_jangpping",
     name: "장삥 비결",
-    description: "이번 판 동안 장삥 레벨 +1.",
+    description: "장삥의 기본 배수를 영구적으로 한 단계 강화.",
     yakuId: "jangpping",
     price: 5,
     rarity: "common",
@@ -403,7 +404,7 @@ export const BOOKS = [
   {
     id: "b_gupping",
     name: "구삥 비결",
-    description: "이번 판 동안 구삥 레벨 +1.",
+    description: "구삥의 기본 배수를 영구적으로 한 단계 강화.",
     yakuId: "gupping",
     price: 5,
     rarity: "uncommon",
@@ -413,7 +414,7 @@ export const BOOKS = [
   {
     id: "b_doksa",
     name: "독사 비결",
-    description: "이번 판 동안 독사 레벨 +1.",
+    description: "독사의 기본 배수를 영구적으로 한 단계 강화.",
     yakuId: "doksa",
     price: 6,
     rarity: "uncommon",
@@ -423,7 +424,7 @@ export const BOOKS = [
   {
     id: "b_ali",
     name: "알리 비결",
-    description: "이번 판 동안 알리 레벨 +1.",
+    description: "알리의 기본 배수를 영구적으로 한 단계 강화.",
     yakuId: "ali",
     price: 6,
     rarity: "uncommon",
@@ -433,7 +434,7 @@ export const BOOKS = [
   {
     id: "b_ttaeng",
     name: "땡 비결",
-    description: "이번 판 동안 땡 레벨 +1.",
+    description: "땡의 기본 배수를 영구적으로 한 단계 강화.",
     yakuId: "ttaeng",
     price: 7,
     rarity: "uncommon",
@@ -443,7 +444,7 @@ export const BOOKS = [
   {
     id: "b_jangttaeng",
     name: "장땡 비결",
-    description: "이번 판 동안 장땡 레벨 +1.",
+    description: "장땡의 기본 배수를 영구적으로 한 단계 강화.",
     yakuId: "jangttaeng",
     price: 8,
     rarity: "rare",
@@ -453,7 +454,7 @@ export const BOOKS = [
   {
     id: "b_gwangttaeng_13",
     name: "13광땡 비결",
-    description: "이번 판 동안 13광땡 레벨 +1.",
+    description: "13광땡의 기본 배수를 영구적으로 한 단계 강화.",
     yakuId: "gwangttaeng_13",
     price: 9,
     rarity: "rare",
@@ -463,7 +464,7 @@ export const BOOKS = [
   {
     id: "b_gwangttaeng_18",
     name: "18광땡 비결",
-    description: "이번 판 동안 18광땡 레벨 +1.",
+    description: "18광땡의 기본 배수를 영구적으로 한 단계 강화.",
     yakuId: "gwangttaeng_18",
     price: 9,
     rarity: "rare",
@@ -473,7 +474,7 @@ export const BOOKS = [
   {
     id: "b_gwangttaeng_38",
     name: "38광땡 비결",
-    description: "이번 판 동안 38광땡 레벨 +1.",
+    description: "38광땡의 기본 배수를 영구적으로 한 단계 강화.",
     yakuId: "gwangttaeng_38",
     price: 10,
     rarity: "legendary",
@@ -563,7 +564,7 @@ export const EDITIONS = [
   {
     id: "engraved",
     name: "음각",
-    description: "부적에만 적용되며 부적 슬롯 +1.",
+    description: "부적에만 적용되며 부적 칸 +1.",
     assetTag: "edition:engraved",
   },
 ] as const satisfies readonly CardModifierDefinition<EditionId>[];

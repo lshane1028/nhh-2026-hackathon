@@ -15,6 +15,9 @@ const COLLECTION_BASE_POINTS: Record<CollectionYakuId, number> = {
   three_brights: 3,
   four_brights: 4,
   five_brights: 15,
+  six_brights: 22,
+  four_godori: 8,
+  five_godori: 12,
 };
 
 const BRIGHT_BOOKS = new Set<CollectionYakuId>([
@@ -22,6 +25,7 @@ const BRIGHT_BOOKS = new Set<CollectionYakuId>([
   "three_brights",
   "four_brights",
   "five_brights",
+  "six_brights",
 ]);
 
 const RIBBON_BOOKS = new Set<CollectionYakuId>(["hongdan", "chodan", "cheongdan"]);

@@ -4,11 +4,20 @@ import { removeRedundantKindEffect } from "../content/card-effects";
 // v2 = 짓고땡. A v1 save holds the old poker-style yaku ids, which no longer
 // resolve, so bumping the key is the cheapest way to drop them.
 export const SAVE_KEY = "flower-board-go:v2";
+const RETIRED_TALISMAN_IDS = new Set(["t_twelve_month_painter", "t_five_direction_goblin"]);
 
 export interface SaveEnvelope {
   schemaVersion: 1;
   savedAt: string;
   game: GameState;
+}
+
+/** Removes card flags that belonged to rules retired from the current build. */
+function normalizeCurrentRuleCard<T extends GameState["deck"][number]>(card: T): T {
+  return removeRedundantKindEffect({
+    ...card,
+    tags: card.tags.filter((tag) => tag !== "zero_base"),
+  }) as T;
 }
 
 export function saveGame(state: GameState): void {
@@ -44,12 +53,13 @@ export function normalizeGameState(game: GameState): GameState {
   const collectionScore = game.chain.collectionScore ?? 0;
   return {
     ...game,
-    deck: game.deck.map(removeRedundantKindEffect),
-    drawPile: game.drawPile.map(removeRedundantKindEffect),
-    hand: game.hand.map(removeRedundantKindEffect),
-    usedPile: game.usedPile.map(removeRedundantKindEffect),
+    deck: game.deck.map(normalizeCurrentRuleCard),
+    drawPile: game.drawPile.map(normalizeCurrentRuleCard),
+    hand: game.hand.map(normalizeCurrentRuleCard),
+    usedPile: game.usedPile.map(normalizeCurrentRuleCard),
+    talismans: game.talismans.filter((item) => !RETIRED_TALISMAN_IDS.has(item.definitionId)),
     pendingPack: game.pendingPack
-      ? { ...game.pendingPack, candidates: game.pendingPack.candidates.map(removeRedundantKindEffect) }
+      ? { ...game.pendingPack, candidates: game.pendingPack.candidates.map(normalizeCurrentRuleCard) }
       : null,
     experimentalRules: { ...game.experimentalRules, yardMatching: false },
     yard: { cards: [], sweptCount: 0 },
