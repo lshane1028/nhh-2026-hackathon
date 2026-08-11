@@ -24,7 +24,7 @@ describe("starter deck backs", () => {
   });
 
   it("never restores the red deck's radial-ray fallback", () => {
-    const css = readFileSync(join(process.cwd(), "app", "components", "screen-ui.css"), "utf8");
+    const css = readFileSync(join(process.cwd(), "app", "components", "title-screen.css"), "utf8");
     const rule = css.match(/\.title-screen__deck\[data-deck-id="deck_red"\][\s\S]*?\n\}/)?.[0] ?? "";
 
     expect(rule).not.toContain("conic-gradient");

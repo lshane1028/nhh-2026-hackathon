@@ -18,6 +18,7 @@ import {
   primeGameAudio,
 } from "../audio/game-sfx";
 import "./screen-ui.css";
+import "./market-screen.css";
 import { RunIdentityStrip } from "./RunIdentityStrip";
 
 export interface MarketRewardView {

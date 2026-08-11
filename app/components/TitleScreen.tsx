@@ -3,6 +3,7 @@
 import type { StartDeckDefinition } from "@/game/types";
 
 import "./screen-ui.css";
+import "./title-screen.css";
 
 export interface TitleScreenProps {
   assetTag: string;

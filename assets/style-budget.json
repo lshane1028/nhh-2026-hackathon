@@ -1,7 +1,11 @@
 {
   "files": {
-    "app/game.css": { "maxLines": 1384, "maxImportant": 63 },
+    "app/game.css": { "maxLines": 870, "maxImportant": 45 },
     "app/components/deck-editor.css": { "maxLines": 141, "maxImportant": 7 },
+    "app/components/screen-ui.css": { "maxLines": 295, "maxImportant": 0 },
+    "app/components/title-screen.css": { "maxLines": 174, "maxImportant": 6 },
+    "app/components/run-end-screen.css": { "maxLines": 69, "maxImportant": 0 },
+    "app/components/market-screen.css": { "maxLines": 473, "maxImportant": 12 },
     "app/components/game-ui.css": { "maxLines": 2048, "maxImportant": 1 },
     "app/components/art-direction.css": { "maxLines": 499, "maxImportant": 59 },
     "app/components/pixel-direction.css": { "maxLines": 2473, "maxImportant": 463 }

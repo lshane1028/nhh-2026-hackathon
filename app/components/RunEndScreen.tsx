@@ -6,6 +6,7 @@ import { getYakuAssetTag, getYakuDisplayName } from "@/game/content/yaku";
 import { AssetPlaceholder } from "./AssetPlaceholder";
 import { HwatuCard } from "./HwatuCard";
 import "./screen-ui.css";
+import "./run-end-screen.css";
 
 export interface RunEndYakuStat {
   yakuId: YakuId | string;

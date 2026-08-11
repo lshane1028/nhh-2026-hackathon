@@ -30,7 +30,7 @@ function renderOffer(item: MarketOfferView, money: number): string {
 
 describe("market offer affordances", () => {
   it("keeps the selected offer's purchase button inside its upper-right corner", () => {
-    const cssPath = fileURLToPath(new URL("../../app/game.css", import.meta.url));
+    const cssPath = fileURLToPath(new URL("../../app/components/market-screen.css", import.meta.url));
     const css = readFileSync(cssPath, "utf8");
     const rule = css.match(/\.market-card__purchase\s*\{([^}]*)\}/)?.[1] ?? "";
 

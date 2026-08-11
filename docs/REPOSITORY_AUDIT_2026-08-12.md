@@ -6,7 +6,7 @@
 
 ## 결론
 
-현재 빌드는 플레이 가능한 프로토타입을 넘어, 규칙 엔진과 콘텐츠 검증이 잘 갖춰진 게임입니다. `game/`이 React에 의존하지 않고 `UI → reducer → engine/content` 방향을 지키며, 244개 테스트가 짓·끗패·수집·부적·금단패·상점·저장·모바일 레이아웃의 주요 회귀를 막습니다. 보안 감사와 두 배포 빌드도 모두 통과했습니다.
+현재 빌드는 플레이 가능한 프로토타입을 넘어, 규칙 엔진과 콘텐츠 검증이 잘 갖춰진 게임입니다. `game/`이 React에 의존하지 않고 `UI → reducer → engine/content` 방향을 지키며, 247개 테스트가 짓·끗패·수집·부적·금단패·상점·저장·모바일 레이아웃의 주요 회귀를 막습니다. 보안 감사와 두 배포 빌드도 모두 통과했습니다.
 
 다만 유지보수 비용은 여전히 높습니다. 이번 구조 작업으로 `GameApp.tsx`는 2,068줄에서 1,604줄, `game/state/game.ts`는 1,916줄에서 1,503줄로 줄었지만, `pixel-direction.css` 2,465줄과 그 안의 `!important` 463개는 다음 병목으로 남아 있습니다.
 
@@ -27,7 +27,7 @@
 
 | 영역 | 평가 | 판단 |
 | --- | --- | --- |
-| 규칙 정확성·회귀 방지 | A- | 순수 엔진과 244개 테스트가 핵심 불변식을 잘 잠금 |
+| 규칙 정확성·회귀 방지 | A- | 순수 엔진과 247개 테스트가 핵심 불변식을 잘 잠금 |
 | 도메인 구조 | B+ | `content / engine / state` 분리가 좋고 `game → app` 역참조가 없음 |
 | UI 유지보수성 | C+ | 최상위 컴포넌트가 화면·저장·오디오·연출을 함께 조정 |
 | 상태 전이 유지보수성 | B- | 단일 진입점을 유지하면서 selector·장터·팩·소모품·계절 전환을 분리 |
@@ -250,7 +250,7 @@ Cloudflare Worker 응답에는 CSP, COOP, CORP, Permissions-Policy, nosniff, fra
 
 ## 검증 기록
 
-- `npm test`: 34개 파일, 244개 테스트 통과
+- `npm test`: 35개 파일, 247개 테스트 통과
 - `npm run typecheck`: 통과
 - `npm run lint`: 통과
 - `npm run build`: 통과
@@ -294,6 +294,7 @@ Cloudflare Worker 응답에는 CSP, COOP, CORP, Permissions-Policy, nosniff, fra
 - `docs/ART_BIBLE.md`에 팔레트, 2:3 안전 영역, 카테고리 실루엣, 강조 예산, 계절 이펙트, 모바일 회귀 조합을 고정했습니다.
 - `npm run styles:check`가 대형 CSS 네 파일의 줄 수와 `!important`가 현재 기준보다 늘어나는 것을 거부합니다.
 - 덱 편집·금단장 대상 화면의 기본 규칙 141줄을 `deck-editor.css`로 실제 분리했습니다. `game.css`는 1,529줄에서 1,384줄로 줄었고 새 파일도 별도 예산으로 고정했습니다.
+- 타이틀·장터·런 결산의 기본 규칙을 각각 `title-screen.css`, `market-screen.css`, `run-end-screen.css`로 분리했습니다. 공용 `screen-ui.css`에는 화면 공통 버튼과 튜토리얼만 남기고, `game.css`는 870줄까지 줄였습니다.
 
 ### 5순위 일부 완료
 
@@ -305,8 +306,8 @@ Cloudflare Worker 응답에는 CSP, COOP, CORP, Permissions-Policy, nosniff, fra
 
 ### 다음 작업 묶음
 
-1. 장터·타이틀·결산 CSS를 같은 방식으로 작은 화면 단위로 분리합니다.
-2. 제출·라운드 수명주기를 회귀 테스트와 함께 추가 분리합니다.
-3. 발견 도감과 런 결산 분석을 확장합니다.
+1. 제출·라운드 수명주기를 회귀 테스트와 함께 추가 분리합니다.
+2. 발견 도감과 런 결산 분석을 확장합니다.
+3. `art-direction.css`와 `pixel-direction.css`의 화면별 계층을 단계적으로 정리합니다.
 
 Vite native config loader 관련 미래 호환 경고는 제거했습니다. 빌드의 plugin timing 출력은 오류나 호환 경고가 아니라 빌드 성능 진단 정보입니다.

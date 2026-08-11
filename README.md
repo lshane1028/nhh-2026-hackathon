@@ -118,7 +118,7 @@ npm run dev          # http://localhost:3000
 | `npm run dev` | 개발 서버 (HMR) |
 | `npm run build` | 프로덕션 빌드 |
 | `npm run start` | 빌드 결과 실행 |
-| `npm run test` | Vitest 실행 (244개) |
+| `npm run test` | Vitest 실행 (247개) |
 | `npm run typecheck` | TypeScript 검사 |
 | `npm run lint` | ESLint |
 | `npm run verify` | **test → typecheck → lint → build** 전체 검증 |
@@ -133,7 +133,7 @@ npm run dev          # http://localhost:3000
 | 번들 · 런타임 | Vite 8 + vinext | Next App Router를 Vite/RSC 위에서 구동해 Workers에 그대로 배포 |
 | 배포 | GitHub Pages · Cloudflare Worker 호환 | 공개 링크는 정적 export, Worker 빌드는 보안 헤더와 이미지 최적화 경로 제공 |
 | 스타일 | Tailwind 4 + 수제 CSS | 레이아웃은 유틸리티로, 카드 연출(재질·광택·도트 표식)은 CSS 직접 작성 |
-| 타입 · 테스트 | TypeScript 5.9 · Vitest 4 | 규칙 엔진이 순수 함수라 34개 파일의 244개 테스트로 빠르게 검증 |
+| 타입 · 테스트 | TypeScript 5.9 · Vitest 4 | 규칙 엔진이 순수 함수라 35개 파일의 247개 테스트로 빠르게 검증 |
 | 저장 | `localStorage` (스키마 버전 관리) | 계정 · 서버 없이 진행 저장. 규칙 변경 시 키를 올려 호환 불가 세이브를 폐기 |
 | **런타임 AI** | **없음** | 시드 재현성과 일관된 규칙 판정을 보장하기 위한 의도적 배제 |
 
@@ -205,7 +205,7 @@ nhh-2026-hackathon/
 │   │   ├── actions.ts              GameAction 32종 (판별 유니온)
 │   │   ├── game.ts                 gameReducer — 상태 전이의 단일 진입점
 │   │   └── storage.ts              localStorage 저장 · 스키마 버전 검사 · 정규화
-│   └── tests/                  ── 자동 테스트 244개
+│   └── tests/                  ── 자동 테스트 247개
 │       ├── engine.test.ts          족보 판정 · 짓 성립 · 점수 연산 순서
 │       ├── state.test.ts           상태 전이 · 고 · 술잔 · 팩 · 중복 정산 방지
 │       ├── content.test.ts         콘텐츠 ID 유일성 · 태그 · 효과 연결
@@ -299,7 +299,7 @@ randomAt(seed, cursor) = mix32( fnv1a(seed) ⊕ (cursor+1)×0x9E3779B9 ) / 2³²
 npm run verify    # test → typecheck → lint → build
 ```
 
-규칙이 자주 바뀌는 게임이라 회귀 방지에 비중을 뒀습니다. 현재 34개 테스트 파일에서 244개 사례를 실행합니다.
+규칙이 자주 바뀌는 게임이라 회귀 방지에 비중을 뒀습니다. 현재 35개 테스트 파일에서 247개 사례를 실행합니다.
 
 특히 **두 곳에 나뉘어 있는 같은 규칙**을 테스트로 못 박았습니다. 한쪽만 고쳐도 타입 검사와 린트는 통과하기 때문입니다.
 
@@ -320,7 +320,7 @@ npm run verify    # test → typecheck → lint → build
 
 - 시드 재현성을 보장하기 위해 — 모델 호출이 섞이면 같은 시드가 같은 런을 만들지 못합니다
 - 심사자가 API 키 없이 링크만으로 실행할 수 있게 하기 위해
-- 결정론적 순수 함수여야 244개의 테스트로 주요 규칙을 잠글 수 있기 때문에
+- 결정론적 순수 함수여야 247개의 테스트로 주요 규칙을 잠글 수 있기 때문에
 
 사용한 프롬프트 원문은 [`docs/PROMPTS/`](docs/PROMPTS), 작업 로그는 [`docs/AI_USAGE_LOG.md`](docs/AI_USAGE_LOG.md),
 전체 기술 설명은 [`docs/submission/`](docs/submission)의 **AI 활용 기술 문서**에 있습니다.
