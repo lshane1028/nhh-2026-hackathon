@@ -1,6 +1,7 @@
 {
   "files": {
-    "app/game.css": { "maxLines": 1529, "maxImportant": 70 },
+    "app/game.css": { "maxLines": 1384, "maxImportant": 63 },
+    "app/components/deck-editor.css": { "maxLines": 141, "maxImportant": 7 },
     "app/components/game-ui.css": { "maxLines": 2048, "maxImportant": 1 },
     "app/components/art-direction.css": { "maxLines": 499, "maxImportant": 59 },
     "app/components/pixel-direction.css": { "maxLines": 2473, "maxImportant": 463 }

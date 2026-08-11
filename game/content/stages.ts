@@ -1,4 +1,5 @@
 import type { Month, WeatherId } from "../types";
+import { BOSSES } from "./bosses";
 
 export interface StageDefinition {
   stage: number;
@@ -47,16 +48,41 @@ export const STAGES: StageDefinition[] = [
   { stage: 12, month: 12, name: "겨울 두목 · 나가리 왕", subtitle: "열두 달의 마지막 베팅", target: 50_000, bossId: "boss_nagari_king", weatherId: "rain", assetTag: "stage_12_rain_boss" },
 ];
 
+const INFINITE_WEATHER_ROTATION: readonly WeatherId[] = ["clear", "wind", "rain", "snow"];
+
+function getInfiniteWeather(base: WeatherId, lap: number): WeatherId {
+  const index = INFINITE_WEATHER_ROTATION.indexOf(base);
+  return INFINITE_WEATHER_ROTATION[(Math.max(0, index) + lap) % INFINITE_WEATHER_ROTATION.length];
+}
+
+function getInfiniteBoss(base: StageDefinition, lap: number): StageDefinition["bossId"] {
+  if (base.bossId) return base.bossId;
+  // Four non-boss months per lap gain a deterministic roaming boss. This adds
+  // variation without introducing another source of non-replayable randomness.
+  if ((base.month + lap) % 3 !== 0) return null;
+  return BOSSES[(base.month * 5 + lap) % BOSSES.length]?.id ?? null;
+}
+
 export function getStageDefinition(stage: number, infiniteLap = 0): StageDefinition {
   const base = STAGES[(stage - 1) % STAGES.length];
   const lap = infiniteLap + Math.floor((stage - 1) / STAGES.length);
   if (lap === 0) return base;
+  const bossId = getInfiniteBoss(base, lap);
+  const weatherId = getInfiniteWeather(base.weatherId, lap);
+  const roamingBoss = bossId && bossId !== base.bossId
+    ? BOSSES.find((boss) => boss.id === bossId)
+    : null;
+  const variation = roamingBoss
+    ? `떠돌이 두목 · ${roamingBoss.name}`
+    : `날씨 변주 · ${weatherId === "clear" ? "맑음" : weatherId === "wind" ? "바람" : weatherId === "rain" ? "비" : "눈"}`;
   return {
     ...base,
     stage,
     name: `무한 달력 ${lap}바퀴 · ${base.name}`,
-    subtitle: `${base.subtitle} / 목표 ×${(1.6 ** lap).toFixed(2)}`,
+    subtitle: `${base.subtitle} / 목표 ×${(1.6 ** lap).toFixed(2)} / ${variation}`,
     target: Math.floor(base.target * 1.6 ** lap),
+    bossId,
+    weatherId,
     assetTag: `${base.assetTag}_infinite_${lap}`,
   };
 }

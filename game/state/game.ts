@@ -89,7 +89,7 @@ import {
   rerollMarket,
 } from "./market-actions";
 import { prependGameLog as logEntry } from "./logs";
-import { openPurchasedPack } from "./pack-actions";
+import { closePendingPack, confirmPackSelection, openPurchasedPack } from "./pack-actions";
 import { applyPendingConsumable } from "./consumable-actions";
 import { advanceAfterShop, openSeasonContract } from "./run-lifecycle";
 
@@ -1326,63 +1326,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "REROLL_SHOP": {
       return rerollMarket(state);
     }
-    case "CONFIRM_PACK_SELECTION": {
-      const pack = state.pendingPack;
-      if (!pack || pack.picksLeft <= 0) return state;
-      const selectedIds = [...new Set(action.candidateIds)];
-      const selectedCards = pack.candidates.filter((card) => selectedIds.includes(card.instanceId));
-      const selectedRewards = (pack.rewardCandidates ?? []).filter((candidate) => selectedIds.includes(candidate.candidateId));
-      const selectedCount = selectedCards.length + selectedRewards.length;
-      if (selectedCount === 0 || selectedCount !== selectedIds.length || selectedCount > pack.picksLeft) return state;
-      if (pack.category === "burn" && selectedCount !== pack.picksLeft) return state;
-
-      const selectedTalismanRewards = selectedRewards.filter((candidate) => candidate.category === "talisman");
-      if (state.talismans.length + selectedTalismanRewards.length > getEffectiveTalismanSlots(state)) return state;
-
-      const selectedCardIds = new Set(selectedCards.map((card) => card.instanceId));
-      const burn = pack.category === "burn";
-      let yakuLevels = { ...state.yakuLevels };
-      const talismans = [...state.talismans];
-      let lastConsumableId = state.lastConsumableId;
-      const rewardNames: string[] = [];
-
-      for (const candidate of selectedRewards) {
-        if (candidate.category === "book") {
-          const book = BOOK_BY_ID[candidate.definitionId];
-          if (!book) return state;
-          const current = yakuLevels[book.yakuId] ?? { level: 1, mastery: 0 };
-          yakuLevels = { ...yakuLevels, [book.yakuId]: { ...current, level: current.level + 1 } };
-          lastConsumableId = book.id;
-          rewardNames.push(book.name);
-        } else {
-          const definition = TALISMAN_BY_ID[candidate.definitionId];
-          if (!definition) return state;
-          talismans.push({ instanceId: `${candidate.candidateId}:owned`, definitionId: definition.id, growth: 0 });
-          rewardNames.push(definition.name);
-        }
-      }
-
-      const cardNames = selectedCards.map((card) => `${card.month}월 ${card.name}`);
-      const names = [...cardNames, ...rewardNames];
-      return {
-        ...state,
-        deck: burn
-          ? state.deck.filter((card) => !selectedCardIds.has(card.instanceId))
-          : [...state.deck, ...selectedCards],
-        yakuLevels,
-        talismans,
-        lastConsumableId,
-        pendingPack: null,
-        logs: logEntry(
-          state,
-          "reward",
-          burn ? `${selectedCount}장 소각 확정` : `${selectedCount}개 획득 확정`,
-          names.join(" · "),
-        ),
-      };
-    }
+    case "CONFIRM_PACK_SELECTION":
+      return confirmPackSelection(state, action.candidateIds);
     case "CLOSE_PACK":
-      return { ...state, pendingPack: null };
+      return closePendingPack(state);
     case "SELECT_CONSUMABLE_TARGET": {
       const exists = state.pendingTargetIds.includes(action.cardId);
       const forbidden = state.pendingConsumableId

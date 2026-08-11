@@ -95,6 +95,7 @@ import {
   useScoreReveal,
 } from "./components/useScoreReveal";
 import "./game.css";
+import "./components/deck-editor.css";
 import "./components/art-direction.css";
 import "./components/pixel-direction.css";
 
