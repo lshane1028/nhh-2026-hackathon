@@ -67,7 +67,7 @@ export function calculateCupRolePreview(
 ): CupRolePreviewCounts {
   const withoutCup = collectedCards.filter((card) => card.instanceId !== cupCard.instanceId);
   const current = calculateCollectionBonus(withoutCup, cupRoles, yakuLevels).counts;
-  const withRole = (role: CupRole) => calculateCollectionBonus(
+  const withRole = (role: "animal" | "double_chaff") => calculateCollectionBonus(
     [...withoutCup, cupCard],
     { ...cupRoles, [cupCard.instanceId]: role },
     yakuLevels,

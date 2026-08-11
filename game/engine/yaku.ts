@@ -32,10 +32,17 @@ export interface CollectionEvaluationInput {
 export const MIN_SUBMISSION = 2;
 export const MAX_SUBMISSION = 5;
 
-/** 돌패 always counts as twelve; everything else is its printed month plus edits. */
+/**
+ * Month used only to decide whether the trailing cards form a legal 짓.
+ *
+ * Permanent score bonuses must not rewrite the printed combination. Otherwise
+ * two visually identical 11월 cards can disagree for 9+11, and a boosted 4월
+ * can incorrectly turn 4+12 into a legal 20. Those bonuses are applied later
+ * by the scoring engine, after the printed-month 짓 has been validated.
+ */
 export function getEffectiveMonth(card: CardInstance): number {
   if (card.enhancement === "stone") return 12;
-  return card.month + card.permanentKkeutBonus;
+  return card.month;
 }
 
 function uniqueCards(cards: readonly CardInstance[]): CardInstance[] {

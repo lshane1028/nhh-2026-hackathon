@@ -44,8 +44,10 @@ function joinClassNames(...values: Array<string | false | undefined>): string {
   return values.filter(Boolean).join(" ");
 }
 
+const NUMBER_FORMATTER = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 2 });
+
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 2 }).format(value);
+  return NUMBER_FORMATTER.format(value);
 }
 
 export function PlayRail({
@@ -137,11 +139,8 @@ export function PlayRail({
         </div>
       </section>
 
-{/*
-        Before submit this shows the BARE hand — 짓 월합 x 끗패 배수 — and nothing
-        else. Everything the collection and the talismans add is withheld until
-        the hand is played, so the reveal has something left to reveal.
-      */}
+      {/* Before submit this shows only the bare hand: printed 짓 월 합 × the
+          끗패 multiplier. Card and talisman effects are revealed after play. */}
       <section
         className={joinClassNames(
           "play-rail__formula",

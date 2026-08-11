@@ -434,6 +434,7 @@ textarea {
 .market-card__kind,
 .market-card__price,
 .market-card__flag { border-radius: 0 !important; box-shadow: 1px 1px 0 rgb(0 0 0 / 45%); }
+.market-card__purchase { border-radius: 0 !important; }
 
 /* Tooltips, modals, rules and endings share one pixel window language. */
 .hwatu-card__hint,
@@ -464,7 +465,10 @@ textarea {
   box-shadow: var(--px-shadow), var(--px-inset) !important;
 }
 .run-end-screen__stats dl div,
-.run-end-screen__yaku-grid article {
+.run-end-screen__yaku-grid article,
+.run-end-screen__owned-yaku-grid article,
+.run-end-screen__owned-talisman-grid article,
+.run-end-screen__used-forbidden-grid article {
   border-width: 2px !important;
   border-radius: 0 !important;
   box-shadow: 2px 2px 0 rgb(0 0 0 / 34%);
@@ -2039,4 +2043,423 @@ button small,
   .market-shell__banner:has(.market-owned--banner) .market-shell__caption { display: none; }
   .market-shell__banner-tools > .market-owned--banner { grid-template-columns: 9rem minmax(0, 1fr); min-height: 4.2rem; }
   .market-owned--banner > header span { white-space: normal; }
+}
+
+/* --------------------------------------------------------------------------
+   Mobile landscape
+
+   A short viewport is not a narrow desktop. The old max-height breakpoint
+   collapsed play into a three-screen-tall single column and also left the
+   third rail to implicit grid placement below 1180px. Keep the actual table in
+   one visual viewport, reserve fixed compact rails, and scale only the dense
+   chrome around the cards. Safe-area padding keeps controls clear of notches.
+   -------------------------------------------------------------------------- */
+@media (orientation: landscape) and (max-height: 620px) and (min-width: 540px) {
+  html,
+  body { min-height: 100%; overscroll-behavior: none; }
+
+  .play-shell {
+    --shell-gap: clamp(0.18rem, 0.55vw, 0.32rem);
+    width: 100%;
+    height: 100svh !important;
+    min-height: 0 !important;
+    grid-template-columns:
+      clamp(7.6rem, 17vw, 9.8rem)
+      minmax(0, 1fr)
+      clamp(8.3rem, 19vw, 10.6rem) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    gap: var(--shell-gap) !important;
+    padding:
+      max(var(--shell-gap), env(safe-area-inset-top))
+      max(var(--shell-gap), env(safe-area-inset-right))
+      max(var(--shell-gap), env(safe-area-inset-bottom))
+      max(var(--shell-gap), env(safe-area-inset-left)) !important;
+    overflow: hidden !important;
+  }
+  .play-shell > .play-side { order: 1; }
+  .play-shell > .play-board { order: 2; }
+  .play-shell > .play-rail { order: 3; }
+
+  /* Collection stays readable as five compact tracks instead of becoming a
+     second page. Names, counts, and actual collected cards remain visible. */
+  .play-side,
+  .play-side .collection-board { min-height: 0; overflow: hidden !important; }
+  .play-side .collection-board {
+    gap: 0.16rem !important;
+    padding: 0.24rem !important;
+  }
+  .play-side .collection-board__header {
+    gap: 0.2rem;
+    padding-bottom: 0.16rem;
+  }
+  .play-side .collection-board__header span,
+  .play-side .collection-board__header code,
+  .play-side .collection-board__header > p { display: none; }
+  .play-side .collection-board__header strong { font-size: 0.66rem; }
+  .play-side .collection-board__items {
+    display: grid;
+    min-height: 0;
+    flex: 1 1 auto;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: repeat(5, minmax(0, 1fr));
+    gap: 0.12rem !important;
+  }
+  .play-side .collection-board__track {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) !important;
+    align-content: center;
+    gap: 0.08rem !important;
+    padding: 0.12rem 0.16rem !important;
+    overflow: hidden;
+  }
+  .play-side .collection-board__track-heading { gap: 0.12rem; }
+  .play-side .collection-board__icon,
+  .play-side .collection-board__mark {
+    width: 1.28rem !important;
+    height: 1.28rem !important;
+    flex-basis: 1.28rem;
+  }
+  .play-side .collection-board__mark > b { font-size: 0.56rem; }
+  .play-side .collection-board__track-heading strong { font-size: 0.6rem !important; }
+  .play-side .collection-board__track-heading span { display: none; }
+  .play-side .collection-board__track-heading > b {
+    width: 1.05rem;
+    height: 1.05rem;
+    font-size: 0.52rem;
+  }
+  .play-side .collection-board__track-body { gap: 0.04rem; overflow: hidden; }
+  .play-side .collection-board__cards {
+    flex-wrap: nowrap;
+    gap: 0.08rem !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+  .play-side .collection-card {
+    width: 1.08rem !important;
+    min-width: 1.08rem !important;
+    flex: 0 0 1.08rem !important;
+  }
+  .play-side .collection-board__slots { min-height: 0.72rem; flex-wrap: nowrap; gap: 0.08rem; overflow: hidden; }
+  .play-side .collection-board__slot,
+  .play-side .collection-board__track--bright .collection-board__slot { width: 0.65rem; height: 0.65rem; }
+  .play-side .collection-board__milestones { display: none; }
+
+  /* The centre owns the remaining width and the complete viewport height. */
+  .play-board {
+    min-height: 0;
+    gap: 0.16rem;
+    overflow: hidden;
+  }
+  .play-board__top { z-index: 80; min-height: 0; }
+  .play-board__top .talisman-strip {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.18rem !important;
+    align-items: center;
+    padding: 0.18rem 0.24rem !important;
+    overflow: visible !important;
+  }
+  .play-board__top .talisman-strip__header {
+    display: grid;
+    gap: 0.02rem;
+    min-width: 3.4rem;
+  }
+  .play-board__top .talisman-strip__header > span { font-size: 0.58rem; }
+  .play-board__top .talisman-strip__header > em { display: none; }
+  .play-board__top .talisman-strip__slots {
+    min-width: 0;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 0.12rem;
+    padding: 0;
+  }
+  .play-board__top .talisman-strip__item,
+  .play-board__top .talisman-strip__empty {
+    width: 100%;
+    max-width: none;
+    min-height: 2.25rem;
+    grid-template-columns: 1.25rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.1rem;
+    padding: 0.1rem;
+  }
+  .play-board__top .talisman-strip__art {
+    width: 1.25rem;
+    height: 1.88rem;
+    aspect-ratio: 2 / 3;
+    padding: 0.04rem;
+  }
+  .play-board__top .talisman-strip__name { font-size: 0.48rem; }
+
+  .play-board__felt {
+    min-height: 0;
+    gap: 0.08rem;
+    padding: 0.2rem 0.25rem;
+    overflow: hidden;
+  }
+  .play-board__prompt { font-size: 0.54rem; line-height: 1.15; }
+  .play-board__stage { min-height: 0; gap: 0.18rem; overflow: hidden; }
+  .hand-fan {
+    flex-wrap: nowrap !important;
+    padding: 0.2rem 0 0.08rem !important;
+    overflow: visible;
+  }
+  .hand-fan > li {
+    margin-inline: clamp(-1.05rem, -2.2vw, -0.35rem) !important;
+    transform:
+      rotate(calc(var(--t) * 4deg))
+      translateY(calc((1 - cos(calc(var(--t) * 90deg))) * 0.72rem)) !important;
+  }
+  .hand-fan .hwatu-card--dense { height: clamp(5.3rem, 28svh, 7.2rem); }
+  .deck-stack {
+    min-width: 3.75rem;
+    gap: 0.08rem;
+    padding: 0.16rem !important;
+  }
+  .deck-stack__back { width: clamp(2.25rem, 7svh, 2.85rem); }
+  .deck-stack > em { display: none; }
+  .deck-stack > strong { min-width: 3.3rem; padding: 0.08rem 0.12rem; }
+  .deck-stack > strong small { font-size: 0.5rem; }
+  .deck-stack > strong span { font-size: 0.66rem; }
+  .hand-meta { gap: 0.2rem; font-size: 0.48rem; }
+  .hand-meta__yaku { font-size: 0.58rem; }
+
+  .hand-actions,
+  .decision-actions,
+  .decision-actions--two { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.18rem; }
+  .decision-actions--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hand-actions > button,
+  .decision-actions button {
+    min-width: 0;
+    min-height: 2.15rem !important;
+    padding: 0.18rem 0.28rem !important;
+  }
+  .hand-actions strong,
+  .decision-actions strong { font-size: 0.68rem; }
+  .hand-actions span,
+  .decision-actions span { font-size: 0.46rem; line-height: 1.15; }
+  .go-danger-banner { gap: 0.25rem; padding: 0.2rem 0.35rem; }
+  .go-danger-banner span { font-size: 0.5rem; }
+
+  /* Score rail: all decisions and totals stay visible, while secondary prose
+     and the debug seed yield their space. */
+  .play-rail {
+    gap: 0.15rem;
+    padding: 0.24rem;
+    overflow: hidden !important;
+  }
+  .play-rail__stage { grid-template-columns: 2rem minmax(0, 1fr); gap: 0.2rem; }
+  .play-rail__stage-plate { height: 2rem; padding: 0.08rem; }
+  .play-rail__stage-copy { gap: 0.03rem; }
+  .play-rail__stage-copy > strong { font-size: 0.62rem; }
+  .play-rail__stage-copy > span { display: none; }
+  .play-rail__badges { gap: 0.08rem; margin-top: 0.02rem; }
+  .play-rail__badges em { padding: 0.02rem 0.16rem; font-size: 0.44rem; }
+  .play-rail__goal { padding: 0.16rem 0.2rem; }
+  .play-rail__goal > span,
+  .play-rail__goal > small { font-size: 0.45rem; }
+  .play-rail__goal > strong { font-size: 1.15rem; }
+  .play-rail__progress { gap: 0.1rem; padding: 0.15rem 0.2rem; }
+  .play-rail__progress-head > span,
+  .play-rail__pot > span { font-size: 0.44rem; }
+  .play-rail__progress-head > strong { font-size: 0.72rem; }
+  .play-rail__progress-bar { height: 0.22rem; }
+  .play-rail__pot > strong { font-size: 0.62rem; }
+  .play-rail__pot > em { font-size: 0.42rem; }
+  .play-rail__score-split { gap: 0.1rem; margin: 0; }
+  .play-rail__score-split > span { padding: 0.12rem 0.16rem; font-size: 0.44rem; }
+  .play-rail__score-split b { font-size: 0.62rem; }
+  .play-rail__score-split small { font-size: 0.4rem; }
+  .play-rail__formula { gap: 0.1rem; padding: 0.18rem; }
+  .play-rail__formula-yaku { font-size: 0.62rem; }
+  .play-rail__formula-values { gap: 0.1rem; }
+  .play-rail__formula-values > b { min-height: 1.8rem; padding: 0.08rem; font-size: 0.9rem; }
+  .play-rail__formula-values > i { font-size: 0.64rem; }
+  .play-rail__formula-total > span { font-size: 0.74rem; }
+  .play-rail__formula > small { display: none; }
+  .play-rail__pop { min-height: 0.9rem; padding: 0.04rem 0.12rem; }
+  .play-rail__pop > span { font-size: 0.45rem; }
+  .play-rail__pop > b { font-size: 0.58rem; }
+  .play-rail__resources { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.1rem; }
+  .play-rail__resources > div { gap: 0; padding: 0.12rem 0.05rem; }
+  .play-rail__resources dt { font-size: 0.4rem; }
+  .play-rail__resources dd { font-size: 0.68rem; }
+  .play-rail__resources dd small { font-size: 0.4rem; }
+  .play-rail__actions { gap: 0.1rem; margin-top: auto; }
+  .play-rail__actions button { min-height: 1.85rem !important; padding: 0.1rem !important; font-size: 0.5rem; }
+  .play-rail__seed { display: none; }
+
+  /* Full-screen overlays use the visual viewport, not the browser's unstable
+     legacy vh value. Pack contents scroll inside the modal only. */
+  .game-modal__backdrop {
+    align-items: center !important;
+    padding:
+      max(0.25rem, env(safe-area-inset-top))
+      max(0.25rem, env(safe-area-inset-right))
+      max(0.25rem, env(safe-area-inset-bottom))
+      max(0.25rem, env(safe-area-inset-left)) !important;
+    overflow: hidden;
+  }
+  .game-modal {
+    width: min(94vw, 58rem) !important;
+    max-height: calc(100svh - 0.5rem) !important;
+    border-radius: 0.2rem !important;
+  }
+  .game-modal__header { padding: 0.35rem 0.5rem; }
+  .game-modal__header h2 { font-size: 0.9rem; }
+  .game-modal__content { padding: 0.35rem 0.5rem; }
+  .game-modal__actions { padding: 0.35rem 0.5rem; }
+  .game-modal__close,
+  .game-modal__action { min-height: 2rem; padding: 0.25rem 0.45rem; }
+  .game-modal--pack .pack-picks {
+    grid-template-columns: repeat(auto-fit, minmax(5rem, 1fr)) !important;
+    gap: 0.28rem !important;
+  }
+  .game-modal--pack .pack-pick__card { width: min(6rem, 20svh) !important; }
+  .game-modal .pack-reward-pick { width: min(7rem, 24svh); min-height: 0; grid-template-rows: minmax(4.5rem, 1fr) auto auto auto; }
+
+  .card-theater__stage {
+    width: calc(100% - 0.5rem);
+    height: calc(100svh - 0.5rem);
+    margin: 0.25rem auto;
+  }
+
+  /* Shop remains a two-by-two floor. Its banner and cards become shorter, not
+     a vertically unbounded page, so buying and leaving stay reachable. */
+  .market-shell {
+    width: 100%;
+    height: 100svh !important;
+    min-height: 0 !important;
+    gap: 0.22rem;
+    padding:
+      max(0.22rem, env(safe-area-inset-top))
+      max(0.22rem, env(safe-area-inset-right))
+      max(0.22rem, env(safe-area-inset-bottom))
+      max(0.22rem, env(safe-area-inset-left));
+    overflow: hidden !important;
+  }
+  .market-shell__banner,
+  .market-shell__banner:has(.market-owned--banner) {
+    min-height: 0;
+    grid-template-rows: auto minmax(3.2rem, 1fr);
+    gap: 0.1rem 0.3rem;
+    padding: 0.18rem 0.28rem;
+  }
+  .market-shell__banner strong { font-size: 0.8rem; }
+  .market-shell__banner > div > span,
+  .market-shell__caption,
+  .market-owned--banner > header span { display: none; }
+  .market-shell__banner-tools > .market-owned--banner {
+    min-height: 3.2rem;
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    gap: 0.25rem;
+    padding: 0.15rem 0.22rem;
+  }
+  .market-owned--banner > header strong { font-size: 0.74rem; }
+  .market-owned--banner .market-owned__slots > button {
+    width: 6.5rem;
+    min-width: 6.5rem;
+    height: 2.75rem;
+    min-height: 2.75rem !important;
+    grid-template-columns: 1.45rem minmax(0, 1fr);
+    padding: 0.1rem !important;
+  }
+  .market-owned--banner .market-owned__slots > button > span { width: 1.45rem; height: 2.18rem; }
+  .market-owned--banner .market-owned__slots > button > b { font-size: 0.52rem; }
+  .market-panel__body {
+    grid-template-columns: 5.7rem minmax(0, 1fr) !important;
+    gap: 0.22rem;
+    padding: 0.22rem;
+  }
+  .market-panel__actions { gap: 0.18rem; }
+  .market-panel__wallet { padding: 0.18rem; }
+  .market-panel__wallet > strong { font-size: 0.9rem; }
+  .market-shell .market-action { min-height: 2.15rem; padding: 0.16rem; }
+  .market-shell .market-action strong { font-size: 0.62rem; }
+  .market-shell .market-action span,
+  .market-panel__note { font-size: 0.44rem; }
+  .market-panel__racks { min-height: 0; overflow: hidden !important; }
+  .market-floor { min-height: 0; gap: 0.22rem; }
+  .market-dept { gap: 0.12rem; padding: 0.18rem; overflow: hidden !important; }
+  .market-dept__sign { gap: 0.18rem; padding: 0.14rem 0.2rem; }
+  .market-dept__sign strong { font-size: 0.58rem; }
+  .market-dept__sign span { display: none; }
+  .market-floor .market-dept__items {
+    grid-template-columns: repeat(auto-fit, minmax(4rem, 1fr)) !important;
+    gap: 0.2rem !important;
+    padding: 0.15rem 0.08rem !important;
+    overflow: hidden !important;
+  }
+  .market-floor .market-card__wrap { width: min(100%, 4.6rem) !important; }
+  .market-card__purchase { min-height: 1.55rem; margin-top: 0.15rem; padding: 0.12rem; font-size: 0.5rem; }
+  .market-floor .market-card__label { padding: 0.18rem !important; font-size: 0.52rem !important; }
+  .market-floor .market-card__price { font-size: 0.52rem !important; }
+
+  /* Content-heavy front/end screens are allowed to scroll, but never clip
+     behind the browser chrome or keep a stale 100dvh after rotation. */
+  .title-root,
+  .game-root:has(> .intro-screen),
+  .game-root:has(> .deck-editor-screen),
+  .game-root:has(> .run-end-screen) {
+    height: 100svh !important;
+    min-height: 0 !important;
+    padding-top: max(0.35rem, env(safe-area-inset-top));
+    padding-right: max(0.35rem, env(safe-area-inset-right));
+    padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
+    padding-left: max(0.35rem, env(safe-area-inset-left));
+    overflow: auto !important;
+    overscroll-behavior: contain;
+  }
+  .title-root .title-screen { height: auto; min-height: calc(100svh - 0.7rem); overflow: visible; }
+  .title-root .title-screen__hero { grid-template-columns: minmax(8rem, 0.55fr) minmax(0, 1.45fr); }
+  .title-root .title-screen__hero-art { min-height: 7rem; }
+  .title-root .title-screen__card-fan { height: 7rem; transform: scale(0.48); }
+  .title-root .title-screen__intro h1 { font-size: clamp(2rem, 8svh, 3.1rem); }
+  .title-root .title-screen__description { margin-top: 0.18rem; font-size: 0.62rem; }
+  .title-root .title-screen__deck-grid { display: flex; overflow-x: auto; scroll-snap-type: x proximity; }
+  .title-root .title-screen__deck { min-width: 7.5rem; scroll-snap-align: start; }
+
+  .game-root:has(> .intro-screen--ritual),
+  .game-root > .intro-screen.intro-screen--ritual {
+    height: 100svh !important;
+    min-height: 0 !important;
+  }
+  .game-root > .intro-screen.intro-screen--ritual {
+    grid-template-rows: minmax(7rem, 1fr) auto auto auto;
+    gap: 0.3rem;
+    padding: 0.45rem 0.7rem;
+    overflow: auto;
+  }
+  .intro-screen--ritual .intro-screen__heading { padding: 0.42rem 0.6rem; }
+  .intro-screen--ritual .intro-screen__month { width: 3.6rem; }
+  .intro-screen--ritual .intro-screen__copy h1 { font-size: clamp(1.8rem, 8svh, 2.8rem) !important; }
+  .intro-screen--ritual .intro-screen__target { min-width: 6.8rem; padding: 0.35rem 0.5rem; }
+  .intro-screen--ritual .intro-screen__target strong { font-size: 1.7rem !important; }
+  .intro-screen--ritual .intro-screen__rule { min-height: 4.5rem; padding: 0.35rem 0.5rem; }
+  .intro-screen--ritual .intro-screen__rule-mark { width: 2.5rem; }
+  .intro-screen--ritual .intro-screen__actions button { min-height: 2rem; }
+  .intro-screen--boss .intro-screen__boss-copy { padding: 0.5rem; }
+  .intro-screen--boss .intro-screen__boss-copy > h2 { font-size: clamp(1.6rem, 8svh, 2.6rem); }
+  .intro-screen--boss .intro-screen__boss-copy > strong { font-size: 0.68rem; line-height: 1.3; }
+  .intro-screen--boss .intro-screen__boss-copy > div { margin-top: 0.3rem; padding: 0.3rem; }
+  .intro-screen--boss .intro-screen__boss-rules article { padding: 0.3rem; }
+}
+
+@media (orientation: landscape) and (max-height: 420px) and (min-width: 540px) {
+  .play-shell {
+    grid-template-columns: 7.1rem minmax(0, 1fr) 7.8rem !important;
+  }
+  .play-board__top .talisman-strip { padding-block: 0.1rem !important; }
+  .play-board__top .talisman-strip__item,
+  .play-board__top .talisman-strip__empty { min-height: 1.9rem; grid-template-columns: 1.05rem minmax(0, 1fr); }
+  .play-board__top .talisman-strip__art { width: 1.05rem; height: 1.58rem; }
+  .hand-fan .hwatu-card--dense { height: clamp(4.6rem, 26svh, 6.1rem); }
+  .hand-actions > button,
+  .decision-actions button { min-height: 1.85rem !important; }
+  .play-rail__goal > small,
+  .play-rail__score-split small,
+  .play-rail__progress-bar { display: none; }
+  .market-shell__banner:has(.market-owned--banner) { grid-template-rows: auto minmax(2.7rem, 1fr); }
+  .market-shell__banner-tools > .market-owned--banner { min-height: 2.7rem; }
+  .market-owned--banner .market-owned__slots > button { height: 2.3rem; min-height: 2.3rem !important; }
+  .market-owned--banner .market-owned__slots > button > span { width: 1.2rem; height: 1.8rem; }
 }

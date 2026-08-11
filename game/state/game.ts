@@ -45,6 +45,7 @@ import {
   isCupCard,
   resolveCupRole,
   type CupRole,
+  type CupRoleSource,
 } from "../engine/deck";
 import {
   evaluateBakContract,
@@ -139,9 +140,12 @@ function emptyStats(): GameState["stats"] {
     goSuccesses: 0,
     goFailures: 0,
     highestHand: 0,
+    highestHandYakuId: null,
+    highestHandCards: [],
     highestSubmissionCards: 0,
     moneyEarned: 0,
     yakusPlayed: {},
+    forbiddenCardsUsed: {},
   };
 }
 
@@ -237,6 +241,23 @@ function cardsFromIds(state: GameState, ids: readonly string[]): CardInstance[] 
   });
 }
 
+/**
+ * Collection/scoring view of the September cup.
+ *
+ * Saves keep only the player's ordinary animal/쌍피 filing choice. 국진 술잔 is
+ * a live override: while owned, every cup is evaluated on both tracks and no
+ * post-submit filing choice is necessary.
+ */
+export function getEffectiveCupRoles(state: GameState): CupRoleSource {
+  const dual = calculateTalismanRoundRuleModifiers(state.talismans).cupHasDualRole;
+  if (!dual) return state.cupAssignments;
+  const roles: Record<string, CupRole> = { ...state.cupAssignments };
+  for (const card of state.deck) {
+    if (isCupCard(card)) roles[card.instanceId] = "dual";
+  }
+  return roles;
+}
+
 function countContract(state: GameState, effectKey: string): number {
   const matchingIds = new Set<string>(
     CONTRACTS.filter((entry) => entry.effectKey === effectKey).map((entry) => entry.id),
@@ -259,7 +280,7 @@ function contractDiscount(state: GameState): number {
 function collectionPerks(state: GameState) {
   return calculateCollectionBonus(
     cardsFromIds(state, state.chain.collection.cardIds),
-    state.cupAssignments,
+    getEffectiveCupRoles(state),
     state.yakuLevels,
   ).perks;
 }
@@ -527,6 +548,9 @@ function cupRoleVariantsFor(
   state: GameState,
   cards: readonly CardInstance[],
 ): { variants: CupRole[]; unassignedIds: string[] } {
+  if (calculateTalismanRoundRuleModifiers(state.talismans).cupHasDualRole) {
+    return { variants: ["dual"], unassignedIds: [] };
+  }
   const cupCards = cards.filter(isCupCard);
   const unassignedIds = cupCards
     .filter((card) => !state.cupAssignments[card.instanceId])
@@ -552,6 +576,7 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
   }
   const highestYakuLevel = Math.max(1, ...Object.values(state.yakuLevels).map((entry) => entry.level));
   const cupVariants = cupRoleVariantsFor(state, [...submitted, ...capture.captured]);
+  const baseCupRoles = getEffectiveCupRoles(state);
   const evaluatedVariants: Array<{
     breakdown: ScoreBreakdown;
     unifyMonth: number | null;
@@ -574,7 +599,9 @@ export function evaluateSelectedHand(state: GameState): ScoredSelection | null {
 
   for (const unifyMonth of unifyVariants) {
   for (const cupRole of cupVariants.variants) {
-    const cupRoleMap: Record<string, CupRole> = { ...state.cupAssignments };
+    const cupRoleMap: Record<string, CupRole> = typeof baseCupRoles === "string"
+      ? {}
+      : { ...baseCupRoles };
     for (const id of cupVariants.unassignedIds) cupRoleMap[id] = cupRole;
     const evaluatedSubmission = submitted.map((card, index) => decorateCard(card, index, unifyMonth));
     const evaluatedCaptured = capture.captured.map((card, index) => decorateCard(card, index, null));
@@ -703,7 +730,7 @@ function applyCardAftermath(state: GameState, scored: ScoredSelection): GameStat
   }
   // 무광 연습 — the drought only counts hands that actually scored.
   const scoredABright = scoringCards.some((card) =>
-    hasEffectiveCardKind(card, "bright", resolveCupRole(state.cupAssignments, card)),
+    hasEffectiveCardKind(card, "bright", resolveCupRole(getEffectiveCupRoles(state), card)),
   );
   talismans = talismans.map((item) => {
     const definition = TALISMAN_BY_ID[item.definitionId];
@@ -714,7 +741,7 @@ function applyCardAftermath(state: GameState, scored: ScoredSelection): GameStat
 
   const cremations = talismans.filter((item) => item.definitionId === "t_cremation_deed");
   const chaffToBurn = scoringCards.filter((card) =>
-    hasEffectiveCardKind(card, "chaff", resolveCupRole(state.cupAssignments, card)),
+    hasEffectiveCardKind(card, "chaff", resolveCupRole(getEffectiveCupRoles(state), card)),
   ).slice(0, cremations.length);
   const growingCremationIds = new Set<string>();
   const cremationsByGrowthPriority = [...cremations].sort((left, right) => {
@@ -846,7 +873,7 @@ function finishRound(state: GameState): GameState {
   );
   const collectionResult = calculateCollectionBonus(
     cardsFromIds(state, state.chain.collection.cardIds),
-    state.cupAssignments,
+    getEffectiveCupRoles(state),
     state.yakuLevels,
   );
   const rewardReasons = [
@@ -926,6 +953,7 @@ function nextUnassignedCollectedCupId(
   state: GameState,
   cupAssignments: GameState["cupAssignments"] = state.cupAssignments,
 ): string | null {
+  if (calculateTalismanRoundRuleModifiers(state.talismans).cupHasDualRole) return null;
   return cardsFromIds(state, state.chain.collection.cardIds)
     .find((card) => isCupCard(card) && !cupAssignments[card.instanceId])
     ?.instanceId ?? null;
@@ -935,7 +963,7 @@ function nextUnassignedCollectedCupId(
 function finalizeDeferredCupCollection(state: GameState): GameState {
   const collectionScore = calculateCollectionBonus(
     cardsFromIds(state, state.chain.collection.cardIds),
-    state.cupAssignments,
+    getEffectiveCupRoles(state),
     state.yakuLevels,
   ).goStopPoints * 20;
   const chain = {
@@ -1011,10 +1039,13 @@ function submitHand(state: GameState): GameState {
   if (!scored) {
     return { ...state, logs: logEntry(state, "system", "제출 불가", "2~5장으로 짓(월 합 10의 배수)과 끗패를 만들어 주세요.") };
   }
-  const pendingCupCardId = [...scored.submitted, ...scored.captured]
-    .filter(isCupCard)
-    .map((card) => card.instanceId)
-    .find((id) => !state.cupAssignments[id]) ?? null;
+  const cupHasDualRole = calculateTalismanRoundRuleModifiers(state.talismans).cupHasDualRole;
+  const pendingCupCardId = cupHasDualRole
+    ? null
+    : [...scored.submitted, ...scored.captured]
+      .filter(isCupCard)
+      .map((card) => card.instanceId)
+      .find((id) => !state.cupAssignments[id]) ?? null;
   const submittedIds = new Set(scored.submitted.map((card) => card.instanceId));
   const remainingHand = state.hand.filter((card) => !submittedIds.has(card.instanceId));
   const mastery = createMasteryEvents(scored.breakdown);
@@ -1025,7 +1056,7 @@ function submitHand(state: GameState): GameState {
   ])];
   const collectionResult = calculateCollectionBonus(
     cardsFromIds(state, collectedIds),
-    state.cupAssignments,
+    getEffectiveCupRoles(state),
     state.yakuLevels,
   );
   const chain = addHandToRound(state.chain, scored.breakdown.score, {
@@ -1077,6 +1108,12 @@ function submitHand(state: GameState): GameState {
       ...state.stats,
       handsPlayed: state.stats.handsPlayed + 1,
       highestHand: Math.max(state.stats.highestHand, scored.breakdown.score),
+      highestHandYakuId: scored.breakdown.score > state.stats.highestHand
+        ? scored.breakdown.yakuId
+        : state.stats.highestHandYakuId,
+      highestHandCards: scored.breakdown.score > state.stats.highestHand
+        ? scored.submitted.map((card) => ({ ...card, tags: [...card.tags] }))
+        : state.stats.highestHandCards,
       highestSubmissionCards: Math.max(state.stats.highestSubmissionCards, scored.submitted.length),
       yakusPlayed: {
         ...state.stats.yakusPlayed,
@@ -1541,6 +1578,13 @@ function applyConsumable(state: GameState, option?: string): GameState {
     pendingTargetIds: [],
     pendingShopOfferId: null,
     lastConsumableId: id,
+    stats: {
+      ...state.stats,
+      forbiddenCardsUsed: {
+        ...(state.stats.forbiddenCardsUsed ?? {}),
+        [forbidden.id]: ((state.stats.forbiddenCardsUsed ?? {})[forbidden.id] ?? 0) + 1,
+      },
+    },
     logs: logEntry(state, "reward", forbidden.name, result.message),
   };
 }

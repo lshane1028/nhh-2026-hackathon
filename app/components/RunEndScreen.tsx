@@ -4,6 +4,7 @@ import type { RunStats, YakuId } from "@/game/types";
 import { getYakuAssetTag, getYakuDisplayName } from "@/game/content/yaku";
 
 import { AssetPlaceholder } from "./AssetPlaceholder";
+import { HwatuCard } from "./HwatuCard";
 import "./screen-ui.css";
 
 export interface RunEndYakuStat {
@@ -11,6 +12,29 @@ export interface RunEndYakuStat {
   name: string;
   count: number;
   assetTag: string;
+}
+
+export interface RunEndOwnedYaku {
+  yakuId: YakuId | string;
+  name: string;
+  level: number;
+  assetTag: string;
+}
+
+export interface RunEndOwnedTalisman {
+  instanceId: string;
+  name: string;
+  description: string;
+  assetTag: string;
+  growth: number;
+}
+
+export interface RunEndForbiddenStat {
+  definitionId: string;
+  name: string;
+  description: string;
+  assetTag: string;
+  count: number;
 }
 
 export interface RunEndScreenProps {
@@ -26,6 +50,9 @@ export interface RunEndScreenProps {
   seed: string;
   stats: RunStats;
   yakuStats?: readonly RunEndYakuStat[];
+  ownedYakus?: readonly RunEndOwnedYaku[];
+  ownedTalismans?: readonly RunEndOwnedTalisman[];
+  usedForbiddens?: readonly RunEndForbiddenStat[];
   onRestart: () => void;
   onReturnToTitle?: () => void;
   onCopySeed?: () => void;
@@ -36,8 +63,10 @@ function joinClassNames(...values: Array<string | false | undefined>): string {
   return values.filter(Boolean).join(" ");
 }
 
+const NUMBER_FORMATTER = new Intl.NumberFormat("ko-KR");
+
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat("ko-KR").format(value);
+  return NUMBER_FORMATTER.format(value);
 }
 
 export function RunEndScreen({
@@ -53,6 +82,9 @@ export function RunEndScreen({
   seed,
   stats,
   yakuStats,
+  ownedYakus = [],
+  ownedTalismans = [],
+  usedForbiddens = [],
   onRestart,
   onReturnToTitle,
   onCopySeed,
@@ -60,16 +92,11 @@ export function RunEndScreen({
 }: RunEndScreenProps) {
   const won = result === "win";
   const heading = title ?? (won ? "경화수월 완주!" : "이번 판은 나가리");
-  const goRate =
-    stats.goAttempts > 0
-      ? Math.round((stats.goSuccesses / stats.goAttempts) * 100)
-      : 0;
   const displayedYakus =
     yakuStats ??
     Object.entries(stats.yakusPlayed)
       .filter(([, count]) => count > 0)
       .sort((left, right) => right[1] - left[1])
-      .slice(0, 5)
       .map(([yakuId, count]) => ({
         yakuId,
         name: getYakuDisplayName(yakuId),
@@ -112,6 +139,28 @@ export function RunEndScreen({
         ) : null}
       </section>
 
+      <section className="run-end-screen__best-hand" aria-labelledby="run-best-hand-title">
+        <div className="screen-section-heading">
+          <div>
+            <p>최고 기록</p>
+            <h2 id="run-best-hand-title">가장 높았던 손패</h2>
+          </div>
+          <span>{stats.highestHandYakuId ? getYakuDisplayName(stats.highestHandYakuId) : "기록 없음"}</span>
+        </div>
+        <div className="run-end-screen__best-hand-body">
+          <div className="run-end-screen__best-cards" aria-label="최고 점수 손패 카드">
+            {stats.highestHandCards.length > 0
+              ? stats.highestHandCards.map((card) => <HwatuCard dense card={card} key={card.instanceId} />)
+              : <p className="run-end-screen__empty">기록된 손패가 없습니다.</p>}
+          </div>
+          <div className="run-end-screen__best-score">
+            <span>최고 손패 점수</span>
+            <strong>{formatNumber(stats.highestHand)}</strong>
+            <small>점</small>
+          </div>
+        </div>
+      </section>
+
       <section className="run-end-screen__stats" aria-labelledby="run-stats-title">
         <div className="screen-section-heading">
           <div>
@@ -123,11 +172,8 @@ export function RunEndScreen({
         <dl>
           <div><dt>제출한 손</dt><dd>{formatNumber(stats.handsPlayed)}</dd></div>
           <div><dt>사용한 버리기</dt><dd>{formatNumber(stats.discardsUsed)}</dd></div>
-          <div><dt>고 도전</dt><dd>{formatNumber(stats.goAttempts)}</dd></div>
-          <div><dt>고 성공</dt><dd>{formatNumber(stats.goSuccesses)}</dd></div>
-          <div><dt>고 실패</dt><dd>{formatNumber(stats.goFailures)}</dd></div>
-          <div><dt>고 성공률</dt><dd>{goRate}%</dd></div>
           <div><dt>최고 한 손</dt><dd>{formatNumber(stats.highestHand)}</dd></div>
+          <div><dt>최다 제출</dt><dd>{formatNumber(stats.highestSubmissionCards)}장</dd></div>
           <div><dt>번 돈</dt><dd>{formatNumber(stats.moneyEarned)}냥</dd></div>
         </dl>
       </section>
@@ -135,8 +181,8 @@ export function RunEndScreen({
       <section className="run-end-screen__yakus" aria-labelledby="run-yaku-title">
         <div className="screen-section-heading">
           <div>
-            <p>끗패 기록</p>
-            <h2 id="run-yaku-title">자주 낸 끗패</h2>
+            <p>족보 기록</p>
+            <h2 id="run-yaku-title">이번 판에 낸 족보</h2>
           </div>
           <span>{displayedYakus.length}종</span>
         </div>
@@ -156,7 +202,91 @@ export function RunEndScreen({
             ))}
           </div>
         ) : (
-          <p className="run-end-screen__empty">기록된 끗패가 없습니다.</p>
+          <p className="run-end-screen__empty">기록된 족보가 없습니다.</p>
+        )}
+      </section>
+
+      <section className="run-end-screen__owned-yakus" aria-labelledby="run-owned-yaku-title">
+        <div className="screen-section-heading">
+          <div>
+            <p>비결서 기록</p>
+            <h2 id="run-owned-yaku-title">보유했던 족보</h2>
+          </div>
+          <span>{ownedYakus.length}종</span>
+        </div>
+        {ownedYakus.length > 0 ? (
+          <div className="run-end-screen__owned-yaku-grid">
+            {ownedYakus.map((item) => (
+              <article key={item.yakuId}>
+                <AssetPlaceholder
+                  assetTag={item.assetTag}
+                  label={item.name}
+                  description={`레벨 ${formatNumber(item.level)}`}
+                  tone="collection"
+                  compact
+                />
+                <strong>Lv.{formatNumber(item.level)}</strong>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="run-end-screen__empty">이번 판에서 강화한 족보가 없습니다.</p>
+        )}
+      </section>
+
+      <section className="run-end-screen__owned-talismans" aria-labelledby="run-owned-talisman-title">
+        <div className="screen-section-heading">
+          <div>
+            <p>부적 기록</p>
+            <h2 id="run-owned-talisman-title">보유했던 부적</h2>
+          </div>
+          <span>{ownedTalismans.length}개</span>
+        </div>
+        {ownedTalismans.length > 0 ? (
+          <div className="run-end-screen__owned-talisman-grid">
+            {ownedTalismans.map((item) => (
+              <article key={item.instanceId}>
+                <AssetPlaceholder
+                  assetTag={item.assetTag}
+                  label={item.name}
+                  description={item.description}
+                  tone="collection"
+                  compact
+                />
+                {item.growth > 0 ? <strong>성장 +{formatNumber(item.growth)}</strong> : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="run-end-screen__empty">마지막까지 보유한 부적이 없습니다.</p>
+        )}
+      </section>
+
+      <section className="run-end-screen__used-forbiddens" aria-labelledby="run-used-forbidden-title">
+        <div className="screen-section-heading">
+          <div>
+            <p>금단서 기록</p>
+            <h2 id="run-used-forbidden-title">사용한 금단서</h2>
+          </div>
+          <span>{usedForbiddens.reduce((sum, item) => sum + item.count, 0)}회</span>
+        </div>
+        {usedForbiddens.length > 0 ? (
+          <div className="run-end-screen__used-forbidden-grid">
+            {usedForbiddens.map((item) => (
+              <article key={item.definitionId}>
+                <AssetPlaceholder
+                  assetTag={item.assetTag}
+                  label={item.name}
+                  description={item.description}
+                  tone="boss"
+                  compact
+                />
+                <strong>{formatNumber(item.count)}회 사용</strong>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="run-end-screen__empty">이번 판에서 사용한 금단서가 없습니다.</p>
         )}
       </section>
 

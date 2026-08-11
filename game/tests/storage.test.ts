@@ -4,6 +4,25 @@ import { createInitialGameState } from "../state/game";
 import { normalizeGameState } from "../state/storage";
 
 describe("saved game normalization", () => {
+  it("fills ending-record fields that did not exist in older saves", () => {
+    const base = createInitialGameState("LEGACY-END-RECORD");
+    const legacyStats = { ...base.stats } as Partial<typeof base.stats>;
+    delete legacyStats.highestHandYakuId;
+    delete legacyStats.highestHandCards;
+    delete legacyStats.forbiddenCardsUsed;
+    const forbiddenName = "광내림";
+
+    const normalized = normalizeGameState({
+      ...base,
+      stats: legacyStats as typeof base.stats,
+      logs: [{ id: "legacy:forbidden", kind: "reward", title: forbiddenName, detail: "옛 사용 기록" }],
+    });
+
+    expect(normalized.stats.highestHandYakuId).toBeNull();
+    expect(normalized.stats.highestHandCards).toEqual([]);
+    expect(normalized.stats.forbiddenCardsUsed).toEqual({ f_bright_descent: 1 });
+  });
+
   it("removes legacy same-kind effects from every place cards can be stored", () => {
     const base = createInitialGameState("LEGACY-SAME-KIND");
     const bright = { ...base.deck.find((card) => card.kind === "bright")!, effectTagId: "as_bright" };

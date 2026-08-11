@@ -15,7 +15,14 @@ export interface EffectiveCardRole {
   baseKkeut: number;
 }
 
-export type CupRole = "animal" | "double_chaff";
+/**
+ * How the September cup is evaluated.
+ *
+ * `dual` is never written into a save or chosen in the cup modal. It is the
+ * live role supplied by 국진 술잔, where the same card must count as both an
+ * animal and two 피 without duplicating the card instance.
+ */
+export type CupRole = "animal" | "double_chaff" | "dual";
 
 /**
  * The September cup no longer has a single round-wide role. Each cup card is
@@ -96,6 +103,7 @@ export function getEffectiveCardKinds(card: CardInstance, cupRole: CupRole = "an
   if (card.enhancement === "wild" || card.tags.includes("all_kind_wild")) return ALL_CARD_KINDS;
 
   const kinds = new Set<CardKind>([getEffectiveCardRole(card, cupRole).kind]);
+  if (card.tags.includes("cup") && cupRole === "dual") kinds.add("chaff");
   if (card.tags.includes("counts_as_bright")) kinds.add("bright");
   const addedKind = card.effectTagId
     ? ADDED_KIND_BY_EFFECT[card.effectTagId as keyof typeof ADDED_KIND_BY_EFFECT]
@@ -119,7 +127,9 @@ export function hasEffectiveCardKind(
 export function getEffectiveChaffValue(card: CardInstance, cupRole: CupRole = "animal"): number {
   if (card.enhancement === "stone") return 0;
   const role = getEffectiveCardRole(card, cupRole);
-  const printedValue = role.kind === "chaff" ? role.chaffValue : 0;
+  const printedValue = card.tags.includes("cup") && cupRole === "dual"
+    ? 2
+    : role.kind === "chaff" ? role.chaffValue : 0;
   return printedValue + Number(card.effectTagId === "extra_pi");
 }
 

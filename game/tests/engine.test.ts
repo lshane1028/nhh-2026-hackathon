@@ -231,7 +231,36 @@ describe("짓 splitting", () => {
   it("treats a 돌패 as 12월 and keeps retired zero-base cards on their printed month", () => {
     expect(getEffectiveMonth(cloneCard(takeKind(3, "bright"), { enhancement: "stone" }))).toBe(STONE_MONTH_VALUE);
     expect(getEffectiveMonth(cloneCard(chaff(7), { tags: ["zero_base"] }))).toBe(7);
-    expect(getEffectiveMonth(cloneCard(chaff(7), { permanentKkeutBonus: 2 }))).toBe(9);
+    expect(getEffectiveMonth(cloneCard(chaff(7), { permanentKkeutBonus: 2 }))).toBe(7);
+  });
+
+  it("uses printed months for 짓 validity regardless of permanent score bonuses", () => {
+    const normalEleven = chaff(11);
+    const boostedEleven = cloneCard(normalEleven, { permanentKkeutBonus: 4 });
+    const pair = [chaff(1), chaff(2)];
+
+    const normalTwenty = findImmediateYakuCandidates([...pair, chaff(9), normalEleven]);
+    const boostedTwenty = findImmediateYakuCandidates([...pair, chaff(9), boostedEleven]);
+    expect(normalTwenty).toHaveLength(1);
+    expect(boostedTwenty).toHaveLength(1);
+    expect(normalTwenty[0].jitSum).toBe(20);
+    expect(boostedTwenty[0].jitSum).toBe(20);
+
+    const scored = calculateHandScore({
+      candidate: boostedTwenty[0],
+      submittedCards: [...pair, chaff(9), boostedEleven],
+    });
+    expect(scored.startingKkeut).toBe(20);
+    expect(scored.finalKkeut).toBe(24);
+    expect(scored.operations).toContainEqual(expect.objectContaining({
+      sourceId: boostedEleven.instanceId,
+      label: "영구 월 합",
+      operation: "add_kkeut",
+      value: 4,
+    }));
+
+    const boostedFour = cloneCard(chaff(4), { permanentKkeutBonus: 4 });
+    expect(findImmediateYakuCandidates([...pair, boostedFour, chaff(12)])).toEqual([]);
   });
 
   it("allows an 8월 팔방패 and 12월 card to make 짓 20", () => {

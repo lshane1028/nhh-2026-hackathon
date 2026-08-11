@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createTimeline } from "animejs/timeline";
 
 import {
   getCollectionLandingTargets,
@@ -8,6 +9,7 @@ import {
   type CupRoleLookup,
 } from "@/game/engine/collection-board";
 import { getImmediateYakuDefinition } from "@/game/content/yaku";
+import { getEffectiveMonth } from "@/game/engine/yaku";
 import type { CardInstance, ScoreBreakdown, ScoreOperation } from "@/game/types";
 import {
   playCardPickSound,
@@ -24,6 +26,10 @@ import {
 } from "../audio/game-sfx";
 import { HwatuCard } from "./HwatuCard";
 import type { ScoreRevealState } from "./useScoreReveal";
+
+const GROWTH_NUMBER_FORMATTER = new Intl.NumberFormat("ko-KR", {
+  maximumFractionDigits: 2,
+});
 
 export type SubmissionBeatKind =
   | "intro"
@@ -101,9 +107,7 @@ function operationText(operation: ScoreOperation): string {
 }
 
 function visibleJitValue(card: CardInstance): number {
-  if (card.tags.includes("zero_base")) return 0;
-  if (card.enhancement === "stone") return 12;
-  return card.month + card.permanentKkeutBonus;
+  return getEffectiveMonth(card);
 }
 
 /** Pure timeline builder: the animation can never disagree with the scored result. */
@@ -262,9 +266,7 @@ export function buildSubmissionBeats(
     runningJit: breakdown.finalKkeut,
     runningHeung: breakdown.finalHeung,
   });
-  const growthNumber = (value: number) => new Intl.NumberFormat("ko-KR", {
-    maximumFractionDigits: 2,
-  }).format(value);
+  const growthNumber = (value: number) => GROWTH_NUMBER_FORMATTER.format(value);
   growthEvents
     .filter((event) => event.delta > 0)
     .forEach((event) => {
@@ -295,7 +297,7 @@ function playSubmissionBeat(beat: SubmissionBeat, index: number) {
 }
 
 interface CollectionFlight {
-  animation: Animation;
+  animation: ReturnType<typeof createTimeline>;
   clone: HTMLElement;
   source: HTMLElement;
 }
@@ -326,7 +328,7 @@ function startCollectionFlight(
 ): CollectionFlight | null {
   const source = findByDataValue("data-theater-card-id", card.instanceId);
   const target = findCollectionTarget(card, track);
-  if (!source || !target || typeof source.animate !== "function") return null;
+  if (!source || !target) return null;
 
   // The collection rail is compact and may scroll on a short viewport. Bring
   // the exact row/slot into view before measuring it, otherwise the card can
@@ -351,15 +353,26 @@ function startCollectionFlight(
   });
   document.body.append(clone);
   source.style.visibility = "hidden";
-  const animation = clone.animate([
-    { opacity: 1, transform: "translate3d(0, 0, 0) scale(1) rotate(0deg)", offset: 0 },
-    { opacity: 1, transform: `translate3d(${deltaX * 0.68}px, ${deltaY * 0.56}px, 0) scale(0.82) rotate(-5deg)`, offset: 0.66 },
-    { opacity: 0.18, transform: `translate3d(${deltaX}px, ${deltaY}px, 0) scale(${targetScale}) rotate(-9deg)`, offset: 1 },
-  ], {
-    duration,
-    easing: "cubic-bezier(.2,.72,.18,1)",
-    fill: "forwards",
-  });
+  const travelDuration = Math.max(1, Math.round(duration * 0.66));
+  const landingDuration = Math.max(1, duration - travelDuration);
+  const animation = createTimeline({ defaults: { ease: "out(4)" } })
+    .add(clone, {
+      opacity: 1,
+      x: deltaX * 0.68,
+      y: deltaY * 0.56,
+      scale: 0.82,
+      rotate: -5,
+      duration: travelDuration,
+    })
+    .add(clone, {
+      opacity: 0.18,
+      x: deltaX,
+      y: deltaY,
+      scale: targetScale,
+      rotate: -9,
+      ease: "inOut(2)",
+      duration: landingDuration,
+    });
   return { animation, clone, source };
 }
 
@@ -428,7 +441,7 @@ export function SubmissionTheater({
         };
         playCollectionSlideSound(collectionIndex);
         flight = startCollectionFlight(card, reduced ? 80 : 260, beat.collectionTrack);
-        if (flight) void flight.animation.finished.then(land).catch(() => undefined);
+        if (flight) void flight.animation.then(land).catch(() => undefined);
         else fallbackLandingTimer = window.setTimeout(land, reduced ? 60 : 180);
       });
     }

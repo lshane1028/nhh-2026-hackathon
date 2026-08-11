@@ -96,6 +96,9 @@ let musicDuckTimer: number | null = null;
 const samplePools = new Map<string, HTMLAudioElement[]>();
 const segmentPlayTokens = new WeakMap<HTMLAudioElement, number>();
 const PLASTIC_CARD_HIT_OFFSETS = [1.34, 4.33, 7.48, 10.68] as const;
+const SAMPLE_PRELOAD_BATCH_SIZE = 2;
+let samplePreloadQueue: string[] = [];
+let samplePreloadScheduled = false;
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
@@ -125,6 +128,32 @@ function preloadSample(url: string): void {
   if (!audio) return;
   samplePools.set(url, [audio]);
   audio.load();
+}
+
+function scheduleSamplePreload(urls: readonly string[]): void {
+  if (typeof window === "undefined" || samplePreloadScheduled) return;
+  samplePreloadQueue = [...new Set(urls)];
+  samplePreloadScheduled = true;
+
+  const scheduleBatch = () => {
+    const runBatch = () => {
+      let loaded = 0;
+      while (samplePreloadQueue.length > 0 && loaded < SAMPLE_PRELOAD_BATCH_SIZE) {
+        const url = samplePreloadQueue.shift();
+        if (url) preloadSample(url);
+        loaded += 1;
+      }
+      if (samplePreloadQueue.length > 0) scheduleBatch();
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(runBatch, { timeout: 1_000 });
+    } else {
+      window.setTimeout(runBatch, 80);
+    }
+  };
+
+  scheduleBatch();
 }
 
 function playSample(url: string, volume: number, playbackRate = 1): void {
@@ -421,7 +450,7 @@ export function playCardPickSound() {
 export function primeGameAudio() {
   audioPrimed = true;
   getContext();
-  [
+  scheduleSamplePreload([
     ...GAME_AUDIO_ASSETS.cardPlace,
     ...GAME_AUDIO_ASSETS.cardSlide,
     ...GAME_AUDIO_ASSETS.cardShove,
@@ -441,7 +470,7 @@ export function primeGameAudio() {
     GAME_AUDIO_ASSETS.cashRegister,
     GAME_AUDIO_ASSETS.coinDrop,
     GAME_AUDIO_ASSETS.shopPurchase,
-  ].forEach(preloadSample);
+  ]);
   startGameMusic();
 }
 

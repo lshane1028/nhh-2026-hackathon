@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
@@ -20,7 +20,7 @@ import {
 } from "./card-visuals";
 import { getFloatingHintPosition, type FloatingHintPosition } from "./tooltip-position";
 
-export type HwatuCupRole = "animal" | "double_chaff";
+export type HwatuCupRole = "animal" | "double_chaff" | "dual";
 
 export interface HwatuCardProps {
   card: CardInstance;
@@ -58,6 +58,9 @@ function joinClassNames(...values: Array<string | false | undefined>): string {
 }
 
 function getCardKindLabel(card: CardInstance, cupRole?: HwatuCupRole) {
+  if (cupRole === "dual") {
+    return "동물·쌍피";
+  }
   if (cupRole === "double_chaff") {
     return "쌍피";
   }
@@ -71,7 +74,7 @@ function getCardKindLabel(card: CardInstance, cupRole?: HwatuCupRole) {
     : KIND_LABELS[card.kind];
 }
 
-export function HwatuCard({
+export const HwatuCard = memo(function HwatuCard({
   card,
   selected = false,
   scoring = false,
@@ -89,16 +92,17 @@ export function HwatuCard({
   const [hintPosition, setHintPosition] = useState<FloatingHintPosition | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
   const hintRef = useRef<HTMLElement | null>(null);
+  const pointerBoundsRef = useRef<DOMRect | null>(null);
   const hintVisible = hintPosition !== null;
   const isDisabled = disabled || Boolean(card.disabledForRound);
   const kindLabel = getCardKindLabel(card, cupRole);
-  const monthValue = card.month + card.permanentKkeutBonus;
+  const scoreMonthBonus = card.permanentKkeutBonus;
   const ribbonLabel = card.ribbonGroup
     ? RIBBON_LABELS[card.ribbonGroup]
     : null;
   const accessibleLabel =
     ariaLabel ??
-    `${card.month}월 ${card.name}, ${kindLabel}, 월값 ${monthValue}${splitRole === "jit" ? ", 짓" : splitRole === "kkeut" ? ", 끗패" : ""}${selected ? ", 선택됨" : ""}${isDisabled ? ", 사용 불가" : ""}`;
+    `${card.month}월 ${card.name}, ${kindLabel}, 짓 계산 ${card.month}${scoreMonthBonus ? `, 득점 월 합 +${scoreMonthBonus}` : ""}${splitRole === "jit" ? ", 짓" : splitRole === "kkeut" ? ", 끗패" : ""}${selected ? ", 선택됨" : ""}${isDisabled ? ", 사용 불가" : ""}`;
 
   const effectTag = card.effectTagId ? CARD_EFFECT_TAG_BY_ID[card.effectTagId] : undefined;
   // Four categories, four channels: 각인 is what the card is MADE of, 판본 is how
@@ -135,8 +139,9 @@ export function HwatuCard({
 
   const showHint = (node: HTMLElement) => {
     anchorRef.current = node;
+    pointerBoundsRef.current = node.getBoundingClientRect();
     setHintPosition(getFloatingHintPosition(
-      node.getBoundingClientRect(),
+      pointerBoundsRef.current,
       window.innerWidth,
       window.innerHeight,
       288,
@@ -145,6 +150,7 @@ export function HwatuCard({
   };
   const hideHint = () => {
     anchorRef.current = null;
+    pointerBoundsRef.current = null;
     setHintPosition(null);
   };
 
@@ -161,7 +167,8 @@ export function HwatuCard({
    */
   const tilt = (event: React.PointerEvent<HTMLElement>) => {
     const node = event.currentTarget;
-    const box = node.getBoundingClientRect();
+    const box = pointerBoundsRef.current ?? node.getBoundingClientRect();
+    pointerBoundsRef.current = box;
     const x = (event.clientX - box.left) / box.width - 0.5;
     const y = (event.clientY - box.top) / box.height - 0.5;
     node.style.setProperty("--pointer-x", x.toFixed(3));
@@ -244,7 +251,8 @@ export function HwatuCard({
 
   const detailTitle = [
     card.name,
-    `월값 ${monthValue}`,
+    `짓 계산 ${card.month}`,
+    scoreMonthBonus ? `득점 월 합 +${scoreMonthBonus}` : null,
     ribbonLabel,
     ...modifierLines,
     card.tags.map((tag) => `#${tag}`).join(" "),
@@ -278,9 +286,9 @@ export function HwatuCard({
           role="tooltip"
           style={{ left: hintPosition.left, top: hintPosition.top }}
         >
-          <b>{card.month}월 {monthValue > card.month ? `+${monthValue - card.month}` : ""}</b>
+          <b>{card.month}월</b>
           <em>{kindLabel}{ribbonLabel ? ` · ${ribbonLabel}` : ""}</em>
-          <i>월값 {monthValue}</i>
+          <i>짓 계산 {card.month}{scoreMonthBonus ? ` · 득점 월 합 +${scoreMonthBonus}` : ""}</i>
           {modifierLines.map((line) => <u key={line}>{line}</u>)}
           {isDisabled ? <s>이번 판 사용 불가</s> : null}
         </span>,
@@ -329,4 +337,4 @@ export function HwatuCard({
       {hint}
     </>
   );
-}
+});

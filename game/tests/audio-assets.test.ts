@@ -8,6 +8,7 @@ import {
   playCollectionSlapSound,
   playCollectionSlideSound,
   playShopPurchaseSound,
+  primeGameAudio,
   resolveGameMusicScene,
 } from "../../app/audio/game-sfx";
 
@@ -117,5 +118,42 @@ describe("game audio assets", () => {
     expect(played).toContain(GAME_AUDIO_ASSETS.shopPurchase);
     await vi.advanceTimersByTimeAsync(95);
     expect(played).toContain(GAME_AUDIO_ASSETS.reset);
+  });
+
+  it("defers bulk sample decoding and warms only a small idle batch", () => {
+    const loaded: string[] = [];
+    const idleCallbacks: Array<(deadline: IdleDeadline) => void> = [];
+    class FakeAudio {
+      currentTime = 0;
+      ended = false;
+      paused = true;
+      playbackRate = 1;
+      preload = "";
+      volume = 1;
+
+      constructor(public readonly src: string) {}
+      load() { loaded.push(this.src); }
+      pause() { this.paused = true; }
+      play() { this.paused = false; return Promise.resolve(); }
+    }
+
+    vi.stubGlobal("window", {
+      Audio: FakeAudio,
+      clearTimeout,
+      localStorage: { getItem: () => null, setItem: () => undefined },
+      requestIdleCallback: (callback: (deadline: IdleDeadline) => void) => {
+        idleCallbacks.push(callback);
+        return idleCallbacks.length;
+      },
+      setTimeout,
+    });
+
+    primeGameAudio();
+    expect(loaded).toHaveLength(0);
+    expect(idleCallbacks).toHaveLength(1);
+
+    idleCallbacks.shift()?.({ didTimeout: false, timeRemaining: () => 50 });
+    expect(loaded).toHaveLength(2);
+    expect(idleCallbacks).toHaveLength(1);
   });
 });

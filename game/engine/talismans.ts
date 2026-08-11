@@ -109,6 +109,7 @@ function cardRetriggerEffects(
   talisman: TalismanInstance,
   definition: TalismanDefinition,
   cupRole: CupRole,
+  scoringCardCount: number,
   suffix: string,
 ): OrderedScoreEffect[] {
   const effects: OrderedScoreEffect[] = [];
@@ -139,6 +140,16 @@ function cardRetriggerEffects(
     addEffect(effects, makeEffect(talisman, definition, "add_heung", 6, `${card.name} 자개 ${suffix}`));
   } else if (card.edition === "five_color") {
     addEffect(effects, makeEffect(talisman, definition, "multiply_heung", 1.35, `${card.name} 오색 ${suffix}`));
+  }
+
+  // Card treatments are part of the card's score text too. Omitting these made
+  // 재발동 charms work on editions but silently ignore 짝패/무거운 달/고집패.
+  if (card.effectTagId === "partner_boost" && scoringCardCount > 1) {
+    addEffect(effects, makeEffect(talisman, definition, "add_heung", 2, `${card.name} 짝패 ${suffix}`));
+  } else if (card.effectTagId === "heavy_month") {
+    addEffect(effects, makeEffect(talisman, definition, "add_kkeut", 50, `${card.name} 무거운 달 ${suffix}`));
+  } else if (card.effectTagId === "stubborn") {
+    addEffect(effects, makeEffect(talisman, definition, "add_heung", 3, `${card.name} 고집패 ${suffix}`));
   }
 
   return effects;
@@ -249,7 +260,7 @@ function effectsForDefinition(
       const tag = typeof params.tag === "string" ? params.tag : "bird";
       for (const card of context.scoringCards.filter((entry) => entry.tags.includes(tag))) {
         for (let repeat = 0; repeat < repeats; repeat += 1) {
-          effects.push(...cardRetriggerEffects(card, talisman, definition, cupRole, `재발동 ${repeat + 1}`));
+          effects.push(...cardRetriggerEffects(card, talisman, definition, cupRole, context.scoringCards.length, `재발동 ${repeat + 1}`));
         }
       }
       break;
@@ -412,7 +423,7 @@ function effectsForDefinition(
       if (first && (!requiresEnhancement || first.enhancement !== undefined)) {
         const repeats = Math.max(1, positiveInteger(definition.amount, 1));
         for (let repeat = 0; repeat < repeats; repeat += 1) {
-          effects.push(...cardRetriggerEffects(first, talisman, definition, cupRole, `첫 패 재발동 ${repeat + 1}`));
+          effects.push(...cardRetriggerEffects(first, talisman, definition, cupRole, context.scoringCards.length, `첫 패 재발동 ${repeat + 1}`));
         }
       }
       break;
@@ -420,6 +431,14 @@ function effectsForDefinition(
     case "burn_chaff_growth": {
       const factor = 1 + Math.max(0, finiteOr(talisman.growth));
       if (factor !== 1) addEffect(effects, makeEffect(talisman, definition, "multiply_heung", factor));
+      break;
+    }
+    case "devour_neighbor": {
+      // The stage-opening reducer stores the eaten talisman's value in growth.
+      // Without turning that growth back into a score operation the dagger
+      // visibly ate a charm but never paid the promised permanent multiplier.
+      const factor = 1 + Math.max(0, finiteOr(talisman.growth));
+      if (factor !== 1) addEffect(effects, makeEffect(talisman, definition, "multiply_heung", factor, "누적 성장"));
       break;
     }
     case "month_diversity_multiplier": {
@@ -437,7 +456,7 @@ function effectsForDefinition(
     }
     case "cup_dual_role": {
       for (const card of context.scoringCards.filter((entry) => entry.tags.includes("cup"))) {
-        effects.push(...cardRetriggerEffects(card, talisman, definition, "double_chaff", "쌍피 역할 재발동"));
+        effects.push(...cardRetriggerEffects(card, talisman, definition, "double_chaff", context.scoringCards.length, "쌍피 역할 재발동"));
       }
       break;
     }
@@ -452,7 +471,6 @@ function effectsForDefinition(
     case "threshold_relief":
     case "settlement_multiplier":
     case "fail_rescue":
-    case "devour_neighbor":
     case "economy":
       break;
     default: {
@@ -491,6 +509,28 @@ export function evaluateTalismanEffects(context: TalismanScoreContext): Evaluate
     effects: OrderedScoreEffect[];
     copyable: boolean;
   }> = [];
+  const cannotBeCopied = new Set<ScoreEffectKey>([
+    "copy_left_score",
+    "copy_neighbors",
+    "economy",
+    "fail_rescue",
+    "threshold_relief",
+    "settlement_multiplier",
+  ]);
+
+  const rightmostLiveScoreEffects = (reader: TalismanInstance): OrderedScoreEffect[] => {
+    for (const candidateTalisman of [...context.talismans].reverse()) {
+      if (candidateTalisman.instanceId === reader.instanceId) continue;
+      const candidateDefinition = definitions[candidateTalisman.definitionId];
+      if (!candidateDefinition || cannotBeCopied.has(candidateDefinition.effectKey)) continue;
+      const candidateEffects = [
+        ...effectsForDefinition(candidateTalisman, candidateDefinition, context),
+        ...editionEffects(candidateTalisman, candidateDefinition),
+      ];
+      if (candidateEffects.length > 0) return candidateEffects;
+    }
+    return [];
+  };
 
   for (const talisman of context.talismans) {
     const definition = definitions[talisman.definitionId];
@@ -516,21 +556,14 @@ export function evaluateTalismanEffects(context: TalismanScoreContext): Evaluate
       const left = groups.at(-1);
       effects = left?.copyable ? cloneEffects(left.effects, talisman, definition) : [];
     } else if (definition.effectKey === "copy_neighbors") {
-      const target = [...groups].reverse().find((group) => group.copyable && group.effects.length > 0);
-      effects = target ? cloneEffects(target.effects, talisman, definition) : [];
+      const targetEffects = rightmostLiveScoreEffects(talisman);
+      effects = cloneEffects(targetEffects, talisman, definition);
     } else {
       effects = effectsForDefinition(talisman, definition, context);
     }
 
     effects.push(...editionEffects(talisman, definition));
-    const copyable = ![
-      "copy_left_score",
-      "copy_neighbors",
-      "economy",
-      "fail_rescue",
-      "threshold_relief",
-      "settlement_multiplier",
-    ].includes(definition.effectKey);
+    const copyable = !cannotBeCopied.has(definition.effectKey);
     groups.push({ definition, effects, copyable });
     orderedScoreEffects.push(...effects);
   }

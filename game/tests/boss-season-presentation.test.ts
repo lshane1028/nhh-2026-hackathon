@@ -19,31 +19,40 @@ describe("seasonal boss presentation", () => {
     expect(getBossSeasonForMonth(3, false)).toBeNull();
   });
 
-  it("renders denser decorative particles without changing the felt", () => {
-    const expectedCounts = { spring: 45, summer: 54, autumn: 39, winter: 54 } as const;
-    for (const [season, count] of Object.entries(expectedCounts)) {
+  it("renders one canvas layer instead of dozens of animated DOM nodes", () => {
+    const seasons = ["spring", "summer", "autumn", "winter"] as const;
+    for (const season of seasons) {
       const markup = renderToStaticMarkup(
-        createElement(BossSeasonOverlay, { season: season as keyof typeof expectedCounts }),
+        createElement(BossSeasonOverlay, { season }),
       );
       expect(markup).toContain(`data-season="${season}"`);
       expect(markup).toContain('aria-hidden="true"');
-      expect(markup.match(/boss-season-fx__particle/g)).toHaveLength(count);
+      expect(markup).toContain("boss-season-fx__canvas");
+      expect(markup).not.toContain("boss-season-fx__particle");
     }
   });
 
-  it("ships motion and reduced-motion styles for every season", () => {
+  it("ships canvas atmosphere and reduced-motion styles for every season", () => {
     const cssPath = fileURLToPath(new URL("../../app/game.css", import.meta.url));
     const css = readFileSync(cssPath, "utf8");
     for (const season of ["spring", "summer", "autumn", "winter"]) {
       expect(css).toContain(`.boss-season-fx--${season}`);
     }
-    expect(css).toContain("@keyframes boss-petal-fall");
-    expect(css).toContain("@keyframes boss-rain-fall");
-    expect(css).toContain("width: 3px");
-    expect(css).toContain("128vh");
-    expect(css).toContain("@keyframes boss-leaf-fall");
-    expect(css).toContain("@keyframes boss-snow-fall");
+    expect(css).toContain(".boss-season-fx__canvas");
+    expect(css).toContain("mix-blend-mode: screen");
+    expect(css).not.toContain("boss-season-fx__particle");
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
+  });
+
+  it("drives the canvas with one animation frame loop and an anime.js scene timeline", () => {
+    const componentPath = fileURLToPath(new URL("../../app/components/BossSeasonOverlay.tsx", import.meta.url));
+    const source = readFileSync(componentPath, "utf8");
+
+    expect(source).toContain('from "animejs/timeline"');
+    expect(source).toContain("createTimeline({ loop: true");
+    expect(source).toContain("window.requestAnimationFrame(draw)");
+    expect(source).toContain("Math.min(window.devicePixelRatio || 1, 1.5)");
+    expect(source).toContain("timeline.revert()");
   });
 
   it("keeps the absolute submission theater out of the boss layer stacking rule", () => {

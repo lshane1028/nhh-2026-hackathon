@@ -411,7 +411,10 @@
 .run-end-screen__hero > h1 { color: #f1dfb7; font-family: Georgia, "Noto Serif KR", serif; }
 .run-end-screen > section { border-color: var(--ad-line); border-radius: 0.25rem; background: linear-gradient(180deg, #291f18, #17120f); color: #eadcbd; }
 .run-end-screen__stats dl div,
-.run-end-screen__yaku-grid article { border-color: #5d4930; border-radius: 0.18rem; background: #17120f; }
+.run-end-screen__yaku-grid article,
+.run-end-screen__owned-yaku-grid article,
+.run-end-screen__owned-talisman-grid article,
+.run-end-screen__used-forbidden-grid article { border-color: #5d4930; border-radius: 0.18rem; background: #17120f; }
 .run-end-screen__stats dt,
 .run-end-screen__score > span,
 .run-end-screen__score > small { color: #9f9078; }

@@ -7,7 +7,7 @@ import { CONTRACTS, START_DECKS, WEATHER_BY_ID } from "@/game/content/meta";
 import { getStageDefinition } from "@/game/content/stages";
 import { getTalismanTimingText, TALISMAN_BY_ID } from "@/game/content/talismans";
 import { BOOK_BY_ID, FORBIDDEN_BY_ID } from "@/game/content/upgrades";
-import { ALL_IMMEDIATE_YAKU_DEFINITIONS, getYakuDisplayName } from "@/game/content/yaku";
+import { ALL_IMMEDIATE_YAKU_DEFINITIONS, getYakuAssetTag, getYakuDisplayName } from "@/game/content/yaku";
 import { CARD_EFFECT_TAG_BY_ID } from "@/game/content/card-effects";
 import {
   getGameAudioMuted,
@@ -52,6 +52,7 @@ import {
   evaluateSelectedHand,
   gameReducer,
   getRoundRequirement,
+  getEffectiveCupRoles,
   getNextGoRequirement,
   mustDeclareGo,
   getDefinitionForOffer,
@@ -197,8 +198,10 @@ interface MarketBanner {
   tone?: "shop" | "reward" | "contract";
 }
 
+const NUMBER_FORMATTER = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 2 });
+
 function format(value: number): string {
-  return new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 2 }).format(value);
+  return NUMBER_FORMATTER.format(value);
 }
 
 export function getCupChoiceActionLabels(preview: CupRolePreviewCounts | null): {
@@ -257,7 +260,7 @@ function collectionResultForTrack(
   confirmedCardIdsByTrack?: CollectionCardIdsByTrack,
 ) {
   const ids = confirmedCardIdsByTrack?.[track] ?? state.chain.collection.cardIds;
-  return calculateCollectionBonus(cardsFor(state, ids), state.cupAssignments, state.yakuLevels);
+  return calculateCollectionBonus(cardsFor(state, ids), getEffectiveCupRoles(state), state.yakuLevels);
 }
 
 function collectionItems(
@@ -284,7 +287,7 @@ function collectionItems(
     confirmedCardIds: confirmedCardIdsByTrack?.[track] ?? state.chain.collection.cardIds,
     pendingCardIds: [],
     track,
-    cupRoles: state.cupAssignments,
+    cupRoles: getEffectiveCupRoles(state),
     collectedOnly,
   });
 
@@ -712,6 +715,8 @@ function DeckEditor({ state, dispatch, onApplyConsumable }: {
 
 export default function GameApp() {
   const [state, dispatch] = useReducer(gameReducer, undefined, () => createInitialGameState());
+  const pendingSaveState = useRef<GameState | null>(null);
+  const saveTimer = useRef<number | null>(null);
   const [savedState, setSavedState] = useState<GameState | null>(null);
   const [tutorialMode, setTutorialMode] = useState(true);
   const [selectedStartDeckId, setSelectedStartDeckId] = useState("deck_standard");
@@ -753,6 +758,21 @@ export default function GameApp() {
   const previousHandIds = useRef<Set<string>>(new Set());
   const previousScreen = useRef(state.screen);
   const collectionLandingTimer = useRef<number | null>(null);
+  const flushPendingSave = useCallback(() => {
+    if (saveTimer.current !== null) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (!pendingSaveState.current) return;
+    saveGame(pendingSaveState.current);
+    pendingSaveState.current = null;
+  }, []);
+  const handleHandCardSelect = useCallback((selected: CardInstance) => {
+    dispatch({ type: "SELECT_CARD", cardId: selected.instanceId });
+  }, []);
+  const handleTalismanReorder = useCallback((instanceId: string, targetInstanceId: string) => {
+    dispatch({ type: "MOVE_TALISMAN_TO", instanceId, targetInstanceId });
+  }, []);
   useEffect(() => {
     const timer = window.setTimeout(() => setAudioMuted(getGameAudioMuted()), 0);
     return () => window.clearTimeout(timer);
@@ -828,10 +848,19 @@ export default function GameApp() {
   }, [startDeckUnlocksLoaded, unlockedStartDeckIds]);
 
   useEffect(() => {
-    if (state.runId !== "not-started" && state.screen !== "title") {
-      saveGame(state);
-    }
-  }, [state]);
+    if (state.runId === "not-started" || state.screen === "title") return;
+    pendingSaveState.current = state;
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(flushPendingSave, 120);
+  }, [flushPendingSave, state]);
+
+  useEffect(() => {
+    window.addEventListener("pagehide", flushPendingSave);
+    return () => {
+      window.removeEventListener("pagehide", flushPendingSave);
+      flushPendingSave();
+    };
+  }, [flushPendingSave]);
 
   useEffect(() => {
     if (state.screen !== "play" && state.screen !== "decision") {
@@ -874,6 +903,7 @@ export default function GameApp() {
     const card = state.hand.find((entry) => entry.instanceId === id);
     return card ? [card] : [];
   });
+  const effectiveCupRoleLookup = useMemo(() => getEffectiveCupRoles(state), [state]);
   const presentationDrawnCards = useMemo(() => {
     if (!cardPresentation) return [];
     const keptIds = new Set(cardPresentation.keptCardIds);
@@ -887,7 +917,9 @@ export default function GameApp() {
     // An unfiled September cup is still an animal on the live board. Its
     // scoring role may have been chosen automatically for the best hand, but
     // that must not silently decide where the player files it afterward.
-    const collectionCupRoles = { ...state.cupAssignments };
+    const collectionCupRoles = typeof effectiveCupRoleLookup === "string"
+      ? effectiveCupRoleLookup
+      : { ...effectiveCupRoleLookup };
     const collectionCards = [...selectedCards, ...preview.captured]
       .filter((card) => getCollectionLandingTargets(card, collectionCupRoles).length > 0);
     setLandedCollectionTargets(new Set());
@@ -945,10 +977,10 @@ export default function GameApp() {
     () => state.talismans.some((item) => item.definitionId === "t_leap_calendar")
       || calculateCollectionBonus(
         cardsFor(state, state.chain.collection.cardIds),
-        state.cupAssignments,
+        effectiveCupRoleLookup,
         state.yakuLevels,
       ).perks.allowFiveMultipleJit,
-    [state],
+    [effectiveCupRoleLookup, state],
   );
   const yakuChoices = useMemo(() => {
     const candidates = findImmediateYakuCandidates(selectedCards, {
@@ -1019,10 +1051,10 @@ export default function GameApp() {
         : [];
     });
   }, [state.talismans, submitSnapshot]);
-  const talismanItems = state.talismans.flatMap((instance) => {
+  const talismanItems = useMemo(() => state.talismans.flatMap((instance) => {
     const definition = TALISMAN_BY_ID[instance.definitionId];
     return definition ? [{ instance, definition }] : [];
-  });
+  }), [state.talismans]);
   const cardTheater = cardPresentation?.kind === "submit" && state.lastScore && !state.pendingCupCardId ? (
     <SubmissionTheater
       key={cardPresentation.id}
@@ -1396,6 +1428,38 @@ export default function GameApp() {
   // land, and every collection flight falls back to an invisible target.
   if ((state.screen === "run_win" || state.screen === "run_lose") && !cardPresentation) {
     const isWin = state.screen === "run_win";
+    const ownedYakus = Object.entries(state.yakuLevels)
+      .filter(([, progress]) => progress.level > 1)
+      .sort((left, right) => right[1].level - left[1].level || left[0].localeCompare(right[0]))
+      .map(([yakuId, progress]) => ({
+        yakuId,
+        name: getYakuDisplayName(yakuId),
+        level: progress.level,
+        assetTag: getYakuAssetTag(yakuId) ?? `ending:yaku:${yakuId}`,
+      }));
+    const ownedTalismans = state.talismans.flatMap((instance) => {
+      const definition = TALISMAN_BY_ID[instance.definitionId];
+      return definition ? [{
+        instanceId: instance.instanceId,
+        name: definition.name,
+        description: definition.description,
+        assetTag: definition.assetTag,
+        growth: instance.growth,
+      }] : [];
+    });
+    const usedForbiddens = Object.entries(state.stats.forbiddenCardsUsed ?? {})
+      .filter(([, count]) => count > 0)
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .flatMap(([definitionId, count]) => {
+        const definition = FORBIDDEN_BY_ID[definitionId];
+        return definition ? [{
+          definitionId,
+          name: definition.name,
+          description: `${definition.benefit} · 대가: ${definition.cost}`,
+          assetTag: definition.assetTag,
+          count,
+        }] : [];
+      });
     return (
       <div className="game-root">
         <RunEndScreen
@@ -1407,6 +1471,9 @@ export default function GameApp() {
           money={state.money}
           seed={state.seed}
           stats={state.stats}
+          ownedYakus={ownedYakus}
+          ownedTalismans={ownedTalismans}
+          usedForbiddens={usedForbiddens}
           summary={isWin ? "열두 달을 모두 도장 찍었습니다. 같은 덱으로 무한 달력을 이어갈 수 있습니다." : "덱은 사라지지 않았습니다. 같은 시드로 다시 설계해 보세요."}
           failureReason={!isWin ? `${format(Math.max(0, state.targetScore - state.chain.roundScore))}점 부족` : undefined}
           onRestart={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode: state.tutorialMode, entropy: runEntropy() })}
@@ -1436,7 +1503,10 @@ export default function GameApp() {
     preview: preview?.breakdown ?? null,
     lastScore: state.lastScore,
     selectedCount: state.selectedCardIds.length,
-    revealVisible: reveal.visible,
+    // Once the theater releases the board, the old hand must disappear from
+    // the rail as well. Otherwise the freshly dealt hand sits next to the last
+    // submission's formula for another 700 ms (the mismatch in screenshots).
+    revealVisible: reveal.visible && Boolean(submitSnapshot),
   });
   const theaterReveal = submissionPlayback && state.lastScore
     ? submissionBeatToReveal(
@@ -1486,7 +1556,7 @@ export default function GameApp() {
             items={talismanItems}
             slots={getEffectiveTalismanSlots(state)}
             firingInstanceId={firingTalismanId}
-            onReorder={(instanceId, targetInstanceId) => dispatch({ type: "MOVE_TALISMAN_TO", instanceId, targetInstanceId })}
+            onReorder={handleTalismanReorder}
           />
         </div>
 
@@ -1534,8 +1604,12 @@ export default function GameApp() {
                     scoring={Boolean(preview?.breakdown.scoringCardIds.includes(card.instanceId))}
                     splitRole={splitRoleOf(card.instanceId)}
                     disabled={isDecision || Boolean(discardSnapshot)}
-                    cupRole={card.tags.includes("cup") ? state.cupAssignments[card.instanceId] : undefined}
-                    onSelect={(selected) => dispatch({ type: "SELECT_CARD", cardId: selected.instanceId })}
+                    cupRole={card.tags.includes("cup")
+                      ? typeof effectiveCupRoleLookup === "string"
+                        ? effectiveCupRoleLookup
+                        : effectiveCupRoleLookup[card.instanceId]
+                      : undefined}
+                    onSelect={handleHandCardSelect}
                   />
                 </li>
                 );

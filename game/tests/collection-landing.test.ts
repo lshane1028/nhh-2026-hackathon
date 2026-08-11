@@ -5,6 +5,7 @@ import {
   buildCollectionSlots,
   getCollectionLandingTargets,
   type CollectionTrack,
+  type CupRoleLookup,
 } from "../engine/collection-board";
 import { createStandardHwatuDeck } from "../engine/deck";
 import type { CardInstance, CardKind } from "../types";
@@ -23,7 +24,7 @@ function withPatch(card: CardInstance, patch: Partial<CardInstance>): CardInstan
   return { ...card, tags: [...card.tags], ...patch };
 }
 
-function tracks(card: CardInstance, cupRoles?: Readonly<Record<string, "animal" | "double_chaff">>) {
+function tracks(card: CardInstance, cupRoles?: CupRoleLookup) {
   return getCollectionLandingTargets(card, cupRoles).map((target) => target.track);
 }
 
@@ -90,6 +91,15 @@ describe("collection landing targets", () => {
         slotMultiplicity: 1,
         collectionValue: 2,
       }),
+    ]);
+  });
+
+  it("files 국진 술잔's cup into animal and 쌍피 at the same time", () => {
+    const cup = deck.find((card) => card.tags.includes("cup"));
+    if (!cup) throw new Error("Missing cup fixture");
+    expect(getCollectionLandingTargets(cup, "dual")).toEqual([
+      expect.objectContaining({ track: "animal", collectionValue: 1 }),
+      expect.objectContaining({ track: "chaff", collectionValue: 2 }),
     ]);
   });
 

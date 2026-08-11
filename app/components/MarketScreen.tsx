@@ -210,8 +210,14 @@ function joinClassNames(...values: Array<string | false | undefined>): string {
   return values.filter(Boolean).join(" ");
 }
 
+const NUMBER_FORMATTER = new Intl.NumberFormat("ko-KR");
+
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat("ko-KR").format(value);
+  return NUMBER_FORMATTER.format(value);
+}
+
+export function requiresShopPurchaseConfirmation(category: ShopOffer["category"]): boolean {
+  return category === "talisman" || category === "book" || category === "pack";
 }
 
 const CATEGORY_GUIDES: Record<ShopOffer["category"], string> = {
@@ -294,6 +300,8 @@ interface MarketCardProps {
   sold?: boolean;
   tutorialId?: string;
   onClick: () => void;
+  confirmLabel?: string;
+  onConfirm?: () => void;
 }
 
 const EMPTY_REWARD_REASONS: NonNullable<MarketRewardView["reasons"]> = [];
@@ -326,6 +334,8 @@ function MarketCard({
   sold,
   tutorialId,
   onClick,
+  confirmLabel,
+  onConfirm,
 }: MarketCardProps) {
   const artUrl = getGeneratedAssetUrl(assetTag);
   const [hintPosition, setHintPosition] = useState<{
@@ -374,7 +384,7 @@ function MarketCard({
      so a department reads as two or three pictures rather than a wall of text. */
   return (
     <>
-    <div className="market-card__wrap" data-tutorial={tutorialId}>
+    <div className="market-card__wrap" data-market-selection-keep data-tutorial={tutorialId}>
       {priceLabel ? <span className="market-card__price" aria-hidden="true">{priceLabel}</span> : null}
       <button
         type="button"
@@ -412,6 +422,16 @@ function MarketCard({
         <span className="market-card__label">{name}</span>
 
       </button>
+      {selected && confirmLabel && onConfirm ? (
+        <button
+          type="button"
+          className="market-card__purchase"
+          data-market-selection-keep
+          onClick={onConfirm}
+        >
+          {confirmLabel}
+        </button>
+      ) : null}
     </div>
     {hintPosition && typeof document !== "undefined"
       ? createPortal(
@@ -459,10 +479,20 @@ function Rack({ label, hint, children, tutorialId }: {
   );
 }
 
-function offerCard(item: MarketOfferView, money: number, onBuy: (id: string) => void, tutorialId?: string) {
+function offerCard(
+  item: MarketOfferView,
+  money: number,
+  selectedOfferId: string | null,
+  onSelect: (id: string) => void,
+  onBuy: (id: string) => void,
+  tutorialId?: string,
+) {
   const cannotAfford = money < (item.requiredMoney ?? item.offer.price);
   const unavailable = Boolean(item.unavailableReason);
   const isPack = item.offer.category === "pack";
+  const requiresConfirmation = requiresShopPurchaseConfirmation(item.offer.category);
+  const selected = requiresConfirmation && selectedOfferId === item.offer.offerId;
+  const purchasePrice = item.requiredMoney ?? item.offer.price;
   return (
     <MarketCard
       key={item.offer.offerId}
@@ -478,13 +508,16 @@ function offerCard(item: MarketOfferView, money: number, onBuy: (id: string) => 
       comparison={item.comparison}
       ctaLabel={item.offer.sold
         ? (isPack ? "개봉 완료" : "구매 완료")
-        : unavailable ? item.unavailableReason! : cannotAfford ? "총액 부족" : isPack ? "개봉" : "구매"}
+        : unavailable ? item.unavailableReason! : cannotAfford ? "총액 부족" : selected ? "선택됨 · 구매 버튼으로 확정" : isPack ? "개봉" : requiresConfirmation ? "선택" : "구매"}
+      selected={selected}
       recommended={item.recommended}
       unavailable={unavailable}
       sold={item.offer.sold}
       disabled={item.offer.sold || unavailable || cannotAfford}
       tutorialId={tutorialId}
-      onClick={() => onBuy(item.offer.offerId)}
+      onClick={() => requiresConfirmation ? onSelect(item.offer.offerId) : onBuy(item.offer.offerId)}
+      confirmLabel={selected ? `구매 : ${formatNumber(purchasePrice)}냥` : undefined}
+      onConfirm={selected ? () => onBuy(item.offer.offerId) : undefined}
     />
   );
 }
@@ -497,10 +530,47 @@ export function MarketScreen(props: MarketScreenProps) {
   const [revealedReasonCount, setRevealedReasonCount] = useState(0);
   const [animatedReward, setAnimatedReward] = useState(() => reward ? 0 : 0);
   const [animatedMoney, setAnimatedMoney] = useState(() => reward ? props.money - reward.amount : props.money);
+  const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
+  const selectedOffer = props.mode === "shop"
+    ? props.offers.find((item) => item.offer.offerId === selectedOfferId)
+    : undefined;
+  const activeSelectedOfferId = selectedOffer
+    && !selectedOffer.offer.sold
+    && !selectedOffer.unavailableReason
+    && props.money >= (selectedOffer.requiredMoney ?? selectedOffer.offer.price)
+    ? selectedOfferId
+    : null;
   const rewardComplete = !reward || (rewardReasons.length > 0
     ? revealedReasonCount >= rewardReasons.length
     : animatedReward >= reward.amount);
   const walletMoney = reward ? animatedMoney : props.money;
+
+  useEffect(() => {
+    if (!activeSelectedOfferId) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-market-selection-keep], button")) return;
+      setSelectedOfferId(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedOfferId(null);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeSelectedOfferId]);
+
+  const selectOffer = (offerId: string) => {
+    setSelectedOfferId((current) => current === offerId ? null : offerId);
+  };
+  const confirmOffer = (offerId: string) => {
+    if (props.mode !== "shop") return;
+    props.onBuyOffer(offerId);
+    setSelectedOfferId(null);
+  };
 
   useEffect(() => {
     if (!reward) return;
@@ -660,7 +730,13 @@ export function MarketScreen(props: MarketScreenProps) {
           {props.mode === "shop" ? (
             props.openedPack ? (
               <Rack label={`${props.openedPack} 개봉`} hint="하나만 무료로 고르세요" tutorialId="dept-pack">
-                {shopOffers.map((item) => offerCard(item, props.money, props.onBuyOffer))}
+                {shopOffers.map((item) => offerCard(
+                  item,
+                  props.money,
+                  activeSelectedOfferId,
+                  selectOffer,
+                  confirmOffer,
+                ))}
               </Rack>
             ) : (
               <>
@@ -685,7 +761,9 @@ export function MarketScreen(props: MarketScreenProps) {
                         {items.map((item) => offerCard(
                           item,
                           props.money,
-                          props.onBuyOffer,
+                          activeSelectedOfferId,
+                          selectOffer,
+                          confirmOffer,
                           item.offer.offerId === recommended?.offer.offerId ? "shop-pick" : undefined,
                         ))}
                       </div>

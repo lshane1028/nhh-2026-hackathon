@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import type {
@@ -241,7 +241,7 @@ function TalismanSlot({ item, selected, sacrifice, firing, onSelect, onReorder }
   );
 }
 
-export function TalismanStrip({
+export const TalismanStrip = memo(function TalismanStrip({
   assetTag,
   items,
   slots,
@@ -296,4 +296,4 @@ export function TalismanStrip({
       </div>
     </section>
   );
-}
+});

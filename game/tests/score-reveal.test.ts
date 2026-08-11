@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   deriveScoreRevealState,
@@ -7,6 +9,7 @@ import {
   selectScoreRevealBreakdown,
 } from "../../app/components/useScoreReveal";
 import type { ScoreBreakdown } from "../types";
+import { PlayRail } from "../../app/components/PlayRail";
 
 const scoredHand: ScoreBreakdown = {
   yakuId: "ttaeng",
@@ -119,5 +122,26 @@ describe("score rail reveal", () => {
       selectedCount: 2,
       revealVisible: false,
     })).toBe(scoredHand);
+  });
+
+  it("keeps card and talisman effects out of the pre-submit preview", () => {
+    const html = renderToStaticMarkup(createElement(PlayRail, {
+      assetTag: "rail",
+      stageAssetTag: "stage",
+      stageLabel: "1월",
+      targetScore: 100,
+      roundScore: 0,
+      goCount: 0,
+      breakdown: scoredHand,
+      formulaCaption: "예상 점수",
+      handsRemaining: 4,
+      discardsRemaining: 3,
+      money: 5,
+      stageIndex: 1,
+      stageTotal: 12,
+    }));
+    expect(html).toContain('class="play-rail__month-sum">10</b>');
+    expect(html).toContain('class="play-rail__multiplier">2</b>');
+    expect(html).toContain("= 20");
   });
 });

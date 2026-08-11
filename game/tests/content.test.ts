@@ -368,6 +368,47 @@ describe("talisman engine", () => {
     expect(only("t_long_jit_thief")).toEqual([]);
   });
 
+  it("re-triggers card treatment score effects as part of the card", () => {
+    const { cards, candidate } = januaryPair();
+    const treated = { ...cards[0], effectTagId: "heavy_month" as const };
+    const submitted = [treated, cards[1]];
+    const effects = buildOrderedTalismanScoreEffects({
+      talismans: [owned("t_cardsharp_touch")],
+      candidate: { ...candidate, scoringCardIds: submitted.map((card) => card.instanceId) },
+      submittedCards: submitted,
+      scoringCards: submitted,
+    });
+    expect(effects.filter((effect) => effect.operation === "add_kkeut" && effect.value === 50)).toHaveLength(2);
+  });
+
+  it("turns 제물 단도의 consumed value into its promised permanent multiplier", () => {
+    const { cards, candidate } = januaryPair();
+    const effects = buildOrderedTalismanScoreEffects({
+      talismans: [owned("t_devouring_dagger", 1.25)],
+      candidate,
+      submittedCards: cards,
+      scoringCards: cards,
+    });
+    expect(effects).toEqual([
+      expect.objectContaining({ sourceId: "owned:t_devouring_dagger", operation: "multiply_heung", value: 2.25 }),
+    ]);
+  });
+
+  it("lets 판을 읽는 자 copy the rightmost live score talisman even when it sits to the reader's right", () => {
+    const { cards, candidate } = januaryPair();
+    const effects = buildOrderedTalismanScoreEffects({
+      talismans: [owned("t_table_reader"), owned("t_first_charm")],
+      candidate,
+      submittedCards: cards,
+      scoringCards: cards,
+    });
+    expect(effects).toContainEqual(expect.objectContaining({
+      sourceId: "owned:t_table_reader",
+      operation: "add_heung",
+      value: 4,
+    }));
+  });
+
   it("turns 망통 into a 월 합 multiplier rather than a dead hand", () => {
     const { cards } = januaryPair();
     const mangtong: YakuCandidate = {

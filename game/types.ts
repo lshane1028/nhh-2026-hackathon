@@ -456,9 +456,12 @@ export interface RunStats {
   goSuccesses: number;
   goFailures: number;
   highestHand: number;
+  highestHandYakuId: string | null;
+  highestHandCards: CardInstance[];
   highestSubmissionCards: number;
   moneyEarned: number;
   yakusPlayed: Record<string, number>;
+  forbiddenCardsUsed: Record<string, number>;
 }
 
 export interface RoundRewardReason {

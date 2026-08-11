@@ -6,9 +6,71 @@ import type { TalismanDefinition } from "../types";
 import { createStandardHwatuDeck } from "../engine/deck";
 import { createGoChainState } from "../engine/go";
 import { randomAt } from "../engine/rng";
-import { createInitialGameState, evaluateSelectedHand, gameReducer, sortHand } from "../state/game";
+import { createInitialGameState, evaluateSelectedHand, gameReducer, getEffectiveCupRoles, sortHand } from "../state/game";
+import { calculateCollectionBonus } from "../engine/collection-bonus";
 
 describe("playable run reducer", () => {
+  it("applies 외날 to an exact two-card hand in both preview and submission", () => {
+    const deck = createStandardHwatuDeck();
+    const pair = deck.filter((card) => card.month === 1).slice(0, 2);
+    const state = {
+      ...createInitialGameState("LONE-BLADE"),
+      runId: "lone-blade",
+      screen: "play" as const,
+      deck,
+      hand: pair,
+      drawPile: deck.filter((card) => !pair.some((selected) => selected.instanceId === card.instanceId)),
+      selectedCardIds: pair.map((card) => card.instanceId),
+      yard: { cards: [], sweptCount: 0 },
+      targetScore: 1_000_000,
+      talismans: [{ instanceId: "owned:lone-blade", definitionId: "t_lone_blade", growth: 0 }],
+    };
+
+    const preview = evaluateSelectedHand(state)?.breakdown;
+    expect(preview?.operations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sourceId: "owned:lone-blade", operation: "add_kkeut", value: 60 }),
+      expect.objectContaining({ sourceId: "owned:lone-blade", operation: "add_heung", value: 6 }),
+    ]));
+    expect(preview?.finalKkeut).toBe(61);
+
+    const submitted = gameReducer(state, { type: "SUBMIT_HAND" });
+    expect(submitted.lastScore?.score).toBe(preview?.score);
+    expect(submitted.lastScore?.finalKkeut).toBe(61);
+    expect(submitted.stats.highestHand).toBe(submitted.lastScore?.score);
+    expect(submitted.stats.highestHandYakuId).toBe(submitted.lastScore?.yakuId);
+    expect(submitted.stats.highestHandCards.map((card) => card.instanceId)).toEqual(
+      pair.map((card) => card.instanceId),
+    );
+  });
+
+  it("makes 국진 술잔 count its cup as animal and 쌍피 without opening a filing modal", () => {
+    const deck = createStandardHwatuDeck();
+    const cup = deck.find((card) => card.tags.includes("cup"))!;
+    const partner = deck.find((card) => card.month === cup.month && card.instanceId !== cup.instanceId)!;
+    const state = {
+      ...createInitialGameState("DUAL-CUP"),
+      runId: "dual-cup",
+      screen: "play" as const,
+      deck,
+      hand: [cup, partner],
+      drawPile: deck.filter((card) => card.instanceId !== cup.instanceId && card.instanceId !== partner.instanceId),
+      selectedCardIds: [cup.instanceId, partner.instanceId],
+      yard: { cards: [], sweptCount: 0 },
+      targetScore: 1_000_000,
+      talismans: [{ instanceId: "owned:dual-cup", definitionId: "t_chrysanthemum_cup", growth: 0 }],
+    };
+
+    const submitted = gameReducer(state, { type: "SUBMIT_HAND" });
+    expect(submitted.pendingCupCardId).toBeNull();
+    const result = calculateCollectionBonus(
+      submitted.deck.filter((card) => submitted.chain.collection.cardIds.includes(card.instanceId)),
+      getEffectiveCupRoles(submitted),
+      submitted.yakuLevels,
+    );
+    expect(result.counts.animal).toBeGreaterThanOrEqual(1);
+    expect(result.counts.chaff).toBeGreaterThanOrEqual(2);
+  });
+
   it("applies 고리 장부 from the live purse to both preview and submitted score", () => {
     const deck = createStandardHwatuDeck();
     const pair = deck.filter((card) => card.month === 1).slice(0, 2);
@@ -892,6 +954,7 @@ describe("playable run reducer", () => {
     expect(applied.money).toBe(81);
     expect(applied.deck.find((card) => card.instanceId === targets[0].instanceId)?.kind).toBe(targets[0].kind);
     expect(applied.deck.find((card) => card.instanceId === targets[1].instanceId)?.kind).toBe("bright");
+    expect(applied.stats.forbiddenCardsUsed).toEqual({ f_bright_descent: 1 });
   });
 
   it("refuses 광내림 before purchase when the hidden ritual fee is unaffordable", () => {

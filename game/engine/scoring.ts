@@ -99,6 +99,15 @@ function scoreCardOnce(
 ): void {
   // The card's own month is NOT added here any more. Under 짓고땡 the 월 합 is
   // the 짓 total, so a card only contributes what its enhancements print.
+  if (card.permanentKkeutBonus !== 0) {
+    appendOperation(operations, state, {
+      sourceId: card.instanceId,
+      label: `영구 월 합${suffix}`,
+      operation: "add_kkeut",
+      value: card.permanentKkeutBonus,
+    });
+  }
+
   if (card.enhancement === "inked") {
     appendOperation(operations, state, { sourceId: card.instanceId, label: `먹칠${suffix}`, operation: "add_kkeut", value: INKED_MONTH_BONUS });
   } else if (card.enhancement === "scarlet") {
@@ -202,7 +211,7 @@ export function calculateHandScore(input: ScoreInput): ScoreBreakdown {
     if (card.effectTagId === "echo") {
       const echoedKkeut = card.enhancement === "stone"
         ? STONE_MONTH_VALUE
-        : getEffectiveCardRole(card, cupRole).baseKkeut + card.permanentKkeutBonus;
+        : getEffectiveCardRole(card, cupRole).baseKkeut;
       appendOperation(operations, state, {
         sourceId: card.instanceId,
         label: "메아리패",

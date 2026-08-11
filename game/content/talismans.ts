@@ -282,7 +282,7 @@ export const TALISMANS = [
   {
     id: "t_double_chaff_belt",
     name: "쌍피 전대",
-    description: "피 카드의 피값이 1 늘고, 쌍피가 득점하면 월 합 +30.",
+    description: "득점한 피 카드마다 월 합 +1. 그중 쌍피는 추가로 월 합 +30.",
     rarity: "uncommon",
     price: 8,
     weight: 12,
@@ -558,7 +558,7 @@ export const TALISMANS = [
   {
     id: "t_first_taste",
     name: "첫맛",
-    description: "이번 판에서 두 번 미만 낸 끗패로 득점하면 배수 ×1.9.",
+    description: "이번 여정에서 두 번 미만 낸 끗패로 득점하면 배수 ×1.9.",
     rarity: "rare",
     price: 10,
     weight: 7,

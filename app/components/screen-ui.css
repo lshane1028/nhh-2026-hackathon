@@ -341,9 +341,25 @@
 .run-end-screen__stats dl div { padding: 0.65rem; border: 1px solid var(--screen-paper-deep); border-radius: 0.65rem; background: #fffdf7; }
 .run-end-screen__stats dt { color: var(--screen-muted); font-size: 0.65rem; }
 .run-end-screen__stats dd { margin: 0.15rem 0 0; font-size: 1.15rem; font-weight: 900; }
-.run-end-screen__yaku-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.55rem; }
-.run-end-screen__yaku-grid article { min-width: 0; padding: 0.55rem; border: 1px solid var(--screen-line); border-radius: 0.65rem; background: #fffdf7; }
-.run-end-screen__yaku-grid article > strong { display: block; margin-top: 0.35rem; color: var(--screen-red); text-align: right; }
+.run-end-screen__best-hand-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; align-items: center; }
+.run-end-screen__best-cards { display: flex; min-width: 0; gap: 0.45rem; align-items: center; overflow-x: auto; padding: 0.65rem 0.35rem 0.9rem; }
+.run-end-screen__best-cards .hwatu-card--dense { height: clamp(6.5rem, 16vh, 9rem); }
+.run-end-screen__best-score { display: grid; min-width: 9rem; place-items: center; padding: 0.85rem; border: 2px solid var(--screen-line); background: #17120f; text-align: center; }
+.run-end-screen__best-score span { color: var(--screen-muted); font-size: 0.68rem; }
+.run-end-screen__best-score strong { color: #f0c96a; font-size: clamp(1.8rem, 4vw, 3.4rem); line-height: 1; }
+.run-end-screen__best-score small { color: var(--screen-muted); }
+.run-end-screen__yaku-grid,
+.run-end-screen__owned-yaku-grid,
+.run-end-screen__owned-talisman-grid,
+.run-end-screen__used-forbidden-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.55rem; }
+.run-end-screen__yaku-grid article,
+.run-end-screen__owned-yaku-grid article,
+.run-end-screen__owned-talisman-grid article,
+.run-end-screen__used-forbidden-grid article { min-width: 0; padding: 0.55rem; border: 1px solid var(--screen-line); border-radius: 0.65rem; background: #fffdf7; }
+.run-end-screen__yaku-grid article > strong,
+.run-end-screen__owned-yaku-grid article > strong,
+.run-end-screen__owned-talisman-grid article > strong,
+.run-end-screen__used-forbidden-grid article > strong { display: block; margin-top: 0.35rem; color: var(--screen-red); text-align: right; }
 .run-end-screen__empty { margin: 0; color: var(--screen-muted); }
 .run-end-screen__seed { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.65rem; align-items: center; }
 .run-end-screen__seed span { color: var(--screen-muted); font-size: 0.7rem; }
@@ -370,8 +386,16 @@
   .tutorial-coach__content { grid-template-columns: 1fr; }
 
   .run-end-screen__stats dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .run-end-screen__yaku-grid { display: flex; overflow-x: auto; padding-bottom: 0.5rem; scroll-snap-type: x proximity; }
-  .run-end-screen__yaku-grid article { width: 11rem; flex: 0 0 11rem; scroll-snap-align: start; }
+  .run-end-screen__best-hand-body { grid-template-columns: 1fr; }
+  .run-end-screen__best-score { grid-template-columns: 1fr auto auto; min-width: 0; justify-content: center; gap: 0.4rem; }
+  .run-end-screen__yaku-grid,
+  .run-end-screen__owned-yaku-grid,
+  .run-end-screen__owned-talisman-grid,
+  .run-end-screen__used-forbidden-grid { display: flex; overflow-x: auto; padding-bottom: 0.5rem; scroll-snap-type: x proximity; }
+  .run-end-screen__yaku-grid article,
+  .run-end-screen__owned-yaku-grid article,
+  .run-end-screen__owned-talisman-grid article,
+  .run-end-screen__used-forbidden-grid article { width: 11rem; flex: 0 0 11rem; scroll-snap-align: start; }
   .run-end-screen__seed { grid-template-columns: 1fr auto; }
   .run-end-screen__seed span { grid-column: 1 / -1; }
   .run-end-screen__actions { flex-direction: column; }

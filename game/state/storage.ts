@@ -1,5 +1,6 @@
 import type { GameState } from "../types";
 import { removeRedundantKindEffect } from "../content/card-effects";
+import { FORBIDDEN_CARDS } from "../content/upgrades";
 
 // v2 = 짓고땡. A v1 save holds the old poker-style yaku ids, which no longer
 // resolve, so bumping the key is the cheapest way to drop them.
@@ -27,7 +28,12 @@ export function saveGame(state: GameState): void {
     savedAt: new Date().toISOString(),
     game: state,
   };
-  window.localStorage.setItem(SAVE_KEY, JSON.stringify(envelope));
+  try {
+    window.localStorage.setItem(SAVE_KEY, JSON.stringify(envelope));
+  } catch {
+    // Storage can be unavailable or full in private/embedded browsers. A save
+    // failure must never interrupt a score animation or leave the run stuck.
+  }
 }
 
 export function loadGame(): GameState | null {
@@ -51,6 +57,12 @@ export function normalizeGameState(game: GameState): GameState {
   const legacyRoundScore = game.chain.roundScore ?? 0;
   const submissionScore = game.chain.submissionScore ?? legacyRoundScore;
   const collectionScore = game.chain.collectionScore ?? 0;
+  const inferredForbiddenCardsUsed = Object.fromEntries(
+    FORBIDDEN_CARDS.flatMap((definition) => {
+      const count = (game.logs ?? []).filter((entry) => entry.kind === "reward" && entry.title === definition.name).length;
+      return count > 0 ? [[definition.id, count]] : [];
+    }),
+  );
   return {
     ...game,
     deck: game.deck.map(normalizeCurrentRuleCard),
@@ -87,7 +99,10 @@ export function normalizeGameState(game: GameState): GameState {
     lastRoundSummary: game.lastRoundSummary ?? null,
     stats: {
       ...game.stats,
+      highestHandYakuId: game.stats?.highestHandYakuId ?? null,
+      highestHandCards: game.stats?.highestHandCards ?? [],
       highestSubmissionCards: game.stats?.highestSubmissionCards ?? 0,
+      forbiddenCardsUsed: game.stats?.forbiddenCardsUsed ?? inferredForbiddenCardsUsed,
     },
   };
 }

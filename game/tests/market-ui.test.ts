@@ -2,7 +2,12 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { MarketScreen, OwnedTalismanBar, type MarketOfferView } from "../../app/components/MarketScreen";
+import {
+  MarketScreen,
+  OwnedTalismanBar,
+  requiresShopPurchaseConfirmation,
+  type MarketOfferView,
+} from "../../app/components/MarketScreen";
 import { CONTRACTS } from "../content/meta";
 
 function renderOffer(item: MarketOfferView, money: number): string {
@@ -22,6 +27,14 @@ function renderOffer(item: MarketOfferView, money: number): string {
 }
 
 describe("market offer affordances", () => {
+  it("requires a separate confirmation for talismans and books only", () => {
+    expect(requiresShopPurchaseConfirmation("talisman")).toBe(true);
+    expect(requiresShopPurchaseConfirmation("book")).toBe(true);
+    expect(requiresShopPurchaseConfirmation("painter")).toBe(false);
+    expect(requiresShopPurchaseConfirmation("forbidden")).toBe(false);
+    expect(requiresShopPurchaseConfirmation("pack")).toBe(true);
+  });
+
   it("puts an owned talisman's effect and sale value in the top-bar slot", () => {
     const html = renderToStaticMarkup(createElement(OwnedTalismanBar, {
       items: [{
