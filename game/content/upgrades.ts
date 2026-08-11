@@ -284,14 +284,14 @@ export const FORBIDDEN_CARDS = [
   {
     id: "f_talisman_possession",
     name: "부적 빙의",
-    description: "고른 부적에 음각의 힘을 들이는 대신 손패 한 칸을 내주는 의식.",
-    benefit: "선택 부적 1개에 음각 판본 부여.",
-    cost: "이번 판의 손패 크기 -1.",
+    description: "부적 하나를 음각으로 바꿔 부적 칸을 늘리는 대신, 이번 판의 기본 손패를 한 장 줄이는 의식.",
+    benefit: "선택 부적을 보유하는 동안 부적 칸 +1. 부적을 팔거나 잃으면 추가 칸도 사라짐.",
+    cost: "이번 판의 기본 손패 크기 영구 -1(최소 5장).",
     price: 13,
     targetKind: "talisman",
     minTargets: 1,
     maxTargets: 1,
-    targetPrompt: "음각을 새길 부적 1개를 고르세요.",
+    targetPrompt: "보유 중 부적 칸 +1을 붙일 부적 1개를 고르세요. 대신 기본 손패가 영구히 1장 줄어듭니다.",
     effectKey: "engrave_talisman_hand_penalty",
     assetTag: "forbidden:talisman-possession",
   },
@@ -564,7 +564,7 @@ export const EDITIONS = [
   {
     id: "engraved",
     name: "음각",
-    description: "부적에만 적용되며 부적 칸 +1.",
+    description: "부적 전용 판본. 이 부적을 보유하는 동안 부적 칸 +1. 부적을 팔거나 잃으면 추가 칸도 사라짐.",
     assetTag: "edition:engraved",
   },
 ] as const satisfies readonly CardModifierDefinition<EditionId>[];

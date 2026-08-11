@@ -5,7 +5,7 @@
 - Mode: style-transfer edit
 - Generated output: `public/assets/cards/hwatu-basic-atlas-generated-v3.png`
 - Game-ready aligned output: `public/assets/cards/hwatu-basic-atlas-generated-v4-aligned.png`
-- Structure reference: `public/assets/cards/hwatu-basic-atlas.png`
+- Structure reference: `source-assets/cards/hwatu-basic-atlas.png`
 - Style reference: earlier Korean pixel-art January month sheet generated in this project
 
 ## Prompt

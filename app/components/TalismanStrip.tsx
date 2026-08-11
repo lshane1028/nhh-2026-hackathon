@@ -79,9 +79,20 @@ interface TalismanSlotProps {
   firing: boolean;
   onSelect?: (item: TalismanStripItem) => void;
   onReorder?: (instanceId: string, targetInstanceId: string) => void;
+  previousInstanceId?: string;
+  nextInstanceId?: string;
 }
 
-function TalismanSlot({ item, selected, sacrifice, firing, onSelect, onReorder }: TalismanSlotProps) {
+function TalismanSlot({
+  item,
+  selected,
+  sacrifice,
+  firing,
+  onSelect,
+  onReorder,
+  previousInstanceId,
+  nextInstanceId,
+}: TalismanSlotProps) {
   const tooltipId = useId();
   const [hintPosition, setHintPosition] = useState<TalismanHintPosition | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
@@ -182,6 +193,7 @@ function TalismanSlot({ item, selected, sacrifice, firing, onSelect, onReorder }
           type="button"
           {...commonProps}
           aria-pressed={selected}
+          aria-keyshortcuts={onReorder ? "ArrowLeft ArrowRight" : undefined}
           aria-label={`${item.definition.name}${sacrifice ? ", 전승 제물로 영구 파괴 예정" : ""}`}
           disabled={item.disabled}
           draggable={Boolean(onReorder) && !item.disabled}
@@ -199,6 +211,17 @@ function TalismanSlot({ item, selected, sacrifice, firing, onSelect, onReorder }
             event.preventDefault();
             const sourceId = event.dataTransfer.getData("text/plain");
             if (sourceId) onReorder(sourceId, item.instance.instanceId);
+          }}
+          onKeyDown={(event) => {
+            if (!onReorder) return;
+            const targetId = event.key === "ArrowLeft"
+              ? previousInstanceId
+              : event.key === "ArrowRight"
+                ? nextInstanceId
+                : undefined;
+            if (!targetId) return;
+            event.preventDefault();
+            onReorder(item.instance.instanceId, targetId);
           }}
           onClick={() => onSelect?.(item)}
         >
@@ -231,6 +254,7 @@ function TalismanSlot({ item, selected, sacrifice, firing, onSelect, onReorder }
             <em>{RARITY_LABELS[item.definition.rarity]} · {item.definition.price}냥</em>
             <p>{item.definition.description}</p>
             <small className="talisman-strip__hint-timing">{getTalismanTimingText(item.definition)}</small>
+            {item.instance.edition === "engraved" ? <u>음각 · 이 부적을 보유하는 동안 부적 칸 +1</u> : null}
             {item.instance.growth !== 0 ? <i>성장 +{item.instance.growth}</i> : null}
             {item.contributionLabel ? <u>{item.contributionLabel}</u> : null}
           </aside>,
@@ -290,6 +314,8 @@ export const TalismanStrip = memo(function TalismanStrip({
               firing={firingInstanceId === item.instance.instanceId}
               onSelect={onSelect}
               onReorder={onReorder}
+              previousInstanceId={items[index - 1]?.instance.instanceId}
+              nextInstanceId={items[index + 1]?.instance.instanceId}
             />
           );
         })}

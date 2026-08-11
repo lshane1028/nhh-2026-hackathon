@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getCupChoiceActionLabels } from "../../app/GameApp";
+import { getCupChoiceActionLabels } from "../../app/components/CupChoiceModal";
 
 describe("cup choice copy", () => {
   it("puts the current and resulting collection counts directly on both choices", () => {

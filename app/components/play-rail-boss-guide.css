@@ -1,0 +1,29 @@
+.play-rail__boss-guide {
+  border: 1px solid rgb(184 58 44 / 55%);
+  background: rgb(43 20 16 / 82%);
+  color: #ead8b5;
+}
+
+.play-rail__boss-guide summary {
+  padding: 0.42rem 0.55rem;
+  color: #f1c45d;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.play-rail__boss-guide p,
+.play-rail__boss-guide b {
+  display: block;
+  margin: 0;
+  padding: 0 0.55rem 0.45rem;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.play-rail__boss-guide b { color: #f0a58c; }
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .play-rail__boss-guide p { display: none; }
+  .play-rail__boss-guide summary,
+  .play-rail__boss-guide b { padding-block: 0.25rem; font-size: 0.66rem; }
+}

@@ -457,7 +457,7 @@ export const TALISMANS = [
   {
     id: "t_over_shoulder_secret",
     name: "어깨너머 비법",
-    description: "각 족보는 자기 레벨과 가장 높은 족보 레벨-2 중 큰 값을 사용.",
+    description: "제출한 족보의 계산 레벨을 '그 족보의 실제 레벨'과 '보유 족보 최고 레벨 -2' 중 높은 값으로 올림. 예: 최고 Lv.6이면 낮은 족보도 최소 Lv.4로 계산.",
     rarity: "rare",
     price: 12,
     weight: 4,

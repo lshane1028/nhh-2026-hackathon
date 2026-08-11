@@ -119,7 +119,7 @@ export function buildForbiddenRitualPresentation(
     const previous = beforeTalismans.get(item.instanceId);
     if (!previous) talismans.push({ instance: item, label: "새 부적 생성", tone: "created" });
     else if (previous.edition !== item.edition || previous.growth !== item.growth || previous.definitionId !== item.definitionId) {
-      talismans.push({ instance: item, label: item.edition === "engraved" ? "음각 판본 영구 부여" : "부적 영구 변화", tone: "changed" });
+      talismans.push({ instance: item, label: item.edition === "engraved" ? "음각 부여 · 보유 중 부적 칸 +1" : "부적 영구 변화", tone: "changed" });
     }
   }
 
@@ -130,7 +130,9 @@ export function buildForbiddenRitualPresentation(
   if (upgradedYakus.length) summaries.push(`족보 ${upgradedYakus.length}종 레벨 +1`);
   if (before.money !== after.money) summaries.push(`보유 냥 ${before.money} → ${after.money}`);
   if (before.handSize !== after.handSize) summaries.push(`손패 크기 ${before.handSize} → ${after.handSize}`);
-  if (before.talismanSlots !== after.talismanSlots) summaries.push(`부적 칸 ${before.talismanSlots} → ${after.talismanSlots}`);
+  const beforeEffectiveSlots = before.talismanSlots + before.talismans.filter((item) => item.edition === "engraved").length;
+  const afterEffectiveSlots = after.talismanSlots + after.talismans.filter((item) => item.edition === "engraved").length;
+  if (beforeEffectiveSlots !== afterEffectiveSlots) summaries.push(`부적 칸 ${beforeEffectiveSlots} → ${afterEffectiveSlots}`);
   if (cards.some((entry) => entry.tone === "burned")) summaries.push(`영구 소각 ${cards.filter((entry) => entry.tone === "burned").length}장`);
   if (cards.some((entry) => entry.tone === "created")) summaries.push(`새 카드 ${cards.filter((entry) => entry.tone === "created").length}장`);
   if (!summaries.length && talismans.length) summaries.push(`부적 ${talismans.length}개에 영구 변화 적용`);

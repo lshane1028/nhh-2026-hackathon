@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "publicByteBudget": 37748736,
+  "requiredFiles": [
+    "assets/cards/hwatu-basic-atlas-generated-v4-aligned.png",
+    "assets/audio/bgm/table-jazzy-vibes-36.mp3",
+    "assets/audio/bgm/title-menu.mp3",
+    "assets/audio/bgm/shop-radio.ogg",
+    "assets/audio/bgm/boss-oh-boss.mp3",
+    "assets/audio/bgm/boss-summer-rain.ogg",
+    "assets/audio/bgm/boss-autumn-wind.ogg"
+  ],
+  "requiredDirectories": [
+    { "path": "assets/cards/hwatu", "minimumFiles": 48 },
+    { "path": "assets/cards/hwatu/native", "minimumFiles": 48 },
+    { "path": "assets/generated/talismans", "minimumFiles": 58 },
+    { "path": "assets/generated/books", "minimumFiles": 8 },
+    { "path": "assets/generated/bosses", "minimumFiles": 12 },
+    { "path": "assets/audio/sfx", "minimumFiles": 30 }
+  ],
+  "sourceOnlyPaths": [
+    "assets/generated/atlases",
+    "assets/cards/hwatu-basic-atlas.png",
+    "assets/audio/bgm/noir-table.mp3",
+    "assets/audio/bgm/boss-spring.ogg",
+    "assets/audio/bgm/boss-summer.ogg",
+    "assets/audio/bgm/boss-autumn.ogg",
+    "assets/audio/bgm/boss-winter.ogg"
+  ]
+}

@@ -2,6 +2,7 @@
 
 import type { ScoreBreakdown } from "@/game/types";
 import type { ScoreRevealState } from "./useScoreReveal";
+import "./play-rail-boss-guide.css";
 
 export interface PlayRailProps {
   assetTag: string;
@@ -10,6 +11,8 @@ export interface PlayRailProps {
   stageSubtitle?: string;
   weatherLabel?: string;
   bossLabel?: string | null;
+  bossDescription?: string | null;
+  bossCounterplay?: string | null;
   /** The bar this round must clear right now — target, or the Go threshold. */
   targetScore: number;
   rewardLabel?: string;
@@ -57,6 +60,8 @@ export function PlayRail({
   stageSubtitle,
   weatherLabel,
   bossLabel,
+  bossDescription,
+  bossCounterplay,
   targetScore,
   rewardLabel = "냥",
   roundScore,
@@ -107,6 +112,14 @@ export function PlayRail({
           </div>
         </div>
       </header>
+
+      {bossLabel && (bossDescription || bossCounterplay) ? (
+        <details className="play-rail__boss-guide">
+          <summary>이번 판 두목 규칙</summary>
+          {bossDescription ? <p>{bossDescription}</p> : null}
+          {bossCounterplay ? <b>대응 · {bossCounterplay}</b> : null}
+        </details>
+      ) : null}
 
       <section className="play-rail__goal" aria-label="목표" data-tutorial="rail-goal">
         <span>{goCount > 0 ? `${goCount}고 문턱` : "이 판의 목표"}</span>

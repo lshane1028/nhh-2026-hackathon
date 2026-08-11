@@ -3,6 +3,7 @@
 프레임워크와 라이브러리의 정확한 버전은 `package-lock.json`을 기준으로 한다.
 
 - React / React DOM
+- Anime.js
 - Next.js 호환 계층 및 vinext
 - Vite
 - Tailwind CSS

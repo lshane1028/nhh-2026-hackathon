@@ -4,7 +4,7 @@ import { BOOKS, FORBIDDEN_CARDS, PAINTER_CARDS } from "../content/upgrades";
 import type { ShopOffer } from "../types";
 import { nextRandom, type RngResult, type RngState } from "./rng";
 
-interface OfferPoolEntry {
+export interface OfferPoolEntry {
   id: string;
   price: number;
   weight?: number;
@@ -44,6 +44,8 @@ export interface GenerateSeededOffersInput {
   category: ShopOffer["category"];
   count: number;
   rng: RngState;
+  /** Optional filtered catalogue. The normal category catalogue is used when omitted. */
+  pool?: readonly OfferPoolEntry[];
   discountRate?: number;
   excludeDefinitionIds?: readonly string[];
   weightMultipliers?: Readonly<Record<string, number>>;
@@ -78,7 +80,7 @@ export function generateSeededOffers(
 ): RngResult<ShopOffer[]> {
   const count = nonNegativeInteger(input.count, "count");
   const excluded = new Set(input.excludeDefinitionIds ?? []);
-  const pool = OFFER_POOLS[input.category].filter((entry) => !excluded.has(entry.id));
+  const pool = (input.pool ?? OFFER_POOLS[input.category]).filter((entry) => !excluded.has(entry.id));
   const available = [...pool];
   const offers: ShopOffer[] = [];
   const multipliers = input.weightMultipliers ?? {};

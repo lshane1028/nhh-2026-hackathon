@@ -40,4 +40,27 @@ describe("forbidden ritual result presentation", () => {
     expect(presentation.summaries).toContain("새 카드 2장");
     expect(presentation.summaries).toContain(`손패 크기 ${base.handSize} → ${base.handSize - 1}`);
   });
+
+  it("explains the exact slot and hand-size result when a talisman is engraved", () => {
+    const base = {
+      ...createInitialGameState("RITUAL-ENGRAVE-REVEAL"),
+      talismans: [{ instanceId: "owned:first", definitionId: "t_first_charm", growth: 0 }],
+    };
+    const definition = FORBIDDEN_BY_ID.f_talisman_possession;
+    const selected = { ...base, pendingTargetIds: [base.talismans[0].instanceId] };
+    const snapshot = createForbiddenRitualSnapshot(selected, definition);
+    const after = {
+      ...base,
+      handSize: base.handSize - 1,
+      talismans: [{ ...base.talismans[0], edition: "engraved" as const }],
+    };
+
+    const presentation = buildForbiddenRitualPresentation(snapshot, after);
+    expect(presentation.talismans[0]).toMatchObject({
+      label: "음각 부여 · 보유 중 부적 칸 +1",
+      tone: "changed",
+    });
+    expect(presentation.summaries).toContain(`손패 크기 ${base.handSize} → ${base.handSize - 1}`);
+    expect(presentation.summaries).toContain(`부적 칸 ${base.talismanSlots} → ${base.talismanSlots + 1}`);
+  });
 });

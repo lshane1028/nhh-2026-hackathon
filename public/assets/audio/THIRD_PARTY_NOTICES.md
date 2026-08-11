@@ -31,7 +31,7 @@ recorded here so the project can audit and update its audio safely.
 - Creator: Ruskerdax
 - Source: https://opengameart.org/content/moil
 - License: https://creativecommons.org/publicdomain/zero/1.0/
-- Included: `bgm/noir-table.mp3`.
+- Repository source (not shipped): `source-assets/audio/bgm/noir-table.mp3`.
 
 ## Thwack Sounds
 
@@ -80,14 +80,14 @@ recorded here so the project can audit and update its audio safely.
 - Creator: yd
 - Source: https://opengameart.org/content/shrine
 - License: https://creativecommons.org/publicdomain/zero/1.0/
-- Included: `bgm/boss-spring.ogg`.
+- Repository source (not shipped): `source-assets/audio/bgm/boss-spring.ogg`.
 
 ## Dark Shrine Loop
 
 - Creator: qubodup, based on yd's Shrine
 - Source: https://opengameart.org/content/dark-shrine-loop
 - License: https://creativecommons.org/publicdomain/zero/1.0/
-- Included: `bgm/boss-summer.ogg`.
+- Repository source (not shipped): `source-assets/audio/bgm/boss-summer.ogg`.
 
 ## Rain (loopable)
 
@@ -101,7 +101,7 @@ recorded here so the project can audit and update its audio safely.
 - Creator: Kistol
 - Source: https://opengameart.org/content/etirwer
 - License: https://creativecommons.org/publicdomain/zero/1.0/
-- Included: `bgm/boss-autumn.ogg`.
+- Repository source (not shipped): `source-assets/audio/bgm/boss-autumn.ogg`.
 
 ## Wind Whoosh Loop
 
@@ -115,7 +115,7 @@ recorded here so the project can audit and update its audio safely.
 - Creator: Kistol
 - Source: https://opengameart.org/content/snowfall
 - License: https://creativecommons.org/publicdomain/zero/1.0/
-- Included: the seamless version in `bgm/boss-winter.ogg`.
+- Repository source (not shipped): the seamless version in `source-assets/audio/bgm/boss-winter.ogg`.
 
 ## Oh! boss!
 

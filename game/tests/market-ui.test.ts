@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -27,6 +29,18 @@ function renderOffer(item: MarketOfferView, money: number): string {
 }
 
 describe("market offer affordances", () => {
+  it("keeps the selected offer's purchase button inside its upper-right corner", () => {
+    const cssPath = fileURLToPath(new URL("../../app/game.css", import.meta.url));
+    const css = readFileSync(cssPath, "utf8");
+    const rule = css.match(/\.market-card__purchase\s*\{([^}]*)\}/)?.[1] ?? "";
+
+    expect(rule).toMatch(/position:\s*absolute/);
+    expect(rule).toMatch(/top:\s*[^;]+/);
+    expect(rule).toMatch(/right:\s*[^;]+/);
+    expect(rule).toMatch(/width:\s*auto/);
+    expect(rule).toMatch(/margin:\s*0/);
+  });
+
   it("requires a separate confirmation for talismans and books only", () => {
     expect(requiresShopPurchaseConfirmation("talisman")).toBe(true);
     expect(requiresShopPurchaseConfirmation("book")).toBe(true);

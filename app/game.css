@@ -844,15 +844,20 @@
 .market-shell .market-card:hover:not(:disabled) { transform: translateY(-0.14rem); }
 
 .market-card__purchase {
-  width: 100%;
-  min-height: 2.1rem;
-  margin-top: 0.45rem;
-  padding: 0.38rem 0.3rem;
+  position: absolute;
+  z-index: 6;
+  top: 0.62rem;
+  right: 0.22rem;
+  width: auto;
+  min-width: 3.6rem;
+  min-height: 1.65rem;
+  margin: 0;
+  padding: 0.22rem 0.42rem;
   border: 2px solid #6f201a;
   background: linear-gradient(180deg, #c33a2e, #8c241d);
   box-shadow: 2px 3px 0 rgb(0 0 0 / 48%);
   color: #fff0cf;
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 950;
   line-height: 1.25;
   white-space: nowrap;

@@ -8,7 +8,7 @@
       "generatedAt": "2026-08-06",
       "tool": "OpenAI image generation",
       "mode": "style-transfer edit",
-      "source": "public/assets/cards/hwatu-basic-atlas.png",
+      "source": "source-assets/cards/hwatu-basic-atlas.png",
       "promptLog": "docs/PROMPTS/prompt-2026-08-06-hwatu-generated-v3.md",
       "notes": "The 48 generated card regions were extracted at their detected borders and rebuilt as an exact 8x6 atlas of 160x240 (2:3) cells."
     },
@@ -65,7 +65,7 @@
   "userProvidedImages": [
     {
       "assetTags": "card-01-* through card-12-* (48 atlas cells)",
-      "file": "public/assets/cards/hwatu-basic-atlas.png",
+      "file": "source-assets/cards/hwatu-basic-atlas.png",
       "displayFile": "public/assets/cards/hwatu-basic-atlas-generated-v4-aligned.png",
       "providedAt": "2026-08-06",
       "rightsNote": "User stated that project use has been cleared"

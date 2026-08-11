@@ -621,6 +621,20 @@ describe("economy engine", () => {
     expect(calculateDiscountedPrice(7, 0.15)).toBe(6);
   });
 
+  it("honours live market catalogue weights instead of drawing uniformly", () => {
+    const result = generateSeededOffers({
+      category: "talisman",
+      count: 1,
+      rng: createRngState("weighted-market-smoke"),
+      pool: [
+        { id: "never", price: 1, weight: 0 },
+        { id: "always", price: 1, weight: 10 },
+      ],
+    });
+
+    expect(result.value.map((offer) => offer.definitionId)).toEqual(["always"]);
+  });
+
   it("rerolls and purchases without mutating the input", () => {
     const rerolled = rerollShop({
       category: "book",

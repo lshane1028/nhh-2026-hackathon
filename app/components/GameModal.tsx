@@ -5,6 +5,7 @@ import type {
   MouseEvent,
   ReactNode,
 } from "react";
+import { useEffect, useRef } from "react";
 
 import { AssetPlaceholder } from "./AssetPlaceholder";
 
@@ -36,6 +37,15 @@ function joinClassNames(...values: Array<string | false | undefined>): string {
   return values.filter(Boolean).join(" ");
 }
 
+const FOCUSABLE_SELECTOR = [
+  "button:not([disabled])",
+  "[href]",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
 export function GameModal({
   id,
   open,
@@ -50,6 +60,40 @@ export function GameModal({
   dismissible = true,
   className,
 }: GameModalProps) {
+  const backdropRef = useRef<HTMLDivElement | null>(null);
+  const dialogRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const backdrop = backdropRef.current;
+    const parent = backdrop?.parentElement;
+    const inertStates = new Map<HTMLElement, boolean>();
+
+    if (backdrop && parent) {
+      for (const sibling of parent.children) {
+        if (!(sibling instanceof HTMLElement) || sibling === backdrop) continue;
+        inertStates.set(sibling, sibling.inert);
+        sibling.inert = true;
+      }
+    }
+
+    queueMicrotask(() => {
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const autofocus = dialog.querySelector<HTMLElement>("[autofocus]");
+      const firstFocusable = dialog.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+      (autofocus ?? firstFocusable ?? dialog).focus();
+    });
+
+    return () => {
+      for (const [element, wasInert] of inertStates) element.inert = wasInert;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [open]);
+
   if (!open) {
     return null;
   }
@@ -61,6 +105,27 @@ export function GameModal({
     if (dismissible && event.key === "Escape") {
       event.stopPropagation();
       onClose();
+      return;
+    }
+    if (event.key === "Tab") {
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)]
+        .filter((element) => element.getAttribute("aria-hidden") !== "true");
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
   };
 
@@ -72,11 +137,13 @@ export function GameModal({
 
   return (
     <div
+      ref={backdropRef}
       className="game-modal__backdrop"
       onClick={handleBackdropClick}
       onKeyDown={handleKeyDown}
     >
       <section
+        ref={dialogRef}
         id={id}
         className={joinClassNames("game-modal", className)}
         role="dialog"

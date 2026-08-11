@@ -2390,7 +2390,15 @@ button small,
     overflow: hidden !important;
   }
   .market-floor .market-card__wrap { width: min(100%, 4.6rem) !important; }
-  .market-card__purchase { min-height: 1.55rem; margin-top: 0.15rem; padding: 0.12rem; font-size: 0.5rem; }
+  .market-card__purchase {
+    top: 0.32rem;
+    right: 0.1rem;
+    min-width: 2.85rem;
+    min-height: 1.25rem;
+    margin: 0;
+    padding: 0.1rem 0.2rem;
+    font-size: 0.46rem;
+  }
   .market-floor .market-card__label { padding: 0.18rem !important; font-size: 0.52rem !important; }
   .market-floor .market-card__price { font-size: 0.52rem !important; }
 

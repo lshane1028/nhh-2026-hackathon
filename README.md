@@ -1,9 +1,8 @@
 <div align="center">
 
-<!-- TITLE: 게임 제목은 이 한 줄만 바꾸면 됩니다 -->
-# 꽃판: GO!
+# 경화수월
 
-**기본 화투 48장으로 전통 놀이 「짓고땡」을 지어 점수를 내고,<br>목표를 넘긴 그 순간 `고`를 외칠지 `스톱`할지 거는 싱글 플레이 로그라이크 덱빌더.**
+**화투패를 짓과 끗패로 나눠 점수를 만들고,<br>수집 족보와 부적으로 열두 달을 돌파하는 싱글 플레이 덱빌더.**
 
 <img src="public/assets/cards/hwatu/card-01-bright-crane.webp" width="88">
 <img src="public/assets/cards/hwatu/card-03-bright-curtain.webp" width="88">
@@ -17,7 +16,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-8.0-646CFF?logo=vite&logoColor=white)
 ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-124%20passing-2f5c46)
+![Tests](https://img.shields.io/badge/tests-240%20passing-2f5c46)
 ![Runtime AI](https://img.shields.io/badge/runtime%20AI-none-b02f28)
 
 **NAN 2026 · NHN Game × AI Hackathon**
@@ -30,11 +29,10 @@
 
 | | |
 |---|---|
-| **웹에서 바로 플레이** | **[꽃판: GO! 실행하기](https://lshane1028.github.io/nhh-2026-hackathon/)** |
+| **웹에서 바로 플레이** | **[경화수월 실행하기](https://lshane1028.github.io/nhh-2026-hackathon/)** |
 | **플레이 영상** | _(업로드 예정)_ |
 
-> 설치 · 회원가입 · API 키가 필요 없습니다. 링크를 열면 브라우저에서 바로 실행되고,<br>
-> 최초 로딩 이후에는 네트워크 없이도 플레이가 이어집니다.
+> 설치 · 회원가입 · API 키가 필요 없습니다. 링크를 열면 브라우저에서 바로 실행됩니다.
 
 <br>
 
@@ -99,7 +97,7 @@
 
 | 카드 | 끗패 족보 | 수집 족보 | 부적 | 비결서 | 화공패 | 금단패 | 두목 | 스테이지 |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **48**장 | **14**종 | **8**종 | **58**종 | **22**종 | **15**종 | **10**종 | **12**종 | **12**+∞ |
+| **48**장 | **14**종 | **11**종 | **56**종 | **22**종 | **15**종 | **10**종 | **12**종 | **12**+∞ |
 
 <br>
 
@@ -120,7 +118,7 @@ npm run dev          # http://localhost:3000
 | `npm run dev` | 개발 서버 (HMR) |
 | `npm run build` | 프로덕션 빌드 |
 | `npm run start` | 빌드 결과 실행 |
-| `npm run test` | Vitest 실행 (124개) |
+| `npm run test` | Vitest 실행 (240개) |
 | `npm run typecheck` | TypeScript 검사 |
 | `npm run lint` | ESLint |
 | `npm run verify` | **test → typecheck → lint → build** 전체 검증 |
@@ -133,11 +131,11 @@ npm run dev          # http://localhost:3000
 |---|---|---|
 | UI | React 19 · Next 16 (App Router) | 화면이 12종이고 전부 같은 상태를 읽습니다. 라우팅보다 상태 공유가 중요해 단일 페이지 + 화면 전환 구조 |
 | 번들 · 런타임 | Vite 8 + vinext | Next App Router를 Vite/RSC 위에서 구동해 Workers에 그대로 배포 |
-| 배포 | Cloudflare Workers + Wrangler | 서버 상태가 없으므로 엣지 정적 배포로 충분. 콜드 스타트 없음 |
+| 배포 | GitHub Pages · Cloudflare Worker 호환 | 공개 링크는 정적 export, Worker 빌드는 보안 헤더와 이미지 최적화 경로 제공 |
 | 스타일 | Tailwind 4 + 수제 CSS | 레이아웃은 유틸리티로, 카드 연출(재질·광택·도트 표식)은 CSS 직접 작성 |
-| 타입 · 테스트 | TypeScript 5.9 · Vitest 4 | 규칙 엔진이 순수 함수라 DOM 없이 124개 테스트가 밀리초 단위로 실행 |
+| 타입 · 테스트 | TypeScript 5.9 · Vitest 4 | 규칙 엔진이 순수 함수라 33개 파일의 240개 테스트로 빠르게 검증 |
 | 저장 | `localStorage` (스키마 버전 관리) | 계정 · 서버 없이 진행 저장. 규칙 변경 시 키를 올려 호환 불가 세이브를 폐기 |
-| **런타임 AI** | **없음** | 시드 재현성과 오프라인 시연을 보장하기 위한 의도적 배제 |
+| **런타임 AI** | **없음** | 시드 재현성과 일관된 규칙 판정을 보장하기 위한 의도적 배제 |
 
 <br>
 
@@ -154,7 +152,7 @@ nhh-2026-hackathon/
 │   ├── audio/
 │   │   └── game-sfx.ts             효과음 재생 (Web Audio, 외부 파일 없음)
 │   └── components/             ── props만 받는 프레젠테이션 컴포넌트
-│       ├── TitleScreen.tsx         제목 · 시드 입력 · 실험 규칙 토글
+│       ├── TitleScreen.tsx         제목 · 시작 덱 · 튜토리얼 여부 선택
 │       ├── AssetPlaceholder.tsx    자산이 없는 자리를 assetTag 텍스트로 대체
 │       ├── PlayRail.tsx            상단 레일: 목표 · 진행도 · 점수 계산 막대 · 남은 자원
 │       ├── HwatuCard.tsx           카드 한 장. 재질(각인) · 표면(판본) · 표식을 합성
@@ -182,8 +180,8 @@ nhh-2026-hackathon/
 │   ├── types.ts                    전체 도메인 타입의 단일 출처
 │   ├── content/                ── 선언형 데이터 카탈로그
 │   │   ├── cards.ts                표준 화투 48장 정의
-│   │   ├── yaku.ts                 끗패 족보 14종 · 수집 족보 8종
-│   │   ├── talismans.ts            부적 58종 (연계 조커 10종 포함)
+│   │   ├── yaku.ts                 끗패 족보 14종 · 수집 족보 11종
+│   │   ├── talismans.ts            부적 56종
 │   │   ├── upgrades.ts             화공패 15 · 금단패 10 · 비결서 22 · 각인 8 · 판본 4 · 낙관 4
 │   │   ├── card-effects.ts         카드 효과 태그 12종
 │   │   ├── bosses.ts               두목 12종과 거는 규칙
@@ -207,14 +205,13 @@ nhh-2026-hackathon/
 │   │   ├── actions.ts              GameAction 32종 (판별 유니온)
 │   │   ├── game.ts                 gameReducer — 상태 전이의 단일 진입점
 │   │   └── storage.ts              localStorage 저장 · 스키마 버전 검사 · 정규화
-│   └── tests/                  ── 자동 테스트 124개
-│       ├── engine.test.ts          족보 판정 · 짓 성립 · 점수 연산 순서 (33)
-│       ├── state.test.ts           상태 전이 · 고 실패 롤백 · 중복 정산 방지 (27)
-│       ├── content.test.ts         콘텐츠 ID 유일성 · 태그 · 수량 (13)
-│       ├── collection-board.test.ts  화면 ≡ 채점기 불변식 (10)
-│       ├── card-visuals.test.ts    각인 ⟂ 판본, 효과 태그 쌍의 유일성 (8)
-│       ├── balance-probe.test.ts   40개 시드 완전 탐색으로 목표 곡선 검증 (4)
-│       └── …                       금단패 · 수집 보너스 · 튜토리얼 · 장터 · 연출
+│   └── tests/                  ── 자동 테스트 240개
+│       ├── engine.test.ts          족보 판정 · 짓 성립 · 점수 연산 순서
+│       ├── state.test.ts           상태 전이 · 고 · 술잔 · 팩 · 중복 정산 방지
+│       ├── content.test.ts         콘텐츠 ID 유일성 · 태그 · 효과 연결
+│       ├── collection-board.test.ts  화면 ≡ 채점기 불변식
+│       ├── mobile-landscape.test.ts  모바일 가로 화면 안전 영역
+│       └── …                       금단패 · 부적 · 오디오 · 툴팁 · 연출 · 저장
 │
 ├── worker/
 │   └── index.ts                    Cloudflare Worker 엔트리 · 이미지 최적화 라우트
@@ -302,7 +299,7 @@ randomAt(seed, cursor) = mix32( fnv1a(seed) ⊕ (cursor+1)×0x9E3779B9 ) / 2³²
 npm run verify    # test → typecheck → lint → build
 ```
 
-규칙이 자주 바뀌는 게임이라 회귀 방지에 비중을 뒀습니다. 테스트 코드가 로직 코드의 **36%** 입니다.
+규칙이 자주 바뀌는 게임이라 회귀 방지에 비중을 뒀습니다. 현재 33개 테스트 파일에서 240개 사례를 실행합니다.
 
 특히 **두 곳에 나뉘어 있는 같은 규칙**을 테스트로 못 박았습니다. 한쪽만 고쳐도 타입 검사와 린트는 통과하기 때문입니다.
 
@@ -323,7 +320,7 @@ npm run verify    # test → typecheck → lint → build
 
 - 시드 재현성을 보장하기 위해 — 모델 호출이 섞이면 같은 시드가 같은 런을 만들지 못합니다
 - 심사자가 API 키 없이 링크만으로 실행할 수 있게 하기 위해
-- 결정론적 순수 함수여야 124개의 테스트로 전부 잠글 수 있기 때문에
+- 결정론적 순수 함수여야 240개의 테스트로 주요 규칙을 잠글 수 있기 때문에
 
 사용한 프롬프트 원문은 [`docs/PROMPTS/`](docs/PROMPTS), 작업 로그는 [`docs/AI_USAGE_LOG.md`](docs/AI_USAGE_LOG.md),
 전체 기술 설명은 [`docs/submission/`](docs/submission)의 **AI 활용 기술 문서**에 있습니다.
@@ -331,6 +328,9 @@ npm run verify    # test → typecheck → lint → build
 <br>
 
 ## 📄 제출 문서
+
+현재 코드와 문서의 차이, 구조·게임·아트·성능 개선 우선순위는
+[`docs/REPOSITORY_AUDIT_2026-08-12.md`](docs/REPOSITORY_AUDIT_2026-08-12.md)에 정리되어 있습니다.
 
 | 문서 | 위치 |
 |---|---|

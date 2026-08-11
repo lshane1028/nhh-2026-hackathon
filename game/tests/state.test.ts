@@ -101,6 +101,46 @@ describe("playable run reducer", () => {
     expect(submitted.lastScore?.finalHeung).toBe(preview?.breakdown.finalHeung);
   });
 
+  it("applies 어깨너머 비법 as a visible borrowed-level increase", () => {
+    const deck = createStandardHwatuDeck();
+    const january = deck.find((card) => card.month === 1)!;
+    const february = deck.find((card) => card.month === 2)!;
+    const pair = [january, february];
+    const initial = createInitialGameState("OVER-SHOULDER");
+    const state = {
+      ...initial,
+      runId: "over-shoulder",
+      screen: "play" as const,
+      deck,
+      hand: pair,
+      drawPile: deck.filter((card) => !pair.some((selected) => selected.instanceId === card.instanceId)),
+      selectedCardIds: pair.map((card) => card.instanceId),
+      yard: { cards: [], sweptCount: 0 },
+      targetScore: 1_000_000,
+      yakuLevels: {
+        ...initial.yakuLevels,
+        ali: { level: 1, mastery: 0 },
+        ttaeng: { level: 6, mastery: 0 },
+      },
+      talismans: [{ instanceId: "owned:over-shoulder", definitionId: "t_over_shoulder_secret", growth: 0 }],
+    };
+
+    const preview = evaluateSelectedHand(state)?.breakdown;
+    expect(preview?.yakuId).toBe("ali");
+    expect(preview?.startingHeung).toBe(7);
+    expect(preview?.operations).toContainEqual(expect.objectContaining({
+      sourceId: "owned:over-shoulder",
+      label: "어깨너머 비법 · Lv.1→Lv.4",
+      operation: "add_heung",
+      value: 1.2,
+    }));
+    expect(preview?.finalHeung).toBeCloseTo(8.2, 5);
+
+    const submitted = gameReducer(state, { type: "SUBMIT_HAND" });
+    expect(submitted.lastScore?.finalHeung).toBeCloseTo(8.2, 5);
+    expect(submitted.lastScore?.operations.some((operation) => operation.sourceId === "owned:over-shoulder")).toBe(true);
+  });
+
   it("preserves the exact two kkeut cards and the remaining jit cards for presentation", () => {
     const deck = createStandardHwatuDeck();
     const card = (month: number) => deck.find((entry) => entry.month === month && entry.kind === "chaff")

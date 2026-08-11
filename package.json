@@ -14,7 +14,9 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "verify": "npm run test && npm run typecheck && npm run lint && npm run build"
+    "assets:check": "node scripts/check-runtime-assets.mjs",
+    "styles:check": "node scripts/check-style-budget.mjs",
+    "verify": "npm run assets:check && npm run styles:check && npm run test && npm run typecheck && npm run lint && npm run build"
   },
   "dependencies": {
     "animejs": "4.5.0",
