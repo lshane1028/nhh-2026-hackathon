@@ -6,7 +6,7 @@
 
 ## 결론
 
-현재 빌드는 플레이 가능한 프로토타입을 넘어, 규칙 엔진과 콘텐츠 검증이 잘 갖춰진 게임입니다. `game/`이 React에 의존하지 않고 `UI → reducer → engine/content` 방향을 지키며, 243개 테스트가 짓·끗패·수집·부적·금단패·상점·저장·모바일 레이아웃의 주요 회귀를 막습니다. 보안 감사와 두 배포 빌드도 모두 통과했습니다.
+현재 빌드는 플레이 가능한 프로토타입을 넘어, 규칙 엔진과 콘텐츠 검증이 잘 갖춰진 게임입니다. `game/`이 React에 의존하지 않고 `UI → reducer → engine/content` 방향을 지키며, 244개 테스트가 짓·끗패·수집·부적·금단패·상점·저장·모바일 레이아웃의 주요 회귀를 막습니다. 보안 감사와 두 배포 빌드도 모두 통과했습니다.
 
 다만 유지보수 비용은 여전히 높습니다. 이번 구조 작업으로 `GameApp.tsx`는 2,068줄에서 1,604줄, `game/state/game.ts`는 1,916줄에서 1,503줄로 줄었지만, `pixel-direction.css` 2,465줄과 그 안의 `!important` 463개는 다음 병목으로 남아 있습니다.
 
@@ -27,7 +27,7 @@
 
 | 영역 | 평가 | 판단 |
 | --- | --- | --- |
-| 규칙 정확성·회귀 방지 | A- | 순수 엔진과 243개 테스트가 핵심 불변식을 잘 잠금 |
+| 규칙 정확성·회귀 방지 | A- | 순수 엔진과 244개 테스트가 핵심 불변식을 잘 잠금 |
 | 도메인 구조 | B+ | `content / engine / state` 분리가 좋고 `game → app` 역참조가 없음 |
 | UI 유지보수성 | C+ | 최상위 컴포넌트가 화면·저장·오디오·연출을 함께 조정 |
 | 상태 전이 유지보수성 | B- | 단일 진입점을 유지하면서 selector·장터·팩·소모품·계절 전환을 분리 |
@@ -250,7 +250,7 @@ Cloudflare Worker 응답에는 CSP, COOP, CORP, Permissions-Policy, nosniff, fra
 
 ## 검증 기록
 
-- `npm test`: 34개 파일, 243개 테스트 통과
+- `npm test`: 34개 파일, 244개 테스트 통과
 - `npm run typecheck`: 통과
 - `npm run lint`: 통과
 - `npm run build`: 통과
@@ -287,7 +287,7 @@ Cloudflare Worker 응답에는 CSP, COOP, CORP, Permissions-Policy, nosniff, fra
 - 파생 상태는 `selectors.ts`, 장터 생성·진입·리롤은 `market-actions.ts`가 담당합니다.
 - 팩 후보 생성은 `pack-actions.ts`, 화공패·금단장 적용은 `consumable-actions.ts`, 계절 계약 전환은 `run-lifecycle.ts`, 로그 생성은 `logs.ts`로 분리했습니다.
 - `gameReducer` 공개 진입점과 모든 액션 계약은 유지했습니다.
-- `game/state/game.ts`는 1,916줄에서 1,503줄로 줄었습니다.
+- `game/state/game.ts`는 1,916줄에서 1,379줄로 줄었습니다.
 
 ### 4순위 기반 완료
 
@@ -301,6 +301,7 @@ Cloudflare Worker 응답에는 CSP, COOP, CORP, Permissions-Policy, nosniff, fra
 - 보스전 플레이 레일에 두목 규칙과 대응법을 접이식으로 남겨 월 시작 화면을 다시 외울 필요가 없게 했습니다.
 - 무한 달력은 기존 목표 배율만 반복하지 않고, 시드와 무관하게 재현 가능한 떠돌이 두목·날씨 변주를 월과 바퀴 기준으로 적용합니다. 원래 열두 달과 정규 보스 규칙은 바뀌지 않습니다.
 - 팩 선택 확정·소각·비결서·부적 획득 처리를 `pack-actions.ts`로 모아 reducer의 팩 도메인 분리를 마쳤습니다.
+- 손패 정렬·보충·선택을 `round-actions.ts`로 분리했고, 무한 달력의 생성 결과가 실제 월 시작 상태까지 이어지는 통합 회귀를 추가했습니다.
 
 ### 다음 작업 묶음
 

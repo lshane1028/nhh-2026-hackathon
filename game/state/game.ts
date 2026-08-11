@@ -2,7 +2,7 @@ import {
   ALL_IMMEDIATE_YAKU_DEFINITIONS,
   COLLECTION_YAKU_DEFINITIONS,
 } from "../content/yaku";
-import { BOSSES, BOSS_BY_ID } from "../content/bosses";
+import { BOSS_BY_ID } from "../content/bosses";
 import { getStageDefinition } from "../content/stages";
 import { TALISMAN_BY_ID } from "../content/talismans";
 import {
@@ -92,6 +92,15 @@ import { prependGameLog as logEntry } from "./logs";
 import { closePendingPack, confirmPackSelection, openPurchasedPack } from "./pack-actions";
 import { applyPendingConsumable } from "./consumable-actions";
 import { advanceAfterShop, openSeasonContract } from "./run-lifecycle";
+import {
+  MAX_SELECTED,
+  clearHandSelection,
+  cloneCard,
+  faceDownForBoss,
+  refillHand,
+  selectHandCard,
+  sortHand,
+} from "./round-actions";
 
 export {
   getEffectiveCupRoles,
@@ -101,8 +110,8 @@ export {
   isUndiscardable,
   mustDeclareGo,
 } from "./selectors";
+export { sortHand } from "./round-actions";
 import type {
-  BossDefinition,
   CardInstance,
   GameState,
   ImmediateYakuId,
@@ -117,32 +126,6 @@ import type {
 } from "../types";
 
 const DEFAULT_SEED = "FLOWER-2026";
-const MAX_SELECTED = 5;
-
-/** 광 → 동물 → 띠 → 피, the order a hwatu player reads a hand in. */
-const KIND_ORDER: Record<CardInstance["kind"], number> = {
-  bright: 0,
-  animal: 1,
-  ribbon: 2,
-  chaff: 3,
-};
-
-/**
- * Always calendar order.
- *
- * There used to be a 광·동물·띠·피 toggle beside the hand. It cost a control and
- * a piece of state to answer a question the player almost never has: 짓 is
- * built out of month sums, so month order is the only arrangement that helps
- * with the thing you are actually doing.
- */
-export function sortHand(hand: readonly CardInstance[]): CardInstance[] {
-  return [...hand].sort((left, right) =>
-    left.month - right.month
-    || KIND_ORDER[left.kind] - KIND_ORDER[right.kind]
-    || left.instanceId.localeCompare(right.instanceId),
-  );
-}
-
 function initialYakuLevels(): Record<string, YakuLevelState> {
   return Object.fromEntries(
     [...ALL_IMMEDIATE_YAKU_DEFINITIONS, ...COLLECTION_YAKU_DEFINITIONS].map((entry) => [
@@ -251,46 +234,6 @@ function cardsFromIds(state: GameState, ids: readonly string[]): CardInstance[] 
   });
 }
 
-function cloneCard(card: CardInstance): CardInstance {
-  return { ...card, tags: [...card.tags] };
-}
-
-function faceDownForBoss(cards: CardInstance[], boss: BossDefinition | null): CardInstance[] {
-  if (boss?.ruleKey !== "two_face_down") return cards;
-  return cards.map((card, index) =>
-    index < 2 ? { ...card, tags: [...card.tags, "face_down"] } : card,
-  );
-}
-
-function refillHand(state: GameState, currentHand: CardInstance[]): GameState {
-  const needed = Math.max(0, getEffectiveHandSize(state) - currentHand.length);
-  if (needed === 0) return { ...state, hand: sortHand(currentHand) };
-
-  let pile = state.drawPile;
-  let cursor = state.rngCursor;
-  let usedPile = state.usedPile;
-  if (pile.length < needed && usedPile.length > 0) {
-    const shuffled = shuffleDeterministic(usedPile.map(cloneCard), {
-      seed: `${state.seed}:recycle:${state.stage}`,
-      cursor,
-    });
-    pile = [...pile, ...shuffled.value];
-    cursor = shuffled.state.cursor;
-    usedPile = [];
-  }
-  const drawn = pile.slice(0, needed).map(cloneCard);
-  const luckyDiscards = drawn.filter((card) => card.effectTagId === "drawn_luck").length;
-  const boss = state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null;
-  return {
-    ...state,
-    rngCursor: cursor,
-    discardsRemaining: state.discardsRemaining + luckyDiscards,
-    hand: sortHand([...currentHand, ...faceDownForBoss(drawn, boss)]),
-    drawPile: pile.slice(drawn.length),
-    usedPile,
-  };
-}
-
 function startRun(state: GameState, startDeckId: string, tutorialMode: boolean, entropy = "fixed"): GameState {
   let cursor = 0;
   const runId = `${state.seed}:run:${entropy}`;
@@ -362,9 +305,7 @@ function resolveDevouringDaggers(talismans: readonly TalismanInstance[]): {
 function startStage(state: GameState): GameState {
   const stage = getStageDefinition(state.stage, state.infiniteLap);
   const devouring = resolveDevouringDaggers(state.talismans);
-  const stageBossId = state.stage > 12
-    ? BOSSES[(state.stage - 13) % BOSSES.length].id
-    : stage.bossId;
+  const stageBossId = stage.bossId;
   const scriptedTutorial = state.tutorialMode && state.stage === 1;
   const shuffled = shuffleDeterministic(state.deck.map(cloneCard), {
     seed: scriptedTutorial ? `${DEFAULT_SEED}:tutorial-stage-1` : `${state.seed}:${state.runId}:stage:${state.stage}`,
@@ -1247,22 +1188,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, experimentalRules: { ...state.experimentalRules, [action.key]: !state.experimentalRules[action.key] } };
     case "START_STAGE":
       return startStage(state);
-    case "SELECT_CARD": {
-      const card = state.hand.find((entry) => entry.instanceId === action.cardId);
-      if (!card) return state;
-      const already = state.selectedCardIds.includes(action.cardId);
-      const selectedCardIds = already
-        ? state.selectedCardIds.filter((id) => id !== action.cardId)
-        : state.selectedCardIds.length < MAX_SELECTED
-          ? [...state.selectedCardIds, action.cardId]
-          : state.selectedCardIds;
-      const hand = card.tags.includes("face_down")
-        ? state.hand.map((entry) => entry.instanceId === card.instanceId ? { ...entry, tags: entry.tags.filter((tag) => tag !== "face_down") } : entry)
-        : state.hand;
-      return { ...state, hand, selectedCardIds };
-    }
+    case "SELECT_CARD":
+      return selectHandCard(state, action.cardId);
     case "CLEAR_SELECTION":
-      return { ...state, selectedCardIds: [] };
+      return clearHandSelection(state);
     case "ASSIGN_CUP_ROLE": {
       if (state.pendingCupCardId !== action.cardId) return state;
       const card = state.deck.find((entry) => entry.instanceId === action.cardId);

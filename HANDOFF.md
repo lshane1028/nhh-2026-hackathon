@@ -23,7 +23,7 @@ npm run build:pages
 | 명령 | 용도 |
 | --- | --- |
 | `npm run dev` | 로컬 개발 서버 |
-| `npm test` | Vitest 34개 파일, 243개 테스트 |
+| `npm test` | Vitest 34개 파일, 244개 테스트 |
 | `npm run typecheck` | TypeScript 검사 |
 | `npm run lint` | ESLint |
 | `npm run styles:check` | 대형 CSS 줄 수와 `!important` 증가 방지 |
@@ -158,7 +158,7 @@ game/
     pack-actions.ts  팩 후보 생성
     consumable-actions.ts 화공패·금단장 적용
     run-lifecycle.ts 계절 계약과 월 전환
-  tests/             34개 파일, 243개 테스트
+  tests/             34개 파일, 244개 테스트
 
 worker/              Cloudflare 응답과 보안 헤더, 이미지 최적화
 scripts/             GitHub Pages export와 제작 도구
@@ -212,7 +212,7 @@ app → game/state → game/engine + game/content
 
 2026-08-12 기준:
 
-- 34개 테스트 파일, 243개 테스트 통과
+- 34개 테스트 파일, 244개 테스트 통과
 - TypeScript 통과
 - ESLint 통과
 - vinext build 통과
@@ -230,6 +230,7 @@ app → game/state → game/engine + game/content
 - 덱 보기·장터의 빌드 강점 태그와 보스전 레일의 상시 규칙·대응 안내를 추가했습니다.
 - 덱 편집 기본 CSS를 `app/components/deck-editor.css`로 분리하고, 팩 확정 로직을 `game/state/pack-actions.ts`로 옮겼습니다.
 - 무한 달력은 원래 보스 규칙을 보존하면서 떠돌이 두목 또는 날씨 변주를 결정론적으로 추가합니다.
+- 손패 정렬·보충·선택은 `game/state/round-actions.ts`로 분리했으며, 무한 달력 변주가 실제 월 시작 상태에 전달되는 통합 테스트를 추가했습니다.
 - 런타임 자산 예산은 `assets/runtime-manifest.json`, 검사는 `npm run assets:check`입니다.
 - 원본 작업 자산은 `source-assets/`, 실제 배포 자산은 `public/`에 둡니다.
 - `GameApp`의 저장과 오디오 장면 전환은 `app/hooks/`로 분리했습니다.
