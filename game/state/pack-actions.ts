@@ -5,7 +5,7 @@ import { BOOKS, BOOK_BY_ID } from "../content/upgrades";
 import { createStandardHwatuDeck } from "../engine/deck";
 import { randomAt } from "../engine/rng";
 import type { CardInstance, GameState, PackDefinition } from "../types";
-import { getShopCategoryPool } from "./market-actions";
+import { getShopCategoryPool } from "./shop-catalog";
 import { prependGameLog } from "./logs";
 import { countContractEffect, getEffectiveTalismanSlots } from "./selectors";
 

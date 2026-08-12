@@ -30,11 +30,6 @@ export function getCardArtUrl(card: AtlasCard): string {
   return `/assets/cards/hwatu/${card.assetTag}.webp`;
 }
 
-/** Lossless source kept in the build as a per-card fallback. */
-export function getCardNativeArtUrl(card: AtlasCard): string {
-  return `/assets/cards/hwatu/native/${card.assetTag}.png`;
-}
-
 /** Column offset of a card inside its month's block of four. */
 function printedMonth(card: AtlasCard): number {
   const match = /^card-(\d{2})-/.exec(card.assetTag);
@@ -71,21 +66,18 @@ export function getAtlasPosition(card: AtlasCard): string {
 }
 
 /**
- * Three staged sources, ordered from sharpest to most defensive.
+ * Two staged sources, ordered from sharpest to most defensive.
  *
- * CardArt requests the lossless PNG only after a WebP error, and attaches the
- * shared atlas only if both crops fail. A failed crop therefore never remains
- * a blank cream card without loading defensive assets on the common path.
+ * CardArt requests the shared atlas only after a WebP error. The lossless PNG
+ * editing sources live in source-assets and are not shipped to every player.
  */
 export function getCardArtSources(card: AtlasCard): {
   primaryUrl: string;
-  fallbackUrl: string;
   atlasUrl: string;
   atlasPosition: string;
 } {
   return {
     primaryUrl: getCardArtUrl(card),
-    fallbackUrl: getCardNativeArtUrl(card),
     atlasUrl: HWATU_ATLAS_URL,
     atlasPosition: getAtlasPosition(card),
   };

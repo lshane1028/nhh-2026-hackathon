@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   getCardArtUrl,
-  getCardNativeArtUrl,
   getCardArtSources,
   HWATU_ATLAS_URL,
 } from "../../app/components/hwatu-atlas";
@@ -15,16 +14,15 @@ function publicAssetPath(url: string): string {
 }
 
 describe("hwatu card art delivery", () => {
-  it("ships a WebP crop and PNG fallback for every one of the 48 cards", () => {
+  it("ships a WebP crop for every one of the 48 cards", () => {
     const deck = createStandardHwatuDeck();
     expect(deck).toHaveLength(48);
 
     deck.forEach((card) => {
-      [getCardArtUrl(card), getCardNativeArtUrl(card)].forEach((url) => {
-        const path = publicAssetPath(url);
-        expect(existsSync(path), `${url} should exist`).toBe(true);
-        expect(statSync(path).size, `${url} should not be empty`).toBeGreaterThan(1_000);
-      });
+      const url = getCardArtUrl(card);
+      const path = publicAssetPath(url);
+      expect(existsSync(path), `${url} should exist`).toBe(true);
+      expect(statSync(path).size, `${url} should not be empty`).toBeGreaterThan(1_000);
     });
   });
 
@@ -33,7 +31,6 @@ describe("hwatu card art delivery", () => {
     const sources = getCardArtSources(card);
 
     expect(sources.primaryUrl).toBe(getCardArtUrl(card));
-    expect(sources.fallbackUrl).toBe(getCardNativeArtUrl(card));
     expect(sources.atlasUrl).toBe(HWATU_ATLAS_URL);
     expect(existsSync(publicAssetPath(HWATU_ATLAS_URL))).toBe(true);
   });

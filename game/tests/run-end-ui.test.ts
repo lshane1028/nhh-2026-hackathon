@@ -48,6 +48,9 @@ describe("run ending record", () => {
           count: 2,
         },
       ],
+      buildTags: [
+        { id: "bright", label: "광 수집", detail: "광 수집 비결과 광 연계", strength: 4 },
+      ],
       onRestart: () => undefined,
     }));
 
@@ -61,6 +64,8 @@ describe("run ending record", () => {
     expect(html).toContain("성장 +3");
     expect(html).toContain("사용한 금단서");
     expect(html).toContain("2회 사용");
+    expect(html).toContain("완성한 덱의 방향");
+    expect(html).toContain("광 수집");
     for (const card of bestCards) expect(html).toContain(card.instanceId);
     expect(html).not.toContain("고 성공");
     expect(html).not.toContain("고 실패");

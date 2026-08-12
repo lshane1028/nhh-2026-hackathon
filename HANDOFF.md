@@ -23,7 +23,7 @@ npm run build:pages
 | 명령 | 용도 |
 | --- | --- |
 | `npm run dev` | 로컬 개발 서버 |
-| `npm test` | Vitest 35개 파일, 247개 테스트 |
+| `npm test` | Vitest 36개 파일, 250개 테스트 |
 | `npm run typecheck` | TypeScript 검사 |
 | `npm run lint` | ESLint |
 | `npm run styles:check` | 대형 CSS 줄 수와 `!important` 증가 방지 |
@@ -158,7 +158,7 @@ game/
     pack-actions.ts  팩 후보 생성
     consumable-actions.ts 화공패·금단장 적용
     run-lifecycle.ts 계절 계약과 월 전환
-  tests/             35개 파일, 247개 테스트
+  tests/             36개 파일, 250개 테스트
 
 worker/              Cloudflare 응답과 보안 헤더, 이미지 최적화
 scripts/             GitHub Pages export와 제작 도구
@@ -175,8 +175,8 @@ app → game/state → game/engine + game/content
 
 ## 8. 현재 구조 부채
 
-- `app/GameApp.tsx`: 1,604줄. 주요 수명주기는 분리됐고 화면 라우터 경계가 남음
-- `game/state/game.ts`: 1,503줄. 장터·팩·소모품·selector는 분리됐고 제출·라운드 수명주기 추가 분리가 남음
+- `app/GameApp.tsx`: 1,619줄. 주요 수명주기는 분리됐고 화면 라우터 경계가 남음
+- `game/state/game.ts`: 1,160줄. 장터·팩·소모품·버리기·고 선언·selector는 분리됐고 제출·술잔·정산 수명주기 추가 분리가 남음
 - `app/components/pixel-direction.css`: 2,465줄, `!important` 463개. CSS layer와 화면별 경계 필요
 - CSS 이후에는 도감 발견 상태, 빌드 정체성 요약, 무한 달력 변주를 순서대로 검토
 
@@ -185,7 +185,7 @@ app → game/state → game/engine + game/content
 ## 9. 카드와 아트 불변식
 
 - 모든 카드형 그림은 2:3이며 `object-fit: contain`을 사용합니다.
-- 11·12월을 포함한 48장 WebP가 기본이고, PNG와 공용 아틀라스는 실패 시 fallback입니다.
+- 11·12월을 포함한 48장 WebP가 기본이고, 공용 아틀라스가 실패 시 fallback입니다. 무손실 PNG 편집 원본은 `source-assets/cards/hwatu-native-fallback/`에만 보존합니다.
 - 카드 전체가 3D로 기울며 선택·호버는 transform을 덮지 않고 CSS 변수로 합성합니다.
 - 각인, 판본, 낙관, 효과는 서로 다른 시각 채널을 사용하고 카드 원화의 월과 종류를 가리지 않습니다.
 - 부적과 카드 툴팁은 `document.body` 포털로 렌더하고 viewport 안으로 clamp합니다.
@@ -212,7 +212,7 @@ app → game/state → game/engine + game/content
 
 2026-08-12 기준:
 
-- 35개 테스트 파일, 247개 테스트 통과
+- 36개 테스트 파일, 250개 테스트 통과
 - TypeScript 통과
 - ESLint 통과
 - vinext build 통과

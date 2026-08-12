@@ -2,9 +2,11 @@
 
 import type { RunStats, YakuId } from "@/game/types";
 import { getYakuAssetTag, getYakuDisplayName } from "@/game/content/yaku";
+import type { RunIdentityTag } from "@/game/state/run-identity";
 
 import { AssetPlaceholder } from "./AssetPlaceholder";
 import { HwatuCard } from "./HwatuCard";
+import { RunIdentityStrip } from "./RunIdentityStrip";
 import "./screen-ui.css";
 import "./run-end-screen.css";
 
@@ -54,6 +56,7 @@ export interface RunEndScreenProps {
   ownedYakus?: readonly RunEndOwnedYaku[];
   ownedTalismans?: readonly RunEndOwnedTalisman[];
   usedForbiddens?: readonly RunEndForbiddenStat[];
+  buildTags?: readonly RunIdentityTag[];
   onRestart: () => void;
   onReturnToTitle?: () => void;
   onCopySeed?: () => void;
@@ -86,6 +89,7 @@ export function RunEndScreen({
   ownedYakus = [],
   ownedTalismans = [],
   usedForbiddens = [],
+  buildTags = [],
   onRestart,
   onReturnToTitle,
   onCopySeed,
@@ -178,6 +182,19 @@ export function RunEndScreen({
           <div><dt>번 돈</dt><dd>{formatNumber(stats.moneyEarned)}냥</dd></div>
         </dl>
       </section>
+
+      {buildTags.length > 0 ? (
+        <section className="run-end-screen__build" aria-labelledby="run-build-title">
+          <div className="screen-section-heading">
+            <div>
+              <p>덱 결산</p>
+              <h2 id="run-build-title">완성한 덱의 방향</h2>
+            </div>
+            <span>{buildTags.length}가지 특징</span>
+          </div>
+          <RunIdentityStrip tags={buildTags} />
+        </section>
+      ) : null}
 
       <section className="run-end-screen__yakus" aria-labelledby="run-yaku-title">
         <div className="screen-section-heading">

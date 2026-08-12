@@ -122,10 +122,12 @@ describe("market offer affordances", () => {
       name: "사광 수집 비결",
       description: "사광 점수 +1",
       assetTag: "book:four-brights",
+      rarityLabel: "등장 빈도 · 매우 희귀",
     }, 99);
 
     expect(html).toContain("book:four-brights");
     expect(html).toContain("/assets/generated/books/four-brights.webp");
+    expect(html).toContain("등장 빈도 · 매우 희귀");
   });
 
   it("fills the seasonal scene above two direct one-sentence rewards", () => {

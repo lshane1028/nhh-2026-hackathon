@@ -12,7 +12,6 @@
   ],
   "requiredDirectories": [
     { "path": "assets/cards/hwatu", "minimumFiles": 48 },
-    { "path": "assets/cards/hwatu/native", "minimumFiles": 48 },
     { "path": "assets/generated/talismans", "minimumFiles": 58 },
     { "path": "assets/generated/books", "minimumFiles": 8 },
     { "path": "assets/generated/bosses", "minimumFiles": 12 },
@@ -25,6 +24,32 @@
     "assets/audio/bgm/boss-spring.ogg",
     "assets/audio/bgm/boss-summer.ogg",
     "assets/audio/bgm/boss-autumn.ogg",
-    "assets/audio/bgm/boss-winter.ogg"
+    "assets/audio/bgm/boss-winter.ogg",
+    "assets/generated/packs/book-medium.webp",
+    "assets/generated/packs/book-large.webp",
+    "assets/generated/packs/talisman-medium.webp",
+    "assets/generated/packs/talisman-large.webp",
+    "assets/generated/packs/burn-large.webp",
+    "assets/cards/hwatu/native"
+  ],
+  "allowedDirectories": [
+    "assets/audio",
+    "assets/audio/bgm",
+    "assets/audio/sfx",
+    "assets/cards",
+    "assets/cards/effects",
+    "assets/cards/hwatu",
+    "assets/fonts",
+    "assets/generated/books",
+    "assets/generated/bosses",
+    "assets/generated/card-effects",
+    "assets/generated/forbidden",
+    "assets/generated/modifiers",
+    "assets/generated/packs",
+    "assets/generated/painters",
+    "assets/generated/seasons",
+    "assets/generated/start-decks",
+    "assets/generated/talismans",
+    "assets/generated/ui"
   ]
 }

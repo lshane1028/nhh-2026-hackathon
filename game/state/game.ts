@@ -9,26 +9,16 @@ import {
   BOOK_BY_ID,
   FORBIDDEN_BY_ID,
   PAINTER_BY_ID,
-  PAINTER_CARDS,
 } from "../content/upgrades";
-import {
-  CONTRACTS,
-  PACK_BY_ID,
-  START_DECK_BY_ID,
-  WEATHER_BY_ID,
-} from "../content/meta";
+import { PACK_BY_ID, START_DECK_BY_ID, WEATHER_BY_ID } from "../content/meta";
 import {
   bossAllowsCardToScore,
   bossAllowsYaku,
-  getBossDiscardMoneyCost,
   getBossKkeutAdjustment,
   getBossSettlementFactor,
 } from "../engine/boss";
 import {
-  applyPainterEffect,
   applyStartDeck,
-  canPayForbiddenCost,
-  getEligibleForbiddenTargetIds,
   isForbiddenTargetEligible,
 } from "../engine/consumables";
 import { calculateCollectionBonus } from "../engine/collection-bonus";
@@ -48,7 +38,6 @@ import {
   addHandToRound,
   canDeclareGo,
   createGoChainState,
-  declareGo,
   isRequirementCleared,
   settleRound,
 } from "../engine/go";
@@ -66,10 +55,7 @@ import {
   calculateTalismanRoundRewardAdjustment,
   calculateTalismanRoundRuleModifiers,
 } from "../engine/talismans";
-import {
-  calculateRoundReward,
-  purchaseShopOffer,
-} from "../engine/economy";
+import { calculateRoundReward } from "../engine/economy";
 import { MIN_SUBMISSION } from "../engine/yaku";
 import type { CollectionEvaluationInput } from "../engine/yaku";
 import type { GameAction } from "./actions";
@@ -79,23 +65,28 @@ import {
   getEffectiveCupRoles,
   getEffectiveHandSize,
   getEffectiveTalismanSlots,
-  getGoThresholdFactor,
   getRoundRequirement,
-  isUndiscardable,
   mustDeclareGo,
 } from "./selectors";
 import {
+  buyMarketOffer,
+  chooseSeasonContract,
   enterMarketAfterReward,
+  moveMarketTalisman,
+  moveMarketTalismanTo,
   rerollMarket,
+  sellMarketTalisman,
 } from "./market-actions";
 import { prependGameLog as logEntry } from "./logs";
-import { closePendingPack, confirmPackSelection, openPurchasedPack } from "./pack-actions";
+import { closePendingPack, confirmPackSelection } from "./pack-actions";
 import { applyPendingConsumable } from "./consumable-actions";
 import { advanceAfterShop, openSeasonContract } from "./run-lifecycle";
 import {
   MAX_SELECTED,
   clearHandSelection,
   cloneCard,
+  declareRoundGo,
+  discardSelected,
   faceDownForBoss,
   refillHand,
   selectHandCard,
@@ -119,7 +110,6 @@ import type {
   PainterDefinition,
   ScoreBreakdown,
   ShopOffer,
-  TalismanDefinition,
   TalismanInstance,
   YakuCandidate,
   YakuLevelState,
@@ -1011,167 +1001,6 @@ function submitHand(state: GameState): GameState {
   return resolveSubmittedHandOutcome(next);
 }
 
-function discardSelected(state: GameState): GameState {
-  if (state.screen !== "play" || state.discardsRemaining <= 0 || state.selectedCardIds.length === 0) return state;
-  const cost = getBossDiscardMoneyCost(state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null);
-  if (state.money < cost) {
-    return { ...state, logs: logEntry(state, "system", "버리기 불가", "세금쟁이에게 낼 냥이 없습니다.") };
-  }
-  const ids = new Set(state.selectedCardIds);
-  // 고집패 refuses to leave the hand even when bundled with other cards.
-  const stuck = state.hand.filter((card) => ids.has(card.instanceId) && isUndiscardable(card));
-  const discarded = state.hand.filter((card) => ids.has(card.instanceId) && !isUndiscardable(card));
-  if (discarded.length === 0) {
-    return {
-      ...state,
-      logs: logEntry(state, "system", "버리기 불가", "고집패는 버릴 수 없습니다."),
-    };
-  }
-  const kept = state.hand.filter((card) => !ids.has(card.instanceId) || isUndiscardable(card));
-  let deck = state.deck;
-  let cursor = state.rngCursor;
-  const purpleResults: string[] = [];
-  const generatedPainters = PAINTER_CARDS.filter((entry) => entry.minTargets <= 1 && entry.maxTargets >= 1 && entry.effectKey !== "repeat_last_consumable");
-  for (const purple of discarded.filter((card) => card.seal === "purple")) {
-    const painter = generatedPainters[Math.floor(randomAt(`${state.seed}:purple:${purple.instanceId}`, cursor++) * generatedPainters.length)];
-    const target = deck[Math.floor(randomAt(`${state.seed}:purple-target:${purple.instanceId}`, cursor++) * deck.length)];
-    if (painter && target) {
-      const result = applyPainterEffect(
-        deck,
-        painter,
-        [target.instanceId],
-        undefined,
-        (prefix) => `${prefix}:${state.runId}:${cursor++}`,
-      );
-      deck = result.deck;
-      purpleResults.push(`자인 → ${painter.name} 자동 적용`);
-    }
-  }
-  const next: GameState = {
-    ...state,
-    deck,
-    rngCursor: cursor,
-    hand: kept,
-    usedPile: [...state.usedPile, ...discarded],
-    selectedCardIds: [],
-    discardsRemaining: state.discardsRemaining - 1,
-    money: state.money - cost,
-    stats: { ...state.stats, discardsUsed: state.stats.discardsUsed + 1 },
-    logs: logEntry(
-      state,
-      "system",
-      `${discarded.length}장 버림`,
-      [
-        stuck.length ? `고집패 ${stuck.length}장은 남았습니다` : null,
-        cost ? "세금 1냥 지불" : "손패를 보충합니다.",
-        ...purpleResults,
-      ].filter(Boolean).join(" · "),
-    ),
-  };
-  return refillHand(next, kept);
-}
-
-
-function buyOffer(state: GameState, offerId: string): GameState {
-  const offer = state.shopOffers.find((entry) => entry.offerId === offerId);
-  if (!offer || offer.sold || state.money < offer.price) return state;
-  const completePurchase = (closeOtherFreeOffers = true) => {
-    const purchase = purchaseShopOffer(state.shopOffers, offerId, state.money);
-    if (!purchase.success) return null;
-    return {
-      money: purchase.moneyAfter,
-      shopOffers: closeOtherFreeOffers
-        ? purchase.offers.map((entry) => ({
-            ...entry,
-            sold: entry.sold || (offer.price === 0 && entry.price === 0),
-          }))
-        : purchase.offers,
-    };
-  };
-  if (offer.category === "pack") {
-    const pack = PACK_BY_ID[offer.definitionId];
-    if (!pack) return state;
-    const purchase = completePurchase(false);
-    if (!purchase) return state;
-    const opened = openPurchasedPack(state, offer.definitionId);
-    if (!opened) return state;
-    return {
-      ...state,
-      rngCursor: opened.cursor,
-      money: purchase.money,
-      pendingPack: opened.pendingPack,
-      shopOffers: purchase.shopOffers,
-      logs: logEntry(state, "reward", `${pack.name} 개봉`, `후보 ${opened.pendingPack.candidates.length + (opened.pendingPack.rewardCandidates?.length ?? 0)}개 중 ${opened.pendingPack.picksLeft}개를 고르세요.`),
-    };
-  }
-  if (offer.category === "talisman") {
-    if (state.talismans.length >= getEffectiveTalismanSlots(state)) return state;
-    const definition = TALISMAN_BY_ID[offer.definitionId] as TalismanDefinition | undefined;
-    if (!definition) return state;
-    const purchase = completePurchase();
-    if (!purchase) return state;
-    return {
-      ...state,
-      money: purchase.money,
-      talismans: [...state.talismans, { instanceId: `${offer.offerId}:owned`, definitionId: definition.id, growth: 0 }],
-      shopOffers: purchase.shopOffers,
-      logs: logEntry(state, "reward", `${definition.name} 획득`, definition.description),
-    };
-  }
-  if (offer.category === "book") {
-    const book = BOOK_BY_ID[offer.definitionId];
-    if (!book) return state;
-    const current = state.yakuLevels[book.yakuId] ?? { level: 1, mastery: 0 };
-    const purchase = completePurchase();
-    if (!purchase) return state;
-    return {
-      ...state,
-      money: purchase.money,
-      yakuLevels: { ...state.yakuLevels, [book.yakuId]: { ...current, level: current.level + 1 } },
-      shopOffers: purchase.shopOffers,
-      lastConsumableId: book.id,
-      logs: logEntry(state, "reward", `${book.name} 독파`, `${book.yakuId} 레벨 ${current.level + 1}`),
-    };
-  }
-  const definition = offer.category === "painter"
-    ? PAINTER_BY_ID[offer.definitionId]
-    : FORBIDDEN_BY_ID[offer.definitionId];
-  if (!definition) return state;
-  if (offer.category === "forbidden") {
-    const forbidden = FORBIDDEN_BY_ID[offer.definitionId] as ForbiddenDefinition | undefined;
-    if (!forbidden) return state;
-    const additionalCost = forbidden.additionalCost ?? 0;
-    if (state.money < offer.price + additionalCost) {
-      return {
-        ...state,
-        logs: logEntry(state, "system", "대가 부족", `구매가 외에 ${additionalCost}냥이 더 필요합니다.`),
-      };
-    }
-    const afterPurchase = { ...state, money: state.money - offer.price };
-    if (!canPayForbiddenCost(afterPurchase, forbidden)) {
-      return { ...state, logs: logEntry(state, "system", "대가 불가", forbidden.cost) };
-    }
-    if (
-      forbidden.targetKind !== "none"
-      && getEligibleForbiddenTargetIds(state, forbidden).length < forbidden.minTargets
-    ) {
-      return { ...state, logs: logEntry(state, "system", "대상 없음", forbidden.targetPrompt) };
-    }
-  }
-  const purchase = completePurchase();
-  if (!purchase) return state;
-  return {
-    ...state,
-    money: purchase.money,
-    screen: "deck_editor",
-    returnScreen: "shop",
-    pendingConsumableId: definition.id,
-    pendingTargetIds: [],
-    pendingShopOfferId: offerId,
-    shopOffers: purchase.shopOffers,
-  };
-}
-
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "HYDRATE":
@@ -1219,27 +1048,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "DISCARD_SELECTED":
       return discardSelected(state);
     case "DECLARE_GO": {
-      if (state.screen !== "decision") return state;
-      if (!canDeclareGo(state.chain, state.handsRemaining)) return state;
-      const chain = declareGo(state.chain, state.targetScore, getGoThresholdFactor(state));
-      const next: GameState = {
-        ...state,
-        chain,
-        stats: { ...state.stats, goAttempts: state.stats.goAttempts + 1 },
-      };
-      const requirement = getRoundRequirement(next);
-      const logged: GameState = {
-        ...next,
-        logs: logEntry(
-          next,
-          "go",
-          `${chain.goCount}고 선언`,
-          `이번 판에서 ${requirement.toLocaleString("ko-KR")}점을 넘겨야 합니다.`,
-        ),
-      };
-      // A hand big enough to clear the new bar outright re-opens the decision.
-      if (isRequirementCleared(logged.chain, requirement)) return logged;
-      return refillHand({ ...logged, screen: "play" }, logged.hand);
+      return declareRoundGo(state);
     }
     case "STOP_ROUND": {
       if (state.screen !== "decision") return state;
@@ -1251,7 +1060,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return enterMarketAfterReward(state);
     }
     case "BUY_OFFER":
-      return buyOffer(state, action.offerId);
+      return buyMarketOffer(state, action.offerId);
     case "REROLL_SHOP": {
       return rerollMarket(state);
     }
@@ -1304,45 +1113,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
     case "SELL_TALISMAN": {
-      const instance = state.talismans.find((entry) => entry.instanceId === action.instanceId);
-      const definition = instance ? TALISMAN_BY_ID[instance.definitionId] : undefined;
-      if (!instance || !definition) return state;
-      return { ...state, money: state.money + Math.max(1, Math.floor(definition.price / 2)), talismans: state.talismans.filter((entry) => entry.instanceId !== action.instanceId) };
+      return sellMarketTalisman(state, action.instanceId);
     }
     case "MOVE_TALISMAN": {
-      const index = state.talismans.findIndex((entry) => entry.instanceId === action.instanceId);
-      const target = index + action.direction;
-      if (index < 0 || target < 0 || target >= state.talismans.length) return state;
-      const talismans = [...state.talismans];
-      [talismans[index], talismans[target]] = [talismans[target], talismans[index]];
-      return { ...state, talismans };
+      return moveMarketTalisman(state, action.instanceId, action.direction);
     }
     case "MOVE_TALISMAN_TO": {
-      const from = state.talismans.findIndex((entry) => entry.instanceId === action.instanceId);
-      const to = state.talismans.findIndex((entry) => entry.instanceId === action.targetInstanceId);
-      if (from < 0 || to < 0 || from === to) return state;
-      const talismans = [...state.talismans];
-      const [moved] = talismans.splice(from, 1);
-      talismans.splice(to, 0, moved);
-      return { ...state, talismans };
+      return moveMarketTalismanTo(state, action.instanceId, action.targetInstanceId);
     }
     case "CHOOSE_CONTRACT": {
-      if (!state.contractChoices.includes(action.contractId)) return state;
-      const contracts = [...state.contracts, action.contractId];
-      const definition = CONTRACTS.find((entry) => entry.id === action.contractId);
-      if (state.stage === 12 && state.infiniteLap === 0) {
-        return { ...state, contracts, screen: "run_win", contractChoices: [], shopOffers: [], shopType: null };
-      }
-      return {
-        ...state,
-        contracts,
-        talismanSlots: definition?.effectKey === "inventory_slots" ? state.talismanSlots + 1 : state.talismanSlots,
-        stage: state.stage + 1,
-        screen: "round_intro",
-        contractChoices: [],
-        shopOffers: [],
-        shopType: null,
-      };
+      return chooseSeasonContract(state, action.contractId);
     }
     case "OPEN_SCREEN":
       return { ...state, returnScreen: state.screen, screen: action.screen };

@@ -20,6 +20,13 @@ describe("generated content art resolver", () => {
     expect(getGeneratedAssetUrl("boss:go-bond")).toBe("/assets/generated/bosses/go-bond.webp");
   });
 
+  it("shares byte-identical pack art between size variants", () => {
+    expect(getGeneratedAssetUrl("pack:book-medium")).toBe(getGeneratedAssetUrl("pack:book-small"));
+    expect(getGeneratedAssetUrl("pack:book-large")).toBe(getGeneratedAssetUrl("pack:book-small"));
+    expect(getGeneratedAssetUrl("pack:talisman-large")).toBe(getGeneratedAssetUrl("pack:talisman-small"));
+    expect(getGeneratedAssetUrl("pack:burn-large")).toBe(getGeneratedAssetUrl("pack:burn-small"));
+  });
+
   it("keeps all four seasonal encounter scenes available", () => {
     for (const slug of ["spring-stranger", "summer-stranger", "autumn-stranger", "winter-stranger"]) {
       const url = getGeneratedAssetUrl(`season:${slug}`)!;

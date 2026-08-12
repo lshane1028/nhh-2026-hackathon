@@ -6,7 +6,6 @@ import type {
   ContractDefinition,
   ShopOffer,
 } from "@/game/types";
-import type { RunIdentityTag } from "@/game/state/run-identity";
 
 import { getGeneratedAssetUrl } from "./generated-asset";
 import { getFloatingHintPosition } from "./tooltip-position";
@@ -19,7 +18,6 @@ import {
 } from "../audio/game-sfx";
 import "./screen-ui.css";
 import "./market-screen.css";
-import { RunIdentityStrip } from "./RunIdentityStrip";
 
 export interface MarketRewardView {
   assetTag: string;
@@ -178,7 +176,6 @@ interface MarketScreenBaseProps {
   stageLabel?: string;
   onLeave?: () => void;
   className?: string;
-  buildTags?: readonly RunIdentityTag[];
 }
 
 export type MarketScreenProps =
@@ -399,7 +396,7 @@ function MarketCard({
           unavailable && "market-card--unavailable",
           sold && "market-card--sold",
         )}
-        aria-label={`${name}, ${kindLabel}, ${priceLabel ?? "가격 없음"}, ${description}${detailLabel ? `, ${detailLabel}` : ""}, ${ctaLabel}`}
+        aria-label={`${name}, ${kindLabel}, ${guide}, ${priceLabel ?? "가격 없음"}, ${description}${detailLabel ? `, ${detailLabel}` : ""}, ${ctaLabel}`}
         aria-pressed={selected}
         disabled={disabled}
         onClick={onClick}
@@ -689,7 +686,6 @@ export function MarketScreen(props: MarketScreenProps) {
         </aside>
 
         <div className="market-panel__racks">
-          {props.buildTags?.length ? <RunIdentityStrip compact tags={props.buildTags} /> : null}
           {props.mode === "reward" ? (
             <Rack label="이번 판 보상" hint={`+${formatNumber(props.reward.amount)}냥`}>
               <div className="market-reward">

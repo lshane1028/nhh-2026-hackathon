@@ -26,6 +26,17 @@ async function walkSize(directory) {
   return bytes;
 }
 
+async function walkFiles(directory, relative = "") {
+  const files = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const entryRelative = path.posix.join(relative, entry.name);
+    const filePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...await walkFiles(filePath, entryRelative));
+    else files.push(entryRelative);
+  }
+  return files;
+}
+
 const failures = [];
 for (const relativePath of manifest.requiredFiles) {
   if (!await exists(path.join(publicRoot, relativePath))) {
@@ -51,6 +62,15 @@ for (const requirement of manifest.requiredDirectories) {
 for (const relativePath of manifest.sourceOnlyPaths) {
   if (await exists(path.join(publicRoot, relativePath))) {
     failures.push(`source-only asset would be deployed: public/${relativePath}`);
+  }
+}
+
+const allowedDirectories = (manifest.allowedDirectories ?? [])
+  .map((directory) => directory.replaceAll("\\", "/").replace(/\/$/, ""));
+for (const relativePath of await walkFiles(publicRoot)) {
+  const normalized = relativePath.replaceAll("\\", "/");
+  if (!allowedDirectories.includes(path.posix.dirname(normalized))) {
+    failures.push(`unregistered runtime asset: public/${normalized}`);
   }
 }
 

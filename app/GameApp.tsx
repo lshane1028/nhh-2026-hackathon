@@ -56,6 +56,7 @@ import type {
   CardInstance,
   ForbiddenDefinition,
   GameState,
+  Rarity,
 } from "@/game/types";
 
 import { AssetPlaceholder } from "./components/AssetPlaceholder";
@@ -80,7 +81,6 @@ import { MarketScreen, OwnedTalismanBar } from "./components/MarketScreen";
 import { PlayRail } from "./components/PlayRail";
 import { PackPickModal } from "./components/PackPickModal";
 import { RunEndScreen } from "./components/RunEndScreen";
-import { RunIdentityStrip } from "./components/RunIdentityStrip";
 import { TalismanStrip } from "./components/TalismanStrip";
 import { TitleScreen } from "./components/TitleScreen";
 import { TutorialSpotlight } from "./components/TutorialSpotlight";
@@ -148,6 +148,18 @@ const NUMBER_FORMATTER = new Intl.NumberFormat("ko-KR", { maximumFractionDigits:
 
 function format(value: number): string {
   return NUMBER_FORMATTER.format(value);
+}
+
+const RARITY_LABELS: Record<Rarity, string> = {
+  common: "흔함",
+  uncommon: "드묾",
+  rare: "매우 희귀",
+  legendary: "전설",
+};
+
+function getOfferRarityLabel(definition: ReturnType<typeof getDefinitionForOffer>): string | undefined {
+  if (!definition || !("rarity" in definition)) return undefined;
+  return `등장 빈도 · ${RARITY_LABELS[definition.rarity as Rarity]}`;
 }
 
 function cardMap(state: GameState): Map<string, CardInstance> {
@@ -528,7 +540,6 @@ function DeckEditor({ state, dispatch, onApplyConsumable }: {
           tone={definition && !isPainter ? "boss" : "card"}
         />
       </header>
-      {!definition ? <RunIdentityStrip tags={getRunIdentityTags(state)} /> : null}
       {forbidden ? (
         <section className="ritual-terms" aria-label={`${forbidden.name} 효과와 대가`}>
           <article className="ritual-terms__benefit">
@@ -1170,6 +1181,7 @@ export default function GameApp() {
             assetTag: definition.assetTag,
             detailLabel,
             comparison,
+            rarityLabel: getOfferRarityLabel(definition),
             requiredMoney,
             priceLabel: additionalCost
               ? `총 ${format(requiredMoney)}냥`
@@ -1191,7 +1203,6 @@ export default function GameApp() {
         stageLabel={`${state.stage}월 장터`}
         money={state.money}
         offers={offers}
-        buildTags={getRunIdentityTags(state)}
         openedPack={openedPack}
         rerollCost={state.rerollCost}
         canReroll={true}
@@ -1311,6 +1322,7 @@ export default function GameApp() {
           ownedYakus={ownedYakus}
           ownedTalismans={ownedTalismans}
           usedForbiddens={usedForbiddens}
+          buildTags={getRunIdentityTags(state)}
           summary={isWin ? "열두 달을 모두 도장 찍었습니다. 같은 덱으로 무한 달력을 이어갈 수 있습니다." : "덱은 사라지지 않았습니다. 같은 시드로 다시 설계해 보세요."}
           failureReason={!isWin ? `${format(Math.max(0, state.targetScore - state.chain.roundScore))}점 부족` : undefined}
           onRestart={() => dispatch({ type: "START_RUN", startDeckId: "deck_standard", tutorialMode: state.tutorialMode, entropy: runEntropy() })}

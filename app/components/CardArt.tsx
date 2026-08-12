@@ -12,15 +12,14 @@ interface CardArtProps {
 }
 
 /**
- * Loads one per-card source at a time: WebP crop → source PNG → shared atlas.
- * Neither fallback is downloaded on the common path; the atlas is attached
- * only after both individual files fail.
+ * Loads one per-card WebP and attaches the shared atlas only if it fails.
+ * Lossless editing PNGs stay outside the runtime bundle in source-assets.
  */
 export function CardArt({ card, className }: CardArtProps) {
   return <CardArtSource key={card.assetTag} card={card} className={className} />;
 }
 
-type CardArtStage = "webp" | "png" | "atlas";
+type CardArtStage = "webp" | "atlas";
 
 function CardArtSource({ card, className }: CardArtProps) {
   const sources = getCardArtSources(card);
@@ -31,7 +30,7 @@ function CardArtSource({ card, className }: CardArtProps) {
     backgroundSize: "800% 600%",
     backgroundRepeat: "no-repeat",
   } : undefined;
-  const imageUrl = stage === "webp" ? sources.primaryUrl : sources.fallbackUrl;
+  const imageUrl = sources.primaryUrl;
 
   return (
     <span
@@ -50,7 +49,7 @@ function CardArtSource({ card, className }: CardArtProps) {
           unoptimized
           alt=""
           draggable={false}
-          onError={() => setStage((current) => current === "webp" ? "png" : "atlas")}
+          onError={() => setStage("atlas")}
         />
       ) : null}
     </span>

@@ -1,7 +1,17 @@
 import { BOSS_BY_ID } from "../content/bosses";
-import { shuffleDeterministic } from "../engine/rng";
+import { PAINTER_CARDS } from "../content/upgrades";
+import { getBossDiscardMoneyCost } from "../engine/boss";
+import { applyPainterEffect } from "../engine/consumables";
+import { canDeclareGo, declareGo, isRequirementCleared } from "../engine/go";
+import { randomAt, shuffleDeterministic } from "../engine/rng";
 import type { BossDefinition, CardInstance, GameState } from "../types";
-import { getEffectiveHandSize } from "./selectors";
+import { prependGameLog as logEntry } from "./logs";
+import {
+  getEffectiveHandSize,
+  getGoThresholdFactor,
+  getRoundRequirement,
+  isUndiscardable,
+} from "./selectors";
 
 export const MAX_SELECTED = 5;
 
@@ -81,4 +91,93 @@ export function selectHandCard(state: GameState, cardId: string): GameState {
 
 export function clearHandSelection(state: GameState): GameState {
   return state.selectedCardIds.length > 0 ? { ...state, selectedCardIds: [] } : state;
+}
+
+export function discardSelected(state: GameState): GameState {
+  if (state.screen !== "play" || state.discardsRemaining <= 0 || state.selectedCardIds.length === 0) return state;
+  const cost = getBossDiscardMoneyCost(state.bossId ? BOSS_BY_ID[state.bossId] ?? null : null);
+  if (state.money < cost) {
+    return { ...state, logs: logEntry(state, "system", "버리기 불가", "세금쟁이에게 낼 냥이 없습니다.") };
+  }
+  const ids = new Set(state.selectedCardIds);
+  const stuck = state.hand.filter((card) => ids.has(card.instanceId) && isUndiscardable(card));
+  const discarded = state.hand.filter((card) => ids.has(card.instanceId) && !isUndiscardable(card));
+  if (discarded.length === 0) {
+    return {
+      ...state,
+      logs: logEntry(state, "system", "버리기 불가", "고집패는 버릴 수 없습니다."),
+    };
+  }
+  const kept = state.hand.filter((card) => !ids.has(card.instanceId) || isUndiscardable(card));
+  let deck = state.deck;
+  let cursor = state.rngCursor;
+  const purpleResults: string[] = [];
+  const generatedPainters = PAINTER_CARDS.filter((entry) => (
+    entry.minTargets <= 1 && entry.maxTargets >= 1 && entry.effectKey !== "repeat_last_consumable"
+  ));
+  for (const purple of discarded.filter((card) => card.seal === "purple")) {
+    const painter = generatedPainters[
+      Math.floor(randomAt(`${state.seed}:purple:${purple.instanceId}`, cursor++) * generatedPainters.length)
+    ];
+    const target = deck[
+      Math.floor(randomAt(`${state.seed}:purple-target:${purple.instanceId}`, cursor++) * deck.length)
+    ];
+    if (painter && target) {
+      const result = applyPainterEffect(
+        deck,
+        painter,
+        [target.instanceId],
+        undefined,
+        (prefix) => `${prefix}:${state.runId}:${cursor++}`,
+      );
+      deck = result.deck;
+      purpleResults.push(`자인 → ${painter.name} 자동 적용`);
+    }
+  }
+  const next: GameState = {
+    ...state,
+    deck,
+    rngCursor: cursor,
+    hand: kept,
+    usedPile: [...state.usedPile, ...discarded],
+    selectedCardIds: [],
+    discardsRemaining: state.discardsRemaining - 1,
+    money: state.money - cost,
+    stats: { ...state.stats, discardsUsed: state.stats.discardsUsed + 1 },
+    logs: logEntry(
+      state,
+      "system",
+      `${discarded.length}장 버림`,
+      [
+        stuck.length ? `고집패 ${stuck.length}장은 남았습니다` : null,
+        cost ? "세금 1냥 지불" : "손패를 보충합니다.",
+        ...purpleResults,
+      ].filter(Boolean).join(" · "),
+    ),
+  };
+  return refillHand(next, kept);
+}
+
+export function declareRoundGo(state: GameState): GameState {
+  if (state.screen !== "decision") return state;
+  if (!canDeclareGo(state.chain, state.handsRemaining)) return state;
+  const chain = declareGo(state.chain, state.targetScore, getGoThresholdFactor(state));
+  const next: GameState = {
+    ...state,
+    chain,
+    stats: { ...state.stats, goAttempts: state.stats.goAttempts + 1 },
+  };
+  const requirement = getRoundRequirement(next);
+  const logged: GameState = {
+    ...next,
+    logs: logEntry(
+      next,
+      "go",
+      `${chain.goCount}고 선언`,
+      `이번 판에서 ${requirement.toLocaleString("ko-KR")}점을 넘겨야 합니다.`,
+    ),
+  };
+  return isRequirementCleared(logged.chain, requirement)
+    ? logged
+    : refillHand({ ...logged, screen: "play" }, logged.hand);
 }
